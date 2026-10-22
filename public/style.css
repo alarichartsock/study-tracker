@@ -229,3 +229,31 @@ body{background:transparent}
 @media(max-width:520px){.mock-stats{gap:6px}.mock-stats .stat{padding:10px}.mock-stats .stat b{font-size:15px;white-space:nowrap}}
 @media(max-width:1600px) and (min-width:761px){.tabbar button span{display:none}.tabbar button{padding:9px 12px}.tabbar button.on span{display:inline}}
 .tabs{overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tabs button{white-space:nowrap;flex:1 0 auto}
+/* v6: side rail navigation on tablet/desktop (never horizontal overflow) */
+@media(min-width:700px){
+ #app{padding-left:calc(84px + env(safe-area-inset-left))}
+ .tabbar{position:fixed;left:calc(12px + env(safe-area-inset-left));right:auto;bottom:auto;top:50%;transform:translateY(-50%);z-index:15;margin:0;width:auto;
+  flex-direction:column;align-items:stretch;justify-content:flex-start;gap:2px;padding:6px;border-radius:30px;overflow-x:hidden;overflow-y:auto;max-height:calc(100vh - 24px)}
+ .tabbar button{flex:none;flex-direction:row;justify-content:center;min-width:0;padding:11px;font-size:14px}
+ .tabbar button span,.tabbar button.on span{display:none!important}
+ .top{padding-left:8px}
+ main{padding-bottom:40px}
+ #toast{bottom:calc(24px + env(safe-area-inset-bottom))}.bulkbar{bottom:12px}
+}
+@media(min-width:1280px){
+ #app{padding-left:240px}
+ .tabbar{top:76px;transform:none;width:212px;border-radius:26px}
+ .tabbar button{justify-content:flex-start;padding:10px 14px;gap:10px}
+ .tabbar button span,.tabbar button.on span{display:inline!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .top>.brand{position:fixed;left:30px;top:calc(26px + env(safe-area-inset-top))}
+}
+/* v6: toolbar with + Session pill */
+.top-r{background:none!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:0;gap:8px;align-items:center;flex:none;margin-left:auto}
+.top-tools{display:flex;border-radius:999px;padding:3px}
+.add-pill{min-height:40px;height:40px;padding:0 16px 0 12px;gap:6px;font-size:15px}
+.add-pill svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+@media(max-width:1023px){.add-pill span{display:none}.add-pill{width:40px;padding:0}}
+dialog .link{font-size:14px}
+@media(min-width:1280px){.top{max-width:none;padding-right:24px}}
+.dlg .row:has(.stars){flex-wrap:wrap}.dlg .stars button{padding:2px}
+@media(max-width:520px){.dlg{padding:18px}.dlg label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}

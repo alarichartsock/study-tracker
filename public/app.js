@@ -270,26 +270,37 @@ ACT.bulkUpd = async () => { const set = {}; if ($('bSubj').value) set.subject = 
   const r = await api('/api/sessions/bulk', 'POST', { ids: [...UI.selected], action: 'update', set }); toast(`Updated ${r.updated}`); UI.selected.clear(); refresh(); };
 ACT.bulkDel = async () => { if (!confirm(`Delete ${UI.selected.size} sessions?`)) return; const r = await api('/api/sessions/bulk', 'POST', { ids: [...UI.selected], action: 'delete' }); UI.selected.clear(); await refresh(); undoToast(`Deleted ${r.deleted} sessions`, r.removed); };
 function undoToast(msg, removed) { toast(msg, 'Undo', async () => { await api('/api/sessions/bulk', 'POST', { action: 'restore', sessions: removed }); toast('Restored'); refresh(); }); }
-ACT.add = () => editSession(null);
+function openAdd() {
+  if (!S) return; editSession(null); const f = $('dlgForm'); if (!f.durm) return;
+  const sync = () => { const e = new Date(f.date.value + 'T' + f.end.value), a = new Date(e - Math.max(1, +f.durm.value || 0) * 6e4); f.start.value = a.toTimeString().slice(0, 5); };
+  f.durm.oninput = sync; f.end.oninput = sync;
+  f.start.oninput = () => { const a = new Date(f.date.value + 'T' + f.start.value), b = new Date(f.date.value + 'T' + f.end.value); if (b <= a) b.setDate(b.getDate() + 1); f.durm.value = Math.round((b - a) / 6e4); };
+}
+ACT.add = () => openAdd();
+$('addBtn').onclick = () => openAdd();
+document.addEventListener('keydown', e => { if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey && ME && !$('dlg').open && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); openAdd(); } });
 ACT.edit = (b, e) => { if (e.target.closest('.chk')) return; editSession(S.sessions.find(s => s.id === +b.dataset.id)); };
 function editSession(s, preset = {}) {
   const st = s ? new Date(s.start) : preset.start || new Date(Date.now() - 3600e3), en = s ? new Date(s.end) : preset.end || new Date(), q = S.settings.quickDurations;
   dialog(`<h3>${s ? 'Edit session' : 'Add session'}</h3>
-    <div class="row"><div><label>Subject</label><select name="subject">${opt(S.subjects, s ? s.subject : sel)}</select></div><div><label>Activity</label><select name="activity">${opt(S.activities, s?.activity || '', '—')}</select></div></div>
+    <div class="row"><div><label>Subject</label><select name="subject">${opt(S.subjects, s ? s.subject : sel)}</select></div><div><label>Activity</label><select name="activity">${opt(S.activities, s ? s.activity || '' : localStorage.activity || '', '—')}</select></div></div>
     <label>Date</label><input type="date" name="date" value="${dk(st)}" required>
     <div class="row"><div><label>Start</label><input type="time" name="start" value="${st.toTimeString().slice(0, 5)}" required></div><div><label>End</label><input type="time" name="end" value="${en.toTimeString().slice(0, 5)}" required></div><div><label>Break (min)</label><input type="number" name="brk" min="0" value="${s ? Math.round((s.breakSec || 0) / 60) : 0}"></div></div>
+    ${!s ? `<div class="row"><div><label>Duration (min)</label><input type="number" name="durm" min="1" value="${Math.max(1, Math.round((en - st) / 6e4))}"></div></div>` : ''}
     ${!s ? `<div class="row wrap gap small">Quick (ending now): ${q.map(m => `<button type="button" class="chip" data-dact="quick" data-m="${m}">${m}m</button>`).join('')}</div>` : ''}
     <label>Note</label><input name="note" value="${esc(s?.note || '')}">
     <div class="row"><div><label>Focus</label>${stars('focus', s?.focus)}</div><div><label>Progress</label>${stars('progress', s?.progress)}</div></div>
-    <div class="row">${s ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+    <div class="row">${s ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}${!s ? '<button type="button" class="link" data-dact="toTimer">Start timer instead</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
   async (v, f) => {
     if (v === 'del') { const r = await api('/api/sessions/' + s.id, 'DELETE'); await refresh(); return undoToast('Session deleted', [r.removed]); }
     const a = new Date(f.date.value + 'T' + f.start.value), b = new Date(f.date.value + 'T' + f.end.value); if (b <= a) b.setDate(b.getDate() + 1);
     const body = { subject: f.subject.value, activity: f.activity.value, note: f.note.value, start: a.toISOString(), end: b.toISOString(), breakSec: (+f.brk.value || 0) * 60, focus: +f.focus.value || null, progress: +f.progress.value || null };
-    await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); toast('Saved'); refresh(); checkAchievements();
+    if (!s) localStorage.activity = body.activity; await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); toast('Saved'); refresh(); checkAchievements();
   });
 }
 dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), st = new Date(+e - b.dataset.m * 60e3); f.date.value = dk(st); f.start.value = st.toTimeString().slice(0, 5); f.end.value = e.toTimeString().slice(0, 5); };
+dialog.acts.toTimer = () => { $('dlg').close('cancel'); go('timer'); };
+const _quick = dialog.acts.quick; dialog.acts.quick = b => { _quick(b); const f = $('dlgForm'); if (f.durm) f.durm.value = b.dataset.m; };
 
 // ================= CALENDAR =================
 VIEWS.cal = () => {
