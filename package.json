@@ -1,6 +1,6 @@
 {
   "name": "mcat-tracker",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Personal Athenify-style study time tracker for MCAT prep",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",

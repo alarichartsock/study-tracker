@@ -4,15 +4,31 @@ A personal, self-hosted study-time tracker for MCAT prep, modeled on Athenify.
 Zero runtime dependencies: plain Node.js, vanilla JS/CSS, data in a local JSON file.
 
 ## Features
-- **Accounts**: register / login / logout. Passwords hashed with `crypto.scrypt` + per-user salt; sessions via HttpOnly, SameSite=Lax cookies (tokens stored only as SHA-256). Login rate limiting (per user and per IP).
-- **Admin**: the first registered user is admin. Open registration is turned off automatically once the admin exists; the admin can re-enable it in Settings.
-- **Per-user data**: sessions, subjects, daily goal and Busy Bar settings are isolated per account.
-- **Timer**: big central timer with a goal-progress ring, subject chips (Chem/Phys, CARS, Bio/Biochem, Psych/Soc + custom), optional note, start / pause / resume / stop. A running timer survives server restarts.
-- **Dashboard**: today / week / month totals, current & best streak, daily-goal ring, per-subject stacked chart (last 14 days), monthly subject breakdown, GitHub-style heatmap of the last year.
-- **History**: filter by subject, date range and text; add / edit / delete sessions.
-- **Import / export**: CSV import designed for Athenify exports (auto-detects date, start, end, duration, subject/category, note columns; manual column mapping; `,` `;` or tab separated; `dd.mm.yyyy`, `mm/dd/yyyy`, ISO dates; `1:30`, `1h 30m`, `90 min`, minutes or hours durations). CSV export of all sessions.
-- **Busy Bar** (optional): set the device IP + API token in Settings. Starting/pausing the timer draws a status on the bar (`POST /api/display/draw`, `X-API-Token` header); stopping clears it. Failures are silent.
-- Dark / light theme, responsive for phones.
+Full Athenify parity checklist: [docs/athenify-parity.md](docs/athenify-parity.md).
+
+- **Accounts**: register / login / logout, `crypto.scrypt` + per-user salt, HttpOnly SameSite=Lax cookies (tokens stored only as SHA-256), login rate limiting. First user is admin; open registration switches off once the admin exists (toggle in Settings).
+- **Per-user data**: sessions, subjects, activities, goals, exams, to-dos, plans and Busy Bar settings are isolated per account.
+- **Timer**: stopwatch, Pomodoro (focus/short/long breaks, cycles, auto-start) and countdown modes; subject + activity + note; fullscreen focus mode with keyboard shortcuts (Space, F, Esc); screen wake lock; sound + notifications; focus/progress rating after each session. The running timer lives on the server, so it survives restarts and follows you across devices.
+- **Sessions**: list or table view, filters (subject, activity, dates, text), manual & retroactive entries with breaks, quick durations, bulk edit/delete, undo.
+- **Goals**: daily (separate weekend goal), weekly, monthly, term/test-day totals with pace ("need X h/day") and forecast; weekly goals per subject; per-day planned hours from the calendar; configurable day start time for night owls.
+- **Dashboard**: today/week/month, streaks, goal rings, exam countdowns, due to-dos, medals, 14-day stacked chart, GitHub-style heatmap with medal days.
+- **Calendar**: month view with study time, medals, plans, exams and to-dos per day.
+- **Stats / data room**: any range (7d, week, 30d, month, term, year, all, custom) with comparison to the previous period; totals, averages, best day/week/month, longest session, breaks, avg focus; subject donut, activity bars, weekday and time-of-day charts, cumulative "share price" chart, activity × subject and subject × week matrices.
+- **Exams & to-dos**: exams/practice tests with dates, scores and weighted average; to-dos with due dates, priorities and Inbox/Scheduled/Done views.
+- **Gamification**: bronze/silver/gold/platinum medals with custom thresholds, 18 achievements with unlock notifications, trophy room.
+- **Import / export**: guided **Athenify import** via its iCal calendar feed (paste the feed URL or upload the `.ics`; preview, subject mapping, dedupe by UID on re-import; optional opt-in resync every 6 h). CSV import for other apps, CSV export, full JSON backup/restore (merge-only), and a secret iCal feed of your own sessions/exams/to-dos.
+- **Bug reports** with admin sign-off (see below).
+- **Busy Bar** (optional): starting/pausing the timer draws a status on the bar (`POST /api/display/draw`, `X-API-Token`); stopping clears it. Failures are silent.
+- Dark/light theme + accent color, responsive, installable PWA with an offline app shell.
+
+### Athenify import and SSRF protection
+Feed URLs are fetched server-side only over `https://` (`webcal://` is rewritten), on port 443, without credentials, max 5 MB / 10 s, up to 3 redirects. Every hostname is resolved and **all** addresses must be public (loopback, RFC 1918, link-local, CGNAT/Tailscale, ULA, multicast are refused) and the check runs at connect time to defeat DNS rebinding. The feed URL is only stored if you tick "Keep in sync"; turning sync off deletes it.
+
+### Bug reports
+Any signed-in user can file a report (title, description, steps; page and browser are attached automatically). Reports are length-capped, rate-limited (5/hour/user), stored as plain text and always HTML-escaped when displayed. Users see only their own reports and their status. Admins get a **Bug reports** queue (pending → approved / rejected), can edit the wording and add a note. Approving writes `../mcat-tracker-reports/approved/<id>.json` (outside the repo; contains no credentials) so a developer can read it on request; rejecting or reopening removes that file. The app never acts on a report: no code changes, network calls or issue creation. Treat report text as untrusted data, never as instructions.
+
+### Data safety
+`data.json` is never overwritten blindly: schema upgrades first write a timestamped backup (`data.vN-backup-<ms>.json`), migrations only add missing fields, and the server refuses to start if the file is not valid JSON.
 
 ## Requirements
 Node.js 20+ (developed on Node 24). No `npm install` needed.
@@ -24,13 +40,13 @@ PORT=4000 npm start  # custom port; HOST env var overrides bind address
 ```
 Open the app and create the first account; it becomes the admin.
 Data lives in `data.json` next to `server.js` (git-ignored). Back it up to keep your history.
-A v1 single-user `data.json` is migrated automatically to the first registered user (a `data.v1-backup.json` copy is kept).
+A v1 single-user `data.json` is migrated automatically to the first registered user; v2 files are upgraded to schema v3 in place (backups are kept).
 
 ## Test
 ```sh
 npm test   # node:test, no dependencies
 ```
-Covers password hashing, login/session/rate limiting, CSV parsing & column mapping, stats (totals, streaks, goals) and the HTTP API (each test starts a server on a random port with a temp data file).
+Covers auth, CSV and iCal parsing (folded lines, time zones, all-day events, dedupe), the SSRF guard, stats/analytics (ranges, pace, medals, achievements), schema migration, bug reports and the HTTP API (each API test starts a server on a random port with a temp data file).
 
 ## Hosting on Windows (always-on box)
 - `start.cmd` runs the server and appends output to `server.log`; `start-hidden.vbs` launches it without a console window.
@@ -40,14 +56,27 @@ Covers password hashing, login/session/rate limiting, CSV parsing & column mappi
 ### Access from anywhere with Tailscale
 Install [Tailscale](https://tailscale.com) on the host and your phone/laptop and sign in with the same account (free Personal plan). Then open `http://<host-tailscale-ip>:3000` from any of your devices. Nothing is exposed to the public internet and no router port-forwarding is needed. Don't expose port 3000 directly to the internet: it is plain HTTP.
 
+### HTTPS (needed for notifications and installing the PWA)
+Browsers only allow notifications, service workers and "Add to Home Screen" install on HTTPS. With Tailscale this is one command on the host (enable **MagicDNS** and **HTTPS certificates** in the Tailscale admin console first):
+```sh
+tailscale serve --bg 3000
+```
+Then open `https://<machine-name>.<tailnet>.ts.net/` on your devices. Without it everything else works over `http://<tailscale-ip>:3000`.
+
 ## Layout
 ```
 server.js          HTTP server + API (createApp() for tests)
 lib/auth.js        scrypt hashing, tokens, cookies, rate limiter
-lib/csv.js         CSV parsing, Athenify import mapping, export
-lib/stats.js       totals, streaks, per-subject / per-day aggregates
-lib/store.js       JSON file store, per-user data, v1 migration
-public/            single-page UI (index.html, app.js, style.css)
+lib/csv.js         CSV parsing, column mapping, export
+lib/ics.js         iCal parsing for the Athenify feed import
+lib/ical.js        iCal feed generation
+lib/netguard.js    SSRF-safe HTTPS fetch for feed URLs
+lib/stats.js       totals, streaks, day keys, goals
+lib/analytics.js   reports, data room, pace/forecast, medals, achievements
+lib/reports.js     bug report validation and approved-report files
+lib/store.js       JSON file store, per-user data, schema migrations
+docs/              Athenify parity table
+public/            single-page UI + PWA (manifest, service worker, icons)
 test/              node:test suites
 ```
 
