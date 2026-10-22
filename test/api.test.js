@@ -112,12 +112,12 @@ test('busy bar failures are silent', async t => {
 test('legacy v1 data.json is migrated to the first (admin) user with a backup', async t => {
   const seed = { sessions: [{ id: 1, subject: 'CARS', note: 'old', start: '2026-10-01T16:00:00.000Z', end: '2026-10-01T17:00:00.000Z' }], subjects: ['CARS', 'Custom'], settings: { dailyGoalMin: 300, busyIp: '', busyToken: '' }, active: null, nextId: 2 };
   const app = await start({ seed }); t.after(app.close);
-  assert.ok(fs.existsSync(path.join(app.dir, 'data.v1-backup.json')));
+  assert.ok(fs.readdirSync(app.dir).some(f => /^data\.v1-backup-\d+\.json$/.test(f)));
   const c = app.client();
   await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
   const s = (await c('/api/state')).body;
   assert.equal(s.sessions[0].note, 'old'); assert.deepEqual(s.subjects, ['CARS', 'Custom']); assert.equal(s.settings.dailyGoalMin, 300);
-  assert.equal(JSON.parse(fs.readFileSync(app.dataFile, 'utf8')).version, 2);
+  assert.equal(JSON.parse(fs.readFileSync(app.dataFile, 'utf8')).version, 3);
 });
 
 test('static UI and JSON content-type guard', async t => {

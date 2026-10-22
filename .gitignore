@@ -1,7 +1,7 @@
 # Runtime data & logs (contain personal data / password hashes)
 data.json
 data.json.tmp
-*.v1-backup.json
+*-backup*.json
 server.log
 *.log
 # Dependencies
