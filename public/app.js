@@ -193,7 +193,7 @@ document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTA
 // ================= DASHBOARD =================
 VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
-  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><svg viewBox="0 0 200 200" class="ring">${ring(80, g.goal ? g.done / g.goal : 0)}<text x="100" y="98" text-anchor="middle" class="ring-txt">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</text><text x="100" y="124" text-anchor="middle" class="ring-sub">${fmtH(g.done)} / ${fmtH(g.goal)}</text></svg><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
+  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub">${fmtH(g.done)} / ${fmtH(g.goal)}</span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const due = S.tasks.filter(x => !x.done && x.due && x.due <= ST.todayKey);

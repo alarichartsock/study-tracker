@@ -260,3 +260,13 @@ dialog .link{font-size:14px}
 /* v7: add-session sheet rows wrap on narrow phones */
 .dlg .row>div{min-width:0}.dlg input,.dlg select{min-width:0;max-width:100%}
 @media(max-width:520px){.dlg .row{flex-wrap:wrap}.dlg .row>div{flex:1 1 130px}.dlg label{white-space:normal}}
+/* v8: bigger goal rings with HTML (unscaled) labels */
+.goalgrid{display:flex;flex-wrap:wrap;justify-content:center;gap:20px 28px}
+.goalgrid>div{flex:0 1 190px;min-width:0}
+.goal-ring{position:relative;width:160px;height:160px;margin:0 auto 10px}
+.goalgrid .goal-ring .ring{width:100%;height:100%;max-width:none;margin:0}
+.goal-ring .ring-bg,.goal-ring .ring-fg{stroke-width:16}
+.goal-ring .ring-center{gap:2px}
+.g-pct{font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.g-sub{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:699px){.goalgrid{gap:16px}.goalgrid>div{flex:0 1 150px}.goal-ring{width:140px;height:140px}.g-pct{font-size:31px}.g-sub{font-size:12px}}
