@@ -1,0 +1,18 @@
+# Runtime data & logs (contain personal data / password hashes)
+data.json
+data.json.tmp
+*.v1-backup.json
+server.log
+*.log
+# Dependencies
+node_modules/
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
