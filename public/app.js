@@ -16,6 +16,10 @@ const daysUntil = k => Math.round((k2d(k) - k2d(dk(new Date()))) / DAY);
 const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
 
+const BRAND = 'Study Tracker';
+const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports' };
+document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND)); document.title = BRAND;
+let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
 const UI = { mode: localStorage.timerMode || 'stopwatch', target: +localStorage.countdownMin || 25, pomo: JSON.parse(localStorage.pomo || 'null'), selected: new Set(), layout: localStorage.sessLayout || 'list',
   range: localStorage.statsRange || '30d', calMonth: dk(new Date()).slice(0, 7), taskView: 'inbox', wiz: { step: 1 } };
@@ -51,13 +55,14 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 async function boot() {
   const me = await api('/api/me');
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
-  ME = me.user; $('auth').classList.add('hid'); $('app').classList.remove('hid');
+  ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   await load(); go(view);
   if (localStorage.onboard === '1') { localStorage.onboard = ''; onboarding(); }
 }
 async function showAuth(me) {
   me = me || await api('/api/me');
-  $('app').classList.add('hid'); $('auth').classList.remove('hid');
+  $('app').classList.add('hid');
+  const showLanding = !landingDone && !me.needsSetup; $('landing').classList.toggle('hid', !showLanding); $('auth').classList.toggle('hid', showLanding); $('aBack').classList.toggle('hid', !!me.needsSetup);
   if (me.needsSetup) authMode = 'setup';
   const reg = authMode !== 'login';
   $('authMsg').textContent = authMode === 'setup' ? 'Create the admin account to get started' : reg ? 'Create an account' : 'Sign in to continue';
@@ -65,13 +70,15 @@ async function showAuth(me) {
   $('aToggle').classList.toggle('hid', authMode === 'setup' || (!reg && !me.registrationOpen));
   $('aToggle').textContent = reg ? 'Have an account? Sign in' : 'New here? Create an account'; $('aErr').textContent = '';
 }
+document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
+$('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth(); };
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
   try { const r = await api(authMode === 'login' ? '/api/login' : '/api/register', 'POST', { username: $('aUser').value.trim(), password: $('aPass').value }); $('aPass').value = ''; if (r.onboarding) localStorage.onboard = '1'; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
-$('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; showAuth(); };
+$('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 $('themeBtn').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = localStorage.theme = t; };
 function applyAccent() { const a = S?.settings.accent, st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
 
@@ -82,7 +89,7 @@ async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/ap
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
-async function render() { if (!S) return; const html = await VIEWS[view](); $('main').innerHTML = html; AFTER[view]?.(); }
+async function render() { if (!S) return; const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
