@@ -257,3 +257,6 @@ dialog .link{font-size:14px}
 @media(min-width:1280px){.top{max-width:none;padding-right:24px}}
 .dlg .row:has(.stars){flex-wrap:wrap}.dlg .stars button{padding:2px}
 @media(max-width:520px){.dlg{padding:18px}.dlg label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+/* v7: add-session sheet rows wrap on narrow phones */
+.dlg .row>div{min-width:0}.dlg input,.dlg select{min-width:0;max-width:100%}
+@media(max-width:520px){.dlg .row{flex-wrap:wrap}.dlg .row>div{flex:1 1 130px}.dlg label{white-space:normal}}
