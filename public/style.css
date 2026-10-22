@@ -53,3 +53,37 @@ pre{white-space:pre-wrap}.maps{margin:10px 0}
   main{padding:12px}.grid4{grid-template-columns:repeat(2,1fr)}.grid2,.grid3{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}.filters #fText,.filters #bAdd{grid-column:span 2}
   .btn.xl{padding:14px 20px;min-width:96px}
 }
+
+/* ---- v3 additions ---- */
+.tabs{display:flex;gap:4px;background:var(--card2);border-radius:12px;padding:4px}.tabs button{flex:1;background:none;border:0;border-radius:9px;padding:8px 12px;cursor:pointer;color:var(--muted)}
+.tabs button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+.row.wrap{flex-wrap:wrap}.grow{flex:1}.gap{gap:8px}.mt{margin-top:12px}.right{text-align:right}.nowrap{white-space:nowrap}
+.link{background:none;border:0;color:var(--acc);cursor:pointer;padding:0;font:inherit}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--card2);border:1px solid var(--line)}
+.pill.pending{color:#f59f00}.pill.approved{color:var(--ok)}.pill.rejected{color:var(--danger)}.pill.high{color:var(--danger)}.pill.low{color:var(--muted)}
+.medal{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle}
+.m-bronze{background:#cd7f32}.m-silver{background:#c0c0c0}.m-gold{background:#f5c518}.m-platinum{background:#a6e3ff}
+.goalgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.goalgrid .ring{max-width:120px;display:block;margin:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}.tbl th,.tbl td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}.tbl th{color:var(--muted);font-weight:500}.tbl td.num,.tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}.heat-cell{cursor:default}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.calgrid .dow{text-align:center;color:var(--muted);font-size:12px}
+.cday{min-height:72px;background:var(--card2);border-radius:10px;padding:6px;cursor:pointer;border:1px solid transparent;font-size:12px;display:flex;flex-direction:column;gap:2px}
+.cday:hover{border-color:var(--acc)}.cday.out{opacity:.35}.cday.today{border-color:var(--acc)}.cday b{font-size:13px}.cday .ex{color:var(--danger);font-weight:600}
+.cday .bar{height:4px;margin-top:auto}
+.trophies{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}.trophy{background:var(--card2);border-radius:12px;padding:12px;text-align:center;opacity:.4}.trophy.on{opacity:1;border:1px solid var(--acc)}.trophy .t-ic{font-size:28px}
+.steps{counter-reset:s;padding-left:0;list-style:none}.steps li{counter-increment:s;margin:8px 0;padding-left:30px;position:relative}.steps li:before{content:counter(s);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px;display:grid;place-items:center}
+.wizard .step{display:none}.wizard .step.on{display:block}
+.fs{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column}
+.fs .ring-box{width:min(70vh,90vw)}.fs .clock{font-size:clamp(56px,14vw,120px)}
+.phase{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc)}
+.stars{display:flex;gap:4px}.stars button{background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted)}.stars button.on{color:#f5c518}
+.chk{width:18px;height:18px;flex:none}.item.sel{border-color:var(--acc)}
+.bulkbar{position:sticky;bottom:12px;display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--acc);border-radius:12px;padding:10px;margin-top:10px;box-shadow:var(--shadow)}
+#toast{display:flex;gap:12px;align-items:center}#toast .link{color:var(--bg);text-decoration:underline;pointer-events:auto}#toast.show{pointer-events:auto}
+textarea{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:80px}
+.report{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;white-space:pre-wrap;word-break:break-word}
+@media(max-width:760px){.calgrid{gap:2px}.cday{min-height:52px;padding:4px;font-size:11px}.cday .tx{display:none}}
+nav{overflow-x:auto;min-width:0;justify-content:flex-start;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav button{white-space:nowrap;flex:none}
+.goalgrid .ring{height:auto;aspect-ratio:1}.goalgrid>div{min-width:0}
+main{overflow-x:hidden}
+.timer-wrap .row{flex-wrap:wrap}.timer-wrap .row>select,.timer-wrap .row>input{flex:1 1 200px}
