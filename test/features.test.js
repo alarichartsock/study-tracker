@@ -21,44 +21,6 @@ async function start(opts = {}) {
   const user = client(); await user('/api/register', 'POST', { username: 'bob', password: 'bob-pass-12' });
   return { server, base, client, admin, user, dataFile, dir, reportsDir, close: () => new Promise(r => server.close(r)) };
 }
-const ICS = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:ath-1', 'DTSTART:20261020T160000Z', 'DTEND:20261020T173000Z', 'SUMMARY:Biochemistry - Flashcards', 'DESCRIPTION:amino acids', 'END:VEVENT',
-  'BEGIN:VEVENT', 'UID:ath-2', 'DTSTART;TZID=Europe/Berlin:20261021T090000', 'DTEND;TZID=Europe/Berlin:20261021T100000', 'SUMMARY:CARS', 'END:VEVENT',
-  'BEGIN:VEVENT', 'UID:ath-3', 'DTSTART;VALUE=DATE:20261022', 'SUMMARY:Exam', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-
-test('Athenify import: preview, mapping, dedupe on re-import, resync opt-in only', async t => {
-  const fetched = [];
-  const app = await start({ fetchFeed: async url => { fetched.push(url); return ICS; } }); t.after(app.close);
-  const c = app.admin;
-  const pv = (await c('/api/athenify/preview', 'POST', { ics: ICS })).body;
-  assert.equal(pv.count, 2); assert.equal(pv.skipped.allDay, 1); assert.equal(pv.duplicates, 0); assert.ok(pv.subjects.Biochemistry); assert.ok(pv.activities.Flashcards);
-  assert.equal((await c('/api/athenify/preview', 'POST', { ics: 'hello' })).status, 400);
-  const imp = (await c('/api/athenify/import', 'POST', { events: pv.events, subjectMap: { Biochemistry: 'Bio/Biochem' } })).body;
-  assert.deepEqual(imp, { added: 2, duplicates: 0, invalid: 0 });
-  const st = (await c('/api/state')).body;
-  const bio = st.sessions.find(s => s.subject === 'Bio/Biochem'); assert.equal(bio.activity, 'Flashcards'); assert.equal(bio.note, 'amino acids'); assert.equal(bio.extUid, 'athenify:ath-1');
-  assert.ok(!st.subjects.includes('Biochemistry')); assert.equal(st.athenifyResync.enabled, false);
-  // re-import is deduped by UID
-  assert.equal((await c('/api/athenify/preview', 'POST', { ics: ICS })).body.duplicates, 2);
-  assert.deepEqual((await c('/api/athenify/import', 'POST', { events: pv.events })).body, { added: 0, duplicates: 2, invalid: 0 });
-  // URL fetch goes through the injected fetcher; URL not stored without opt-in
-  await c('/api/athenify/preview', 'POST', { url: 'https://athenify.io/feed/x.ics' }); assert.equal(fetched.length, 1);
-  assert.ok(!fs.readFileSync(app.dataFile, 'utf8').includes('athenify.io/feed'));
-  assert.equal((await c('/api/athenify/import', 'POST', { events: [], url: 'http://127.0.0.1/x', resync: true })).status, 400);
-  await c('/api/athenify/import', 'POST', { events: [], url: 'webcal://athenify.io/feed/x.ics', resync: true });
-  assert.equal((await c('/api/state')).body.athenifyResync.enabled, true);
-  await app.server.resyncAll(); assert.equal(fetched.at(-1), 'https://athenify.io/feed/x.ics');
-  await c('/api/athenify/resync', 'DELETE'); assert.ok(!fs.readFileSync(app.dataFile, 'utf8').includes('athenify.io/feed'));
-  // other users unaffected
-  assert.equal((await app.user('/api/state')).body.sessions.length, 0);
-});
-
-test('Athenify preview via URL reports SSRF guard errors (real fetcher)', async t => {
-  const app = await start(); t.after(app.close);
-  const r = await app.admin('/api/athenify/preview', 'POST', { url: 'https://127.0.0.1/feed.ics' });
-  assert.equal(r.status, 400); assert.match(r.body.error, /Private/);
-  assert.match((await app.admin('/api/athenify/preview', 'POST', { url: 'http://athenify.io/x' })).body.error, /https/);
-});
-
 test('bug reports: submit, own-only view, admin queue, edit+approve writes file, reject removes, escaping, rate limit', async t => {
   const app = await start({ reportMax: 3 }); t.after(app.close);
   const { admin, user } = app, anon = app.client();
@@ -153,18 +115,13 @@ test('subjects meta/rename, activities, goals/settings validation, plan, exams, 
   assert.ok(Array.isArray((await c('/api/achievements')).body));
 });
 
-test('JSON export/import and iCal feed token', async t => {
+test('JSON export/import', async t => {
   const app = await start(); t.after(app.close); const c = app.admin;
   await c('/api/sessions', 'POST', { subject: 'CARS', start: '2026-10-01T16:00:00Z', end: '2026-10-01T17:00:00Z' });
   await c('/api/settings', 'POST', { busyToken: 'secret-token' });
   const ex = await c('/api/export.json'); assert.equal(ex.body.data.sessions.length, 1); assert.ok(!JSON.stringify(ex.body).includes('secret-token'));
   assert.deepEqual((await c('/api/import.json', 'POST', ex.body)).body, { added: 0, skipped: 1 }); // dedupe
   assert.deepEqual((await app.user('/api/import.json', 'POST', ex.body)).body, { added: 1, skipped: 0 });
-  const feed = (await c('/api/feed', 'POST')).body.path; assert.match(feed, /^\/cal\/[0-9a-f]{64}\.ics$/);
-  const r = await fetch(app.base + feed); assert.equal(r.status, 200); assert.match(await r.text(), /SUMMARY:CARS/);
-  assert.ok(!fs.readFileSync(app.dataFile, 'utf8').includes(feed.slice(5, 69))); // only hash stored
-  assert.equal((await fetch(app.base + '/cal/' + '0'.repeat(64) + '.ics')).status, 404);
-  await c('/api/feed', 'DELETE'); assert.equal((await fetch(app.base + feed)).status, 404);
 });
 
 test('v2 data file is upgraded to v3 with a backup and nothing lost', async t => {

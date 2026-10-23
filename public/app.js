@@ -22,7 +22,7 @@ document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND));
 let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
 const UI = { mode: localStorage.timerMode || 'stopwatch', target: +localStorage.countdownMin || 25, pomo: JSON.parse(localStorage.pomo || 'null'), selected: new Set(), layout: localStorage.sessLayout || 'list',
-  range: localStorage.statsRange || '30d', calMonth: dk(new Date()).slice(0, 7), taskView: 'inbox', wiz: { step: 1 } };
+  range: localStorage.statsRange || '30d', calMonth: dk(new Date()).slice(0, 7), taskView: 'inbox' };
 
 async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: body !== undefined ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
@@ -408,51 +408,16 @@ async function checkAchievements() { try { const A = await api('/api/achievement
   if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name, a.desc); seen.add(a.id); }
   localStorage.seenAch = JSON.stringify([...seen]); } catch { /* ignore */ } }
 
-// ================= IMPORT / EXPORT (Athenify wizard) =================
-const W = UI.wiz;
+// ================= IMPORT / EXPORT =================
 VIEWS.data = () => `<div class="card"><h3>Import CSV</h3><p class="muted small">Columns are detected automatically (date, start, end, duration, subject/category, note). If detection is wrong, type the exact header names.</p>
     <input type="file" id="csvFile" accept=".csv,text/csv"><div class="grid3 maps">${['date', 'start', 'end', 'duration', 'subject', 'note'].map(k => `<input id="m_${k}" placeholder="${k} column">`).join('')}</div>
     <button class="btn primary" data-act="csvImport">Import CSV</button><pre id="csvRes" class="muted small"></pre></div>
   <div class="card"><h3>Backup &amp; export</h3><div class="row wrap gap"><a class="btn" href="/api/export.csv">Sessions CSV</a><a class="btn" href="/api/export.json">Full JSON backup</a>
     <label class="btn" style="margin:0">Restore JSON backup<input type="file" accept=".json,application/json" class="hid" data-chg="jsonImport"></label></div>
     <p class="muted small">Restoring merges and never deletes; sessions already present are skipped.</p></div>`;
-function wizardHTML() {
-  const rs = S.athenifyResync;
-  if (W.step === 1) return `<ol class="steps"><li>Open <b>Athenify</b> in your browser and sign in.</li><li>Find its <b>calendar feed</b> (iCal) option, usually under Settings or integrations. Athenify lists it as “Export your study sessions as an iCal calendar feed”.</li>
-    <li>Copy the feed link (it may start with <code>webcal://</code> or <code>https://</code>), or download it as an <code>.ics</code> file.</li><li>Paste the link or choose the file below. You'll see a preview and can map subjects before anything is imported.</li></ol>
-    <p class="muted small">Can't find a feed? Athenify stores data under GDPR, so you can request a copy of your data (data export) from Athenify. Its CSV/JSON can then go through the CSV import below.</p>
-    <label>Feed URL</label><input id="wUrl" placeholder="webcal://… or https://…" value="${esc(W.url || '')}"><div class="muted small center mt">or</div><input type="file" id="wFile" accept=".ics,text/calendar">
-    <label>How are sessions named in the feed?</label><select id="wMode"><option value="auto">Auto-detect (“Subject - Activity”)</option><option value="subject">Whole title is the subject</option><option value="activity">Whole title is the activity</option></select>
-    <div class="row"><span class="sp"></span><button class="btn primary" data-act="wizPreview">Preview</button></div>
-    ${rs.enabled ? `<p class="muted small">Auto-resync is on (every 6 hours). Last sync: ${rs.lastSync ? new Date(rs.lastSync).toLocaleString() : 'never'}${rs.lastError ? ' · error: ' + esc(rs.lastError) : ''}. <button class="link" data-act="wizStopSync">Turn off and forget URL</button></p>` : ''}`;
-  if (W.step === 2) { const P = W.preview, subjSel = s => `<select data-sub="${esc(s)}"><option value="__keep">Keep as new subject</option>${S.subjects.map(x => `<option ${x === s ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
-    return `<p><b>${P.count}</b> sessions found${P.duplicates ? ` · <b>${P.duplicates}</b> already imported (skipped)` : ''}${P.skipped.allDay ? ` · ${P.skipped.allDay} all-day events ignored` : ''}${P.skipped.invalid ? ` · ${P.skipped.invalid} invalid ignored` : ''}.</p>
-      <h3 class="mt">Map subjects</h3><table class="tbl">${Object.entries(P.subjects).sort((a, b) => b[1].secs - a[1].secs).map(([s, v]) => `<tr><td>${esc(s)}</td><td class="num">${v.count}× · ${fmtH(v.secs)}</td><td>${subjSel(s)}</td></tr>`).join('')}</table>
-      ${Object.keys(P.activities).length ? `<h3 class="mt">Activities found</h3><p class="small">${Object.entries(P.activities).map(([a, v]) => `${esc(a)} <span class="muted">(${v.count})</span>`).join(', ')}</p>` : ''}
-      <h3 class="mt">Sample</h3><div class="scroll"><table class="tbl"><tr><th>Start</th><th>Duration</th><th>Title</th><th>Description</th></tr>${P.sample.map(e => `<tr><td class="nowrap">${new Date(e.start).toLocaleString()}</td><td>${fmtH((new Date(e.end) - new Date(e.start)) / 1000)}</td><td>${esc(e.summary)}</td><td>${esc(String(e.description).slice(0, 80))}</td></tr>`).join('')}</table></div>
-      <label class="switch mt"><input type="checkbox" id="wNote" checked> Use event description as the session note</label>
-      ${W.url ? '<label class="switch"><input type="checkbox" id="wSync"> Keep in sync: saves the feed URL on this server and re-imports new sessions every 6 hours</label>' : ''}
-      <div class="row"><button class="btn" data-act="wizBack">Back</button><span class="sp"></span><button class="btn primary" data-act="wizImport">Import ${P.count - P.duplicates} sessions</button></div>`; }
-  return `<p>✅ Imported <b>${W.result.added}</b> sessions${W.result.duplicates ? `, skipped ${W.result.duplicates} duplicates` : ''}${W.result.invalid ? `, ${W.result.invalid} invalid` : ''}.</p><div class="row"><button class="btn" data-act="wizBack">Import more</button><button class="btn primary" data-act="goto" data-v="dash">See dashboard</button></div>`;
-}
-ACT.wizPreview = async () => {
-  const f = $('wFile').files[0], url = $('wUrl').value.trim(); W.mode = $('wMode').value;
-  if (!f && !url) return toast('Paste the feed URL or choose an .ics file');
-  W.url = f ? '' : url; toast('Loading…'); W.preview = await api('/api/athenify/preview', 'POST', f ? { ics: await f.text(), mode: W.mode } : { url, mode: W.mode }); W.step = 2; render();
-};
-ACT.wizBack = () => { W.step = 1; render(); };
-ACT.wizImport = async () => {
-  const subjectMap = {}; document.querySelectorAll('#wiz [data-sub]').forEach(s => { if (s.value !== '__keep') subjectMap[s.dataset.sub] = s.value; });
-  const sync = !!$('wSync')?.checked;
-  W.result = await api('/api/athenify/import', 'POST', { events: W.preview.events, mode: W.mode, subjectMap, noteFrom: $('wNote').checked ? 'description' : 'none', ...(sync ? { url: W.url, resync: true } : {}) });
-  W.step = 3; W.preview = null; if (!sync) W.url = ''; await refresh(); checkAchievements();
-};
-ACT.wizStopSync = async () => { await api('/api/athenify/resync', 'DELETE'); toast('Auto-resync off; feed URL deleted'); refresh(); };
 ACT.csvImport = async () => { const f = $('csvFile').files[0]; if (!f) return toast('Choose a CSV file'); const map = {}; ['date', 'start', 'end', 'duration', 'subject', 'note'].forEach(k => { const v = $('m_' + k).value.trim(); if (v) map[k] = v; });
   const r = await api('/api/import', 'POST', { csv: await f.text(), map }); $('csvRes').textContent = `Imported ${r.added}, skipped ${r.skipped}.\nDetected columns: ${JSON.stringify(r.columns)}`; await load(); };
 ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
-ACT.feedNew = async () => { const r = await api('/api/feed', 'POST'); await refresh(); const i = $('feedUrl'); i.value = location.origin + r.path; i.classList.remove('hid'); i.select(); toast('Copy the link now; it is only shown once'); };
-ACT.feedOff = async () => { await api('/api/feed', 'DELETE'); refresh(); };
 
 // ================= SETTINGS =================
 VIEWS.set = async () => {

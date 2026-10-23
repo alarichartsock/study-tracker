@@ -2,7 +2,7 @@
 // MCAT Study Tracker - zero-dependency Node server
 const http = require('http'), fs = require('fs'), path = require('path');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
-const ics = require('./lib/ics'), ical = require('./lib/ical'), netguard = require('./lib/netguard'), reports = require('./lib/reports');
+const reports = require('./lib/reports');
 const { Store, PALETTE } = require('./lib/store');
 
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
@@ -18,13 +18,11 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 function createApp(opts = {}) {
   const store = new Store(opts.dataFile || path.join(__dirname, 'data.json'));
   const fetchImpl = opts.fetch || globalThis.fetch;
-  const fetchFeed = opts.fetchFeed || netguard.safeFetchText;
   const reportsDir = opts.reportsDir || path.join(__dirname, '..', 'mcat-tracker-reports', 'approved');
   const minSessionSec = opts.minSessionSec ?? 30;
   const ipLimiter = new auth.RateLimiter(opts.ipMaxAttempts || 20, 15 * 60e3);
   const userLimiter = new auth.RateLimiter(opts.userMaxAttempts || 5, 15 * 60e3);
   const reportLimiter = new auth.RateLimiter(opts.reportMax || 5, 60 * 60e3);
-  const feedLimiter = new auth.RateLimiter(opts.feedMax || 10, 60 * 60e3);
   store.db.reports ||= []; store.db.nextReportId ||= 1;
 
   async function busy(ud, text) { // Busy Bar HTTP API; never throws
@@ -61,9 +59,8 @@ function createApp(opts = {}) {
     return cookie(t, SESSION_DAYS * 86400);
   }
   const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin });
-  const maskedState = ud => { const { athenifyFeed, ...rest } = ud;
-    return { ...rest, settings: { ...ud.settings, busyToken: ud.settings.busyToken ? '********' : '', feedToken: undefined, hasFeed: !!ud.settings.feedToken },
-      athenifyResync: athenifyFeed ? { enabled: true, lastSync: athenifyFeed.lastSync || null, lastError: athenifyFeed.lastError || null } : { enabled: false } }; };
+  const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
+    return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
   const ensureActivity = (ud, name) => { if (name && !ud.activities.includes(name)) ud.activities.push(name); };
   const cleanSession = j => {
@@ -75,27 +72,6 @@ function createApp(opts = {}) {
     if (j.mode) out.mode = ['stopwatch', 'pomodoro', 'countdown', 'manual'].includes(j.mode) ? j.mode : 'manual';
     return out;
   };
-  // Map Athenify events -> sessions, deduping by UID. Returns counts.
-  function importEvents(ud, events, { mode = 'auto', subjectMap = {}, activityMap = {}, noteFrom = 'description' } = {}) {
-    const seen = new Set(ud.sessions.filter(s => s.extUid).map(s => s.extUid)); let added = 0, duplicates = 0, invalid = 0;
-    for (const e of (Array.isArray(events) ? events : []).slice(0, 20000)) {
-      const uid = 'athenify:' + str(e.uid, 200); if (seen.has(uid)) { duplicates++; continue; }
-      const sp = ics.splitSummary(e.summary, mode), srcSubj = sp.subject || str(e.categories, 60) || '(none)';
-      const subject = str(subjectMap[srcSubj] ?? srcSubj, 60) || 'Imported', activity = str(activityMap[sp.activity] ?? sp.activity, 60);
-      let s; try { s = cleanSession({ subject, activity, note: noteFrom === 'description' ? e.description : '', start: e.start, end: e.end, mode: 'manual' }); } catch { invalid++; continue; }
-      ensureSubject(ud, s.subject); ensureActivity(ud, s.activity);
-      ud.sessions.push({ id: ud.nextId++, ...s, extUid: uid, source: 'athenify' }); seen.add(uid); added++;
-    }
-    return { added, duplicates, invalid };
-  }
-  async function resyncAll() { // opt-in periodic Athenify feed resync
-    for (const [uid, ud] of Object.entries(store.db.userData)) {
-      const f = ud.athenifyFeed; if (!f || !f.url) continue;
-      try { const r = importEvents(ud, ics.parseICS(await fetchFeed(f.url)).events, f.mapping || {}); f.lastSync = new Date().toISOString(); f.lastError = null; f.lastAdded = r.added; }
-      catch (e) { f.lastError = String(e.message || e).slice(0, 200); }
-      store.save(); void uid;
-    }
-  }
   // Generic per-user collection CRUD (exams, tasks)
   function crud(ud, coll, p, M, j, clean, res) {
     if (p === `/api/${coll}` && M === 'GET') return send(res, 200, ud[coll]);
@@ -117,13 +93,6 @@ function createApp(opts = {}) {
     const u = new URL(req.url, 'http://x'), p = u.pathname, M = req.method;
     try {
       if (M === 'GET' && STATIC[p]) { const f = path.join(PUBLIC, STATIC[p]); return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)], p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {}); }
-      // iCal feed of the user's own data, authenticated by an unguessable per-user token
-      let m = /^\/cal\/([0-9a-f]{64})\.ics$/.exec(p);
-      if (m && M === 'GET') {
-        const k = auth.tokenKey(m[1]), e = Object.entries(store.db.userData).find(([, ud]) => ud.settings && ud.settings.feedToken === k);
-        if (!e) return send(res, 404, { error: 'not found' });
-        return send(res, 200, ical.toICS(store.data(+e[0])), 'text/calendar; charset=utf-8');
-      }
       if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
       let j = {};
       if (M !== 'GET' && M !== 'HEAD') {
@@ -178,7 +147,7 @@ function createApp(opts = {}) {
       }
       if (p === '/api/achievements') return send(res, 200, analytics.achievements(ud, h));
       if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
-      if (p === '/api/export.json') { const { active, athenifyFeed, ...data } = maskedState(ud); void active; void athenifyFeed;
+      if (p === '/api/export.json') { const { active, ...data } = maskedState(ud); void active;
         return send(res, 200, { app: 'mcat-tracker', exported: new Date().toISOString(), user: user.username, data }, 'application/json', { 'Content-Disposition': 'attachment; filename="mcat-tracker-export.json"' }); }
       if (p === '/api/import.json' && M === 'POST') { // merge a JSON export back in (dedupes sessions by start+end+subject)
         const d = (j.data || j); const key = s => `${s.start}|${s.end}|${s.subject}`, have = new Set(ud.sessions.map(key)); let added = 0, skipped = 0;
@@ -194,25 +163,6 @@ function createApp(opts = {}) {
         for (const s of r.sessions) { ensureSubject(ud, s.subject); ud.sessions.push({ id: ud.nextId++, ...s, source: 'import' }); }
         save(); return send(res, 200, { added: r.sessions.length, skipped: r.skipped, columns: r.columns });
       }
-      // ---- Athenify iCal import wizard ----
-      if (p === '/api/athenify/preview' && M === 'POST') {
-        let text = typeof j.ics === 'string' ? j.ics : null;
-        if (!text && j.url) { if (feedLimiter.blocked('f:' + user.id)) return send(res, 429, { error: 'Too many feed fetches, try again later' }); feedLimiter.fail('f:' + user.id);
-          try { text = await fetchFeed(String(j.url)); } catch (e) { return send(res, 400, { error: 'Could not fetch feed: ' + e.message }); } }
-        if (!text) return send(res, 400, { error: 'Provide a feed URL or an .ics file' });
-        if (!/BEGIN:VCALENDAR/i.test(text.slice(0, 2000))) return send(res, 400, { error: 'That does not look like an iCal (.ics) calendar' });
-        const parsed = ics.parseICS(text), have = new Set(ud.sessions.map(s => s.extUid).filter(Boolean)), mode = j.mode || 'auto';
-        return send(res, 200, { count: parsed.events.length, skipped: parsed.skipped, duplicates: parsed.events.filter(e => have.has('athenify:' + e.uid)).length,
-          ...ics.summarize(parsed.events, mode), sample: parsed.events.slice(0, 8), events: parsed.events });
-      }
-      if (p === '/api/athenify/import' && M === 'POST') {
-        const mapping = { mode: ['auto', 'subject', 'activity'].includes(j.mode) ? j.mode : 'auto', subjectMap: j.subjectMap || {}, activityMap: j.activityMap || {}, noteFrom: j.noteFrom === 'none' ? 'none' : 'description' };
-        const r = importEvents(ud, j.events, mapping);
-        if (j.resync && j.url) { try { ud.athenifyFeed = { url: netguard.normalizeFeedUrl(j.url).toString(), mapping, lastSync: new Date().toISOString() }; } catch (e) { return send(res, 400, { error: e.message }); } }
-        save(); return send(res, 200, r);
-      }
-      if (p === '/api/athenify/resync' && M === 'DELETE') { delete ud.athenifyFeed; save(); return send(res, 200, { ok: true }); }
-
       // ---- timer ----
       if (p === '/api/timer/start' && M === 'POST') {
         if (!ud.active) ud.active = { subject: str(j.subject || ud.subjects[0] || 'Study', 60), activity: str(j.activity, 60), note: str(j.note, 1000), start: new Date().toISOString(), accum: 0, paused: false,
@@ -248,7 +198,7 @@ function createApp(opts = {}) {
         if (j.action === 'restore') { let n = 0; for (const s of Array.isArray(j.sessions) ? j.sessions.slice(0, 1000) : []) { try { ud.sessions.push({ id: ud.nextId++, ...cleanSession(s), ...(s.extUid ? { extUid: str(s.extUid, 210) } : {}) }); n++; } catch { /* skip */ } } save(); return send(res, 200, { restored: n }); }
         return send(res, 400, { error: 'action must be delete, update or restore' });
       }
-      m = /^\/api\/sessions\/(\d+)$/.exec(p);
+      let m = /^\/api\/sessions\/(\d+)$/.exec(p);
       if (m) {
         const i = ud.sessions.findIndex(s => s.id === +m[1]); if (i < 0) return send(res, 404, { error: 'not found' });
         if (M === 'DELETE') { const [gone] = ud.sessions.splice(i, 1); save(); return send(res, 200, { ok: true, removed: gone }); }
@@ -298,8 +248,6 @@ function createApp(opts = {}) {
         if (j.busyToken !== undefined && j.busyToken !== '********') s.busyToken = String(j.busyToken).trim().slice(0, 300);
         save(); return send(res, 200, { ok: true });
       }
-      if (p === '/api/feed' && M === 'POST') { const t = auth.newToken(); ud.settings.feedToken = auth.tokenKey(t); save(); return send(res, 200, { path: `/cal/${t}.ics` }); }
-      if (p === '/api/feed' && M === 'DELETE') { ud.settings.feedToken = null; save(); return send(res, 200, { ok: true }); }
       if (p === '/api/busybar/test' && M === 'POST') return send(res, 200, { ok: await busy(ud, 'MCAT tracker test') });
 
       // ---- bug reports (any user submits; only admins review) ----
@@ -329,7 +277,7 @@ function createApp(opts = {}) {
       send(res, 404, { error: 'not found' });
     } catch (e) { send(res, 400, { error: String(e.message || e) }); }
   });
-  server.store = store; server.resyncAll = resyncAll;
+  server.store = store;
   return server;
 }
 
@@ -337,5 +285,4 @@ module.exports = { createApp };
 if (require.main === module) {
   const port = +process.env.PORT || 3000, app = createApp();
   app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'MCAT tracker on :' + port));
-  setInterval(() => app.resyncAll().catch(() => {}), 6 * 3600e3).unref(); // opt-in Athenify feed resync
 }

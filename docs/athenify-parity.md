@@ -101,12 +101,10 @@ Legend: ✅ already implemented before this phase · 🆕 added in this phase ·
 | Layout preferences | ❌ | Not needed |
 | Real-time cloud sync | ✅ | Self-hosted server is the single source of truth; reachable via Tailscale |
 | Web / iOS / Android apps | ⚠️ | Installable PWA with offline shell (requires HTTPS); no native apps |
-| iCal calendar feed | 🆕 | Secret per-user feed link (sessions, exams, to-dos) |
 | GDPR / EU hosting | ❌ | N/A — self-hosted on your own machine |
 | Data export | ✅ / 🆕 | CSV + full JSON backup/restore |
 | Reminders | 🆕 | Daily "haven't studied yet" reminder while the app is open/installed |
 
 ## Beyond Athenify (this app only)
-- Import from Athenify via its iCal feed (wizard, subject mapping, UID dedupe, optional resync) and CSV import for other apps.
 - Busy Bar status display; multi-user accounts with admin; bug reports with admin sign-off.
 - Not added because Athenify doesn't have them: friends/leaderboards, tags/projects, subject hierarchy.
