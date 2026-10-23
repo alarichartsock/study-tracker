@@ -69,9 +69,7 @@ function pageChecks(phone) {
 
 const failures = []; let shots = 0;
 const note = (tag, list) => { for (const f of list) failures.push(tag + ': ' + f); };
-for (const bname of BROWSERS) {
-  const browser = await pw[bname].launch();
-  for (const w of WIDTHS) {
+async function runWidth(browser, bname, w) {
     const phone = w <= 520, opts = { viewport: { width: w, height: phone ? 844 : 900 }, deviceScaleFactor: phone ? 2 : 1, hasTouch: phone, ...(bname === 'firefox' ? {} : { isMobile: phone }), serviceWorkers: 'block' };
     const tag0 = bname + '@' + w;
     // landing (signed out)
@@ -81,17 +79,17 @@ for (const bname of BROWSERS) {
     const ctx = await browser.newContext(opts); await ctx.addCookies([{ name: 'sid', value: sid, url: BASE }]);
     const page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
     await page.goto(BASE + '/'); await page.waitForTimeout(800); await page.evaluate(() => document.querySelector('dialog[open]')?.close());
-    const check = async (tag, shot = true) => { await page.waitForTimeout(450); note(tag0 + ' ' + tag, [...errs.splice(0), ...await page.evaluate(pageChecks, phone)]);
+    const check = async (tag, shot = true) => { await page.waitForTimeout(250); note(tag0 + ' ' + tag, [...errs.splice(0), ...await page.evaluate(pageChecks, phone)]);
       if (shot) { await page.screenshot({ path: path.join(OUT, `${tag0}-${tag}.png`) }); shots++; }
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(350);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(200);
       note(tag0 + ' ' + tag + ' (scrolled to bottom)', await page.evaluate(pageChecks, phone));
       if (shot) { await page.screenshot({ path: path.join(OUT, `${tag0}-${tag}-bottom.png`) }); shots++; }
       await page.evaluate(() => window.scrollTo(0, 0)); };
-    for (const v of VIEWS) { await page.evaluate(v => document.querySelector(`#nav button[data-v="${v}"]`).click(), v); await page.waitForTimeout(500); await check(v); }
+    for (const v of VIEWS) { await page.evaluate(v => document.querySelector(`#nav button[data-v="${v}"]`).click(), v); await page.waitForTimeout(300); await check(v); }
     // achievements: every category + filters
     await page.evaluate(() => document.querySelector('#nav button[data-v="trophy"]').click()); await page.waitForTimeout(600);
     const cats = await page.evaluate(() => [...document.querySelectorAll('.ach-cats button')].map(b => b.dataset.v));
-    for (const c of cats) { await page.evaluate(c => document.querySelector(`.ach-cats button[data-v="${c}"]`).click(), c); await page.waitForTimeout(500); await check('trophy-' + c, c === 'focus' || c === 'mine'); }
+    for (const c of cats) { await page.evaluate(c => document.querySelector(`.ach-cats button[data-v="${c}"]`).click(), c); await page.waitForTimeout(350); await check('trophy-' + c, c === 'focus' || c === 'mine'); }
     for (const f of ['earned', 'locked', 'all']) { await page.evaluate(f => document.querySelector(`.ach-filter button[data-v="${f}"]`).click(), f); await page.waitForTimeout(450); await check('trophy-filter-' + f, false); }
     // add-session sheet
     await page.evaluate(() => document.getElementById('addBtn').click()); await page.waitForTimeout(600);
@@ -108,9 +106,13 @@ for (const bname of BROWSERS) {
     else { note(tag0 + ' timer fullscreen', [...errs.splice(0), ...await page.evaluate(() => { const vw = document.documentElement.clientWidth; return document.documentElement.scrollWidth > vw + 1 ? ['horizontal overflow in fullscreen'] : []; })]);
       await page.screenshot({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); shots++; await page.keyboard.press('Escape'); }
     await ctx.close();
-  }
-  await browser.close();
 }
+const T = +process.env.UI_TASK_TIMEOUT || 8 * 60e3, CONC = +process.env.UI_CONCURRENCY || 4;
+for (const bname of BROWSERS) { const browser = await pw[bname].launch(), queue = [...WIDTHS];
+  await Promise.all([...Array(Math.min(CONC, queue.length))].map(async () => { for (let w; (w = queue.shift()) !== undefined;) {
+    let timer; try { await Promise.race([runWidth(browser, bname, w), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timed out after ' + T / 1000 + 's')), T); })]); }
+    catch (e) { failures.push(bname + '@' + w + ': run error: ' + String(e && e.message || e).split('\n')[0]); } finally { clearTimeout(timer); } } }));
+  await browser.close(); }
 server.close();
 console.log(`${shots} screenshots in ${OUT}`);
 if (failures.length) { console.error(failures.length + ' UI check failure(s):\n' + [...new Set(failures)].join('\n')); process.exit(1); }
