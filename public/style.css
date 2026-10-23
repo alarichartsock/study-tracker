@@ -274,3 +274,8 @@ dialog .link{font-size:14px}
 /* v9: single clean edge on + Session pill */
 .btn.primary.add-pill{border-color:transparent;background:var(--acc);box-shadow:0 4px 12px color-mix(in srgb,var(--acc) 28%,transparent)}
 .btn.primary.add-pill:hover{background:var(--acc2)}
+
+/* v11: mode tabs collapse while a timer runs */
+.mode-tabs{transition:opacity .3s ease,transform .3s ease,max-height .35s ease,margin .35s ease,padding .35s ease;max-height:60px;overflow:hidden}
+.mode-tabs.gone{opacity:0;transform:translateY(-8px) scale(.96);max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.mode-tabs{transition:none}}

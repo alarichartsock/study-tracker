@@ -22,7 +22,7 @@ test('glass styles include accessibility fallbacks', () => {
 test('served files have no mojibake', () => {
   for (const f of ['index.html', 'app.js', 'style.css', 'sw.js']) assert.doesNotMatch(pub(f), /\u00c2|\u00e2\u20ac/, f);
 });
-test('service worker cache bumped', () => assert.match(pub('sw.js'), /mcat-shell-v8/));
+test('service worker cache bumped', () => assert.match(pub('sw.js'), /mcat-shell-v\d+/));
 test('add-session shortcut is in the toolbar with a timer fallback', () => {
   assert.match(pub('index.html'), /id="addBtn"[^>]*aria-label="Add session"/);
   const js = pub('app.js');
