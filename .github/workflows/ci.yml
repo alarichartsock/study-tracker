@@ -15,3 +15,24 @@ jobs:
         with:
           node-version: 24
       - run: npm test
+  ui:
+    name: Responsive UI (Chromium + WebKit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Playwright is only installed in CI for these checks; the app has no runtime dependencies.
+      - run: npm i --no-save --no-package-lock playwright@1
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:ui
+        env:
+          UI_SHOTS: ui-shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: ui-shots
+          if-no-files-found: warn
+          retention-days: 14

@@ -76,3 +76,18 @@ test/              node:test suites
 
 ## License
 Proprietary. Copyright (c) 2026 Alaric Hartsock. All rights reserved. See [LICENSE](LICENSE).
+
+## Responsive UI checks
+
+`npm test` runs the unit and API tests with no dependencies. `npm run test:ui` runs browser checks in Chromium and WebKit (an approximation of iPhone/Mac Safari) at 320, 375, 390, 414, 768, 1024, 1280 and 1440px across every view: the landing page, all app sections, every achievements category, the add-session sheet and timer fullscreen. It starts its own server on a temporary data folder with a fake test user and sample sessions, then fails on horizontal page overflow, a hidden or covered nav (also after scrolling to the bottom of each page), an overlapping or off-screen + Session / theme button, clipped text in tabs and buttons, goal-ring text leaving the ring, misaligned data-room tables, or console errors. Screenshots go to `ui-shots/` (uploaded by CI as the `ui-screenshots` artifact).
+
+Playwright is not a dependency of the app. Install it just for the checks:
+
+```
+npm i --no-save playwright@1
+npx playwright install chromium webkit
+npm run test:ui
+```
+
+Optional: `UI_BROWSERS=chromium` and `UI_WIDTHS=390,1440` limit the run.
+

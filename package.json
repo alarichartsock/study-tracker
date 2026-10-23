@@ -7,7 +7,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:ui": "node e2e/responsive.mjs"
   },
   "engines": { "node": ">=20" }
 }
