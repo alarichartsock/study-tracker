@@ -270,3 +270,7 @@ dialog .link{font-size:14px}
 .g-pct{font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
 .g-sub{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 @media(max-width:699px){.goalgrid{gap:16px}.goalgrid>div{flex:0 1 150px}.goal-ring{width:140px;height:140px}.g-pct{font-size:31px}.g-sub{font-size:12px}}
+
+/* v9: single clean edge on + Session pill */
+.btn.primary.add-pill{border-color:transparent;background:var(--acc);box-shadow:0 4px 12px color-mix(in srgb,var(--acc) 28%,transparent)}
+.btn.primary.add-pill:hover{background:var(--acc2)}
