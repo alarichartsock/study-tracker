@@ -181,14 +181,14 @@ async function breakOver() {
 }
 ACT.skipBreak = () => { UI.pomo.until = Date.now(); };
 ACT.endPomo = () => { UI.pomo = null; savePomo(); keepAwake(false); render(); };
-ACT.fullscreen = () => { const tw = $('tw'); tw.classList.add('fs'); tw.requestFullscreen?.().catch(() => {}); keepAwake(true);
-  if (!tw.querySelector('.fs-exit')) tw.insertAdjacentHTML('beforeend', '<button class="btn fs-exit" data-act="exitFs" style="position:absolute;top:16px;right:16px">Exit</button>'); };
+ACT.fullscreen = () => { const tw = $('tw'); if (tw.classList.contains('fs')) return exitFs(); tw.classList.add('fs'); tw.requestFullscreen?.().catch(() => {}); keepAwake(true);
+  if (!tw.querySelector('.fs-exit')) tw.insertAdjacentHTML('beforeend', '<button class="btn fs-exit" data-act="exitFs" style="position:absolute;top:16px;right:16px;z-index:30">Exit</button>'); tw.querySelector('.fs-exit').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); exitFs(); }); };
 ACT.exitFs = () => exitFs();
 function exitFs() { $('tw')?.classList.remove('fs'); $('tw')?.querySelector('.fs-exit')?.remove(); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { $('tw')?.classList.remove('fs'); $('tw')?.querySelector('.fs-exit')?.remove(); } });
 document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $('dlg').open) return;
   if (e.code === 'Space') { e.preventDefault(); (S.active ? (S.active.paused ? ACT.resume : ACT.pause) : ACT.start)().catch(x => toast(x.message)); }
-  if (e.key === 'f') ACT.fullscreen(); if (e.key === 'Escape') exitFs(); });
+  if (e.key === 'f' && !$('tw')?.classList.contains('fs')) ACT.fullscreen(); if (e.key === 'Escape') exitFs(); });
 
 // ================= DASHBOARD =================
 VIEWS.dash = () => {
