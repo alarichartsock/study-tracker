@@ -81,7 +81,7 @@ $('authForm').onsubmit = async e => {
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 $('themeBtn').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = localStorage.theme = t; };
-function applyAccent() { const a = S?.settings.accent || (S && sel && S.subjectMeta[sel]?.color), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
+function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.accent || (S && sel && S.subjectMeta[sel]?.color), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
@@ -361,7 +361,7 @@ VIEWS.stats = async () => {
   const subjects = Object.keys(c.bySubject), acts = Object.keys(c.matrix.activitySubject), weeks = [...new Set(Object.values(c.matrix.subjectWeek).flatMap(Object.keys))].sort().slice(-12);
   const cell = v => v ? `<td class="num" style="background:color-mix(in srgb,var(--acc) ${Math.round(Math.min(70, v / Math.max(1, c.total) * 300))}%,transparent)">${fmtH(v)}</td>` : '<td class="num muted">–</td>';
   const range = c.from ? `${fmtDate(k2d(c.from), { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(k2d(c.to), { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No data yet';
-  return `<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  return `${mixChip()}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <select data-chg="sSubj" style="width:auto">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
     ${UI.range === 'custom' ? `<div class="row"><input type="date" value="${from}" data-chg="cRange" data-k="cFrom"><input type="date" value="${to}" data-chg="cRange" data-k="cTo"></div>` : ''}
     <p class="muted small" style="margin:8px 0 0">${range}${R.previous ? ` · previous period: ${fmtH(R.previous.total)} ${chg == null ? '' : `<b style="color:${chg >= 0 ? 'var(--ok)' : 'var(--danger)'}">${chg >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(chg * 100))}%</b>`}` : ''}</p></div>
@@ -464,7 +464,7 @@ ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = aw
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme;
   return `<div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
-    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div></div>
+    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div></div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="MCAT prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
@@ -568,3 +568,30 @@ boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to
 })();
 
 addEventListener('resize', () => { if (document.querySelector('.ach-cats')) achIndicator(true); });
+
+// ---------- study-mix wallpaper ----------
+const WIN_LBL = { day: 'today', week: 'this week', month: 'this month' }, WIN_CHIP = { day: 'your day', week: 'your week', month: 'your month' };
+const bgSet = () => ({ mode: 'auto', window: 'week', motion: true, ...(S?.settings.background || {}) });
+function currentMix() { const b = bgSet(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: +S?.settings.dayStartHour || 0 }); }
+function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.StudyMix) return; const b = bgSet(), dots = [...wp.children];
+  let list = [];
+  if (b.mode === 'auto') list = StudyMix.blobs(currentMix().parts, color);
+  else if (b.mode === 'subject' && sel) list = StudyMix.blobs([{ subject: sel, share: 1 }], color);
+  else if (b.mode === 'accent') { const a = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#6c8cff'; list = StudyMix.blobs([{ subject: '_', share: 1 }], () => a); }
+  wp.classList.toggle('mix', list.length > 0); wp.classList.toggle('drift', b.motion !== false);
+  dots.forEach((el, i) => { const p = list[i]; if (!p) { el.style.cssText = ''; el.classList.remove('on'); return; }
+    el.classList.add('on'); el.style.setProperty('--c', p.color); el.style.setProperty('--x', p.x + '%'); el.style.setProperty('--y', p.y + '%'); el.style.setProperty('--s', p.size + 'vmax'); }); }
+function mixLegend(m = currentMix()) { if (!m.parts.length) return '<span class="muted small">No study logged ' + WIN_LBL[m.win] + ' yet, so the default background is shown.</span>';
+  return m.parts.map(p => '<span class="mix-item"><i class="dot" style="background:' + color(p.subject) + '"></i>' + esc(p.subject) + ' <b>' + Math.round(p.share * 100) + '%</b></span>').join('') + (m.others ? '<span class="muted small">(smaller subjects folded into the biggest)</span>' : ''); }
+function mixChip() { const b = bgSet(); if (b.mode !== 'auto') return '';
+  const m = currentMix(); return '<button class="mix-chip glass" data-act="mixInfo" aria-haspopup="dialog" title="Why these colors?"><span class="mix-dots">' + (m.parts.length ? m.parts.map(p => '<i style="background:' + color(p.subject) + '"></i>').join('') : '<i class="def"></i>') + '</span><span>Background: ' + WIN_CHIP[m.win] + '</span></button>'; }
+ACT.mixInfo = () => { const m = currentMix();
+  dialog('<h3>Your study-mix background</h3><p>Colors come from what you studied ' + WIN_LBL[m.win] + '. Each subject adds a soft blob in its color, sized by its share of your ' + fmtH(m.total) + '.</p><div class="mix-legend">' + mixLegend(m) + '</div><p class="muted small">Change the window, mode or motion in Settings &rarr; Background. Subject colors are set under Subjects.</p><div class="row"><span class="sp"></span><button type="button" class="btn" data-dact="close">Close</button><button type="button" class="btn primary" data-dact="toSettings">Settings</button></div>');
+  if (dialog.acts) { dialog.acts.close = () => $('dlg').close(); dialog.acts.toSettings = () => { $('dlg').close(); go('set'); }; } };
+async function saveBg(patch) { const r = await api('/api/settings', 'POST', { background: patch }); void r; S.settings.background = { ...bgSet(), ...patch }; applyWallpaper(); render(); }
+ACT.bgMode = b => saveBg({ mode: b.dataset.v }); ACT.bgWin = b => saveBg({ window: b.dataset.v }); ACT.bgMotion = b => saveBg({ motion: !!b.checked });
+function bgSettingsCard() { const b = bgSet(), tab = (act, v, cur, l) => '<button data-act="' + act + '" data-v="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + l + '</button>';
+  return '<div class="card"><h3>Background</h3><div class="row wrap gap"><div class="tabs">' + [['auto', 'Auto (study mix)'], ['subject', 'Selected subject'], ['accent', 'Accent'], ['static', 'Static default']].map(([v, l]) => tab('bgMode', v, b.mode, l)).join('') + '</div></div>' +
+    '<div class="row wrap gap"><span class="muted small">Window</span><div class="tabs">' + [['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([v, l]) => tab('bgWin', v, b.window, l)).join('') + '</div>' +
+    '<label class="row" style="gap:8px;margin:0"><input type="checkbox" class="chk" data-chg="bgMotion" ' + (b.motion !== false ? 'checked' : '') + '> Ambient motion</label></div>' +
+    '<p class="muted small">' + (b.mode === 'auto' ? 'Colors come from what you studied ' + WIN_LBL[b.window] + ':' : b.mode === 'subject' ? 'Uses the selected subject\'s color.' : b.mode === 'accent' ? 'Uses your accent color.' : 'Uses the default wallpaper.') + '</p>' + (b.mode === 'auto' ? '<div class="mix-legend">' + mixLegend() + '</div>' : '') + '</div>'; }

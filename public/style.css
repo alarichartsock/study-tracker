@@ -344,3 +344,18 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .goal-ring .g-pct{font-size:clamp(16px,21cqi,36px);max-width:100%}
 .goal-ring .g-sub{display:flex;flex-direction:column;align-items:center;font-size:clamp(9px,7.6cqi,13px);line-height:1.2;max-width:100%;overflow:hidden}
 .goal-ring .g-sub>span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+
+/* study-mix wallpaper */
+.wallpaper i{transition:background-color 1.2s var(--ease),left 1.2s var(--ease),top 1.2s var(--ease),width 1.2s var(--ease),height 1.2s var(--ease),opacity 1.2s var(--ease)}
+.wallpaper i:nth-child(n+4){opacity:0;width:40vmax;height:40vmax;left:50%;top:50%}
+.wallpaper.mix i{opacity:0}
+.wallpaper.mix i.on{background:var(--c);left:calc(var(--x) - var(--s) / 2);top:calc(var(--y) - var(--s) / 2);right:auto;bottom:auto;width:var(--s);height:var(--s);opacity:.42}
+[data-theme=light] .wallpaper.mix i.on{opacity:.38}
+.wallpaper.drift i{animation:wpDrift 46s ease-in-out infinite alternate}
+.wallpaper.drift i:nth-child(2){animation-duration:58s;animation-delay:-12s}.wallpaper.drift i:nth-child(3){animation-duration:52s;animation-delay:-25s}.wallpaper.drift i:nth-child(4){animation-duration:64s;animation-delay:-7s}.wallpaper.drift i:nth-child(5){animation-duration:70s;animation-delay:-33s}
+@keyframes wpDrift{0%{translate:0 0}50%{translate:3vmax -2vmax}100%{translate:-2vmax 3vmax}}
+@media (prefers-reduced-motion:reduce){.wallpaper i{transition:background-color .3s,opacity .3s}.wallpaper.drift i{animation:none}}
+.mix-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--glass-edge);border-radius:999px;padding:6px 12px 6px 8px;margin:0 0 12px;color:inherit;font:inherit;font-size:13px;cursor:pointer;max-width:100%}
+.mix-chip>span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mix-dots{display:inline-flex}.mix-dots i{width:12px;height:12px;border-radius:50%;border:2px solid var(--bg);margin-left:-4px}.mix-dots i:first-child{margin-left:0}.mix-dots i.def{background:linear-gradient(135deg,var(--wp1),var(--wp2))}
+.mix-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0}.mix-item{display:inline-flex;align-items:center;gap:6px;font-size:14px}

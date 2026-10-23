@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/style.css">
 <script>document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');</script>
 </head><body>
-<div class="wallpaper" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="wallpaper" id="wallpaper" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
 <div id="landing" class="landing hid">
   <header class="l-top glass"><div class="brand"><img src="/favicon.svg" alt=""> <span data-brand>Study Tracker</span></div><span class="sp"></span><button class="btn ghost" data-auth="login">Sign in</button><button class="btn primary" data-auth="register">Create account</button></header>
   <section class="hero">
@@ -52,5 +52,5 @@
 
 <dialog id="dlg"><form method="dialog" class="dlg" id="dlgForm"></form></dialog>
 <div id="toast" class="glass"><span id="toastMsg"></span><button class="link" id="toastAct"></button></div>
-<script src="/app.js"></script>
+<script src="/mix.js"></script><script src="/app.js"></script>
 </body></html>

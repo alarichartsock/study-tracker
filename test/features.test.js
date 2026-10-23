@@ -164,3 +164,17 @@ test('achievements API: earnedBy counts across users without leaking other users
   const C = Object.fromEntries((await user('/api/achievements')).body.global.map(x => [x.id, x.earned]));
   assert.equal(C.onboard, true); assert.equal(C.explore, true); assert.equal(C.tinker, true);
 });
+
+test('settings: background mode/window/motion are validated and persisted', async t => {
+  const app = await start(); t.after(app.close); const c = app.user;
+  assert.deepEqual((await c('/api/state')).body.settings.background, { mode: 'auto', window: 'week', motion: true });
+  assert.equal((await c('/api/settings', 'POST', { background: { mode: 'month' } })).status, 400);
+  assert.equal((await c('/api/settings', 'POST', { background: { window: 'year' } })).status, 400);
+  assert.equal((await c('/api/settings', 'POST', { background: { motion: 1 } })).status, 400);
+  assert.equal((await c('/api/settings', 'POST', { background: 'auto' })).status, 400);
+  assert.equal((await c('/api/settings', 'POST', { background: { mode: 'subject', window: 'day', motion: false, extra: 'x' } })).status, 200);
+  assert.deepEqual((await c('/api/state')).body.settings.background, { mode: 'subject', window: 'day', motion: false });
+  assert.equal((await c('/api/settings', 'POST', { background: { window: 'month' } })).status, 200);
+  assert.deepEqual((await c('/api/state')).body.settings.background, { mode: 'subject', window: 'month', motion: false });
+  assert.equal((await c('/mix.js')).status, 200);
+});
