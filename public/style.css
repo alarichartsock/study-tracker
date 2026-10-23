@@ -289,3 +289,11 @@ dialog .link{font-size:14px}
 
 /* v14: timer ring uses the selected subject color */
 .tring .ring-fg,.running .tring .ring-fg{stroke:var(--subj,var(--acc));filter:drop-shadow(0 0 6px color-mix(in srgb,var(--subj,var(--acc)) 45%,transparent))}
+
+/* achievements categories */
+.ach-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 2px 8px;margin:0 -2px}.ach-cats::-webkit-scrollbar{display:none}
+.ach-cats button{flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);background:var(--card2);color:inherit;border-radius:999px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;backdrop-filter:blur(12px)}
+.ach-cats button span{opacity:.6;font-size:12px;margin-left:2px}.ach-cats button.on{background:var(--acc);border-color:var(--acc);color:#fff}.ach-cats button.on span{opacity:.85}
+.ach-filter{margin:4px 0 6px}.t-head{margin:16px 0 8px;font-size:15px}.t-by{margin-top:6px;opacity:.75}
+.trophy b{display:block;margin-top:4px}
+@media (max-width:520px){.trophies{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -89,7 +89,7 @@ async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/ap
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
-async function render() { if (!S) return; const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
+async function render() { if (!S) return; if (view !== 'admin') markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -399,13 +399,34 @@ ACT.examEdit = b => { const e = b.dataset.id ? S.exams.find(x => x.id === +b.dat
 // ================= TROPHIES =================
 VIEWS.trophy = async () => {
   const [A, R] = await Promise.all([api('/api/achievements'), api('/api/report')]), seen = new Set(JSON.parse(localStorage.seenAch || '[]')), md = R.current.medals;
-  return `<div class="card"><h3>Medals</h3><p class="muted small">Earned for days above your thresholds (Settings): ${MEDAL_ORDER.slice().reverse().map(m => `<span class="medal m-${m}"></span> ${m} ${fmtH((S.settings.medals[m] || 0) * 60)}`).join(' · ')}</p>
-    ${statCards(MEDAL_ORDER.map(m => [`<span class="medal m-${m}"></span> ${md[m]}`, m[0].toUpperCase() + m.slice(1)]))}</div>
-  <div class="card"><h3>Achievements · ${A.filter(a => a.earned).length}/${A.length}</h3><div class="trophies">${A.map(a => `<div class="trophy ${a.earned ? 'on' : ''}"><div class="t-ic">${a.earned ? '🏆' : '🔒'}</div><b>${esc(a.name)}</b>${a.earned && !seen.has(a.id) ? ' <span class="pill approved">new</span>' : ''}<div class="muted small">${esc(a.desc)}</div>${a.earned ? '' : `<div class="bar t-prog"><i style="width:${Math.round((a.progress || 0) * 100)}%"></i></div><div class="muted small">${a.unit === 'h' ? fmtH(a.value) + ' / ' + fmtH(a.target) : a.value + ' / ' + a.target + (a.unit === 'd' ? ' days' : '')}</div>`}</div>`).join('')}</div></div>`;
+  const cats = [{ id: 'all', name: 'All' }, ...A.categories, { id: 'mine', name: 'Your activities' }];
+  let cat = localStorage.achCat || 'all'; if (!cats.some(c => c.id === cat)) cat = 'all';
+  const filt = localStorage.achFilter || 'all', keep = x => filt === 'all' || (filt === 'earned' ? x.earned : !x.earned);
+  const inCat = id => id === 'all' ? [...A.global, ...A.personal] : id === 'mine' ? A.personal : A.global.filter(x => x.cat === id);
+  const prog = x => x.unit === 'h' ? fmtH(x.value) + ' / ' + fmtH(x.target) : x.value + ' / ' + x.target + (x.unit === 'd' ? ' days' : '');
+  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + '"><div class="t-ic">' + (x.earned ? '&#127942;' : '&#128274;') + '</div><b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
+    '<div class="muted small">' + esc(x.desc) + '</div>' + (x.earned ? '' : '<div class="bar t-prog"><i style="width:' + Math.round((x.progress || 0) * 100) + '%"></i></div><div class="muted small">' + prog(x) + '</div>') +
+    (x.earnedBy ? '<div class="t-by small">Earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') + ' (' + x.earnedBy.pct + '%)</div>' : '') + '</div>';
+  const grid = list => '<div class="trophies">' + list.map(card).join('') + '</div>';
+  const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4>' + grid(list) : ''; };
+  const personal = () => { const groups = {}; for (const x of A.personal) (groups[x.kind + '|' + x.key] ||= []).push(x);
+    const out = ['activity', 'subject'].map(k => Object.entries(groups).filter(([g]) => g.startsWith(k + '|')).map(([g, l]) => section((k === 'activity' ? 'Activity: ' : 'Subject: ') + g.slice(k.length + 1), l)).join('')).join('');
+    return out || '<p class="muted small">Log sessions with an activity to unlock badges for each of your own tasks and subjects.</p>'; };
+  const body = cat === 'all' ? A.categories.map(c => section(c.name, inCat(c.id))).join('') + '<h3 class="t-head">Your activities</h3>' + personal()
+    : cat === 'mine' ? personal() : (section(cats.find(c => c.id === cat).name, inCat(cat)) || '<p class="muted small">Nothing here for this filter.</p>');
+  const all = inCat('all');
+  return '<div class="card"><h3>Medals</h3><p class="muted small">Earned for days above your thresholds (Settings): ' + MEDAL_ORDER.slice().reverse().map(m => '<span class="medal m-' + m + '"></span> ' + m + ' ' + fmtH((S.settings.medals[m] || 0) * 60)).join(' &middot; ') + '</p>' +
+    statCards(MEDAL_ORDER.map(m => ['<span class="medal m-' + m + '"></span> ' + md[m], m[0].toUpperCase() + m.slice(1)])) + '</div>' +
+    '<div class="card"><h3>Achievements &middot; ' + all.filter(x => x.earned).length + '/' + all.length + '</h3>' +
+    '<div class="ach-cats" role="tablist">' + cats.map(c => { const l = inCat(c.id); return '<button role="tab" data-act="achCat" data-v="' + c.id + '" class="' + (c.id === cat ? 'on' : '') + '">' + esc(c.name) + ' <span>' + l.filter(x => x.earned).length + '/' + l.length + '</span></button>'; }).join('') + '</div>' +
+    '<div class="tabs ach-filter">' + ['all', 'earned', 'locked'].map(v => '<button data-act="achFilter" data-v="' + v + '" class="' + (filt === v ? 'on' : '') + '">' + v[0].toUpperCase() + v.slice(1) + '</button>').join('') + '</div>' + body + '</div>';
 };
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(A.filter(a => a.earned).map(a => a.id)); };
-async function checkAchievements() { try { const A = await api('/api/achievements'), stored = JSON.parse(localStorage.seenAch || 'null'), seen = new Set(stored || A.filter(a => a.earned).map(a => a.id));
-  if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name, a.desc); seen.add(a.id); }
+ACT.achCat = b => { localStorage.achCat = b.dataset.v; render(); };
+ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; render(); };
+const achAll = A => [...A.global, ...A.personal];
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); const t = document.querySelector('.ach-cats .on'); if (t) t.scrollIntoView({ block: 'nearest', inline: 'center' }); };
+async function checkAchievements() { try { const A = achAll(await api('/api/achievements')), stored = JSON.parse(localStorage.seenAch || 'null'), seen = new Set(stored || A.filter(a => a.earned).map(a => a.id));
+  if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name + (a.key ? ' (' + a.key + ')' : ''), a.desc); seen.add(a.id); }
   localStorage.seenAch = JSON.stringify([...seen]); } catch { /* ignore */ } }
 
 // ================= IMPORT / EXPORT =================
@@ -496,7 +517,8 @@ ACT.repReview = async b => { const r = (await api('/api/admin/reports')).find(x 
 
 // ---------- onboarding ----------
 ACT.onboard = () => onboarding();
-function onboarding() {
+function markFlag(k) { const seen = JSON.parse(localStorage.flagsSent || '[]'); if (seen.includes(k)) return; api('/api/flags', 'POST', { key: k }).then(() => { localStorage.flagsSent = JSON.stringify([...seen, k]); }).catch(() => {}); }
+function onboarding() { markFlag('onboarded');
   dialog(`<h3>Welcome to your MCAT tracker 👋</h3><ol class="steps"><li>Set a <b>daily goal</b>. Weekly, monthly and test-day goals are in Settings.</li><li>Pick a subject and hit <b>Start</b>, or use Pomodoro / Countdown mode.</li><li>Coming from another app? Import a CSV export from the Data tab.</li></ol>
     <label>Daily goal (hours)</label><input type="number" name="goal" step="0.5" min="0" value="${S.settings.goals.dailyMin / 60}"><label>MCAT test date (optional)</label><input type="date" name="mcat">
     <div class="row"><span class="sp"></span><button class="btn primary" value="ok">Let's go</button></div>`,

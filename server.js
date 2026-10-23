@@ -145,7 +145,14 @@ function createApp(opts = {}) {
         const r = from && to ? analytics.compare(list, from, to, o) : { current: analytics.report(list, { ...o, from, to }) };
         return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h) });
       }
-      if (p === '/api/achievements') return send(res, 200, analytics.achievements(ud, h));
+      if (p === '/api/achievements') { const A = analytics.achievements(ud, h);
+        const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, +d.settings.dayStartHour || 0]; })); // aggregate counts only
+        for (const x of A.global) { const n = E.counts[x.id] || 0; x.earnedBy = { count: n, users: E.users, pct: E.users ? Math.round(n / E.users * 100) : 0 }; }
+        return send(res, 200, A); }
+      if (p === '/api/flags' && M === 'POST') { const fl = ud.flags ||= {}, k = String(j.key || '');
+        if (k === 'onboarded') fl.onboarded = 1; else if (k.startsWith('view:') && analytics.VIEW_KEYS.includes(k.slice(5))) { fl.views ||= []; if (!fl.views.includes(k.slice(5))) fl.views.push(k.slice(5)); }
+        else return send(res, 400, { error: 'unknown flag' });
+        save(); return send(res, 200, { ok: true }); }
       if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
       if (p === '/api/export.json') { const { active, ...data } = maskedState(ud); void active;
         return send(res, 200, { app: 'mcat-tracker', exported: new Date().toISOString(), user: user.username, data }, 'application/json', { 'Content-Disposition': 'attachment; filename="mcat-tracker-export.json"' }); }
@@ -230,7 +237,7 @@ function createApp(opts = {}) {
       const r2 = crud(ud, 'tasks', p, M, j, cleanTask, res); if (r2 !== false) return r2;
       // ---- settings ----
       if (p === '/api/settings' && M === 'POST') {
-        const s = ud.settings;
+        const s = ud.settings; (ud.flags ||= {}).tinker = 1;
         if (j.dailyGoalMin !== undefined) { s.dailyGoalMin = s.goals.dailyMin = Math.round(numIn(j.dailyGoalMin, 0, 1440)); }
         if (j.goals) { const g = j.goals;
           for (const k of ['dailyMin', 'weeklyMin', 'monthlyMin', 'termMin']) if (g[k] !== undefined) s.goals[k] = Math.round(numIn(g[k] || 0, 0, k === 'dailyMin' ? 1440 : 1e6));

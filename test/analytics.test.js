@@ -55,23 +55,43 @@ test('cumulative series and duration suggestion', () => {
   assert.equal(a.suggestDuration([S(10, 1, 9, 50), S(10, 2, 9, 52), S(10, 3, 9, 90)]), 3000);
   assert.equal(a.suggestDuration([], 'CARS'), null);
 });
-test('achievements', () => {
-  const ud = blankUserData(); ud.sessions = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'].map((x, i) => S(10, 19 + i, 9, 200, x)); ud.sessions[0].mode = 'pomodoro';
-  const got = Object.fromEntries(a.achievements(ud).map(x => [x.id, x.earned]));
-  assert.equal(got.first, true); assert.equal(got.h10, true); assert.equal(got.s3, true); assert.equal(got.s7, false); assert.equal(got.marathon, true); assert.equal(got.allsec, true); assert.equal(got.silver ?? got.bronze, true); assert.equal(got.pomo, false);
+test('achievements: shape, categories, renamed set, no idiosyncratic badges', () => {
+  const ud = blankUserData(); ud.sessions = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'].map((x, i) => S(10, 19 + i, 9, 200, x, { activity: i ? 'Anki' : 'UBook' })); ud.sessions[0].mode = 'pomodoro';
+  const R = a.achievements(ud); assert.ok(Array.isArray(R.global) && Array.isArray(R.personal) && Array.isArray(R.categories));
+  const cats = new Set(R.categories.map(c => c.id)); assert.ok(R.global.every(x => cats.has(x.cat)), 'every global badge has a known category');
+  const got = Object.fromEntries(R.global.map(x => [x.id, x.earned]));
+  assert.equal(got.first, true); assert.equal(got.h10, true); assert.equal(got.s3, true); assert.equal(got.s7, false); assert.equal(got.marathon, true); assert.equal(got.timer1, true); assert.equal(got.pomo, false); assert.equal(got.subj3day, false);
+  assert.equal(got.allsec, undefined, 'MCAT-section badge removed');
+  assert.ok(!R.global.some(x => /anki|ubook/i.test(x.name + x.id + x.desc)), 'no activity-specific global badges');
+  assert.equal(new Set(R.global.map(x => x.id)).size, R.global.length, 'unique ids');
+  for (const bad of ['First Steps', 'Time Keeper', 'Explorer', 'Week Warrior', 'Polymath', 'Deep Focus', 'Carbon Copy']) assert.ok(!R.global.some(x => x.name === bad), bad);
 });
-test('achievements: tiers, progress, activity and goal badges', () => {
+test('achievements: personal badges per activity and subject', () => {
+  const ud = blankUserData(); ud.sessions = [S(10, 12, 9, 90, 'CARS', { activity: 'Anki' }), S(10, 13, 9, 30, 'CARS', { activity: 'UBook' }), S(10, 14, 9, 30, 'Bio/Biochem')];
+  const P = a.achievements(ud).personal, keys = k => [...new Set(P.filter(x => x.kind === k).map(x => x.key))].sort();
+  assert.deepEqual(keys('activity'), ['Anki', 'UBook']); assert.deepEqual(keys('subject'), ['Bio/Biochem', 'CARS']);
+  const by = Object.fromEntries(P.map(x => [x.id, x]));
+  assert.equal(by['activity:anki:h1'].earned, true); assert.equal(by['activity:ubook:h1'].earned, false); assert.ok(Math.abs(by['activity:ubook:h1'].progress - 0.5) < 1e-9);
+  assert.equal(by['subject:cars:h1'].earned, true); assert.equal(by['activity:anki:n10'].value, 1);
+  assert.equal(P.filter(x => x.key === 'Anki').length, 8, '5 hour tiers + 3 session tiers');
+  assert.equal(new Set(P.map(x => x.id)).size, P.length);
+});
+test('achievements: tiers, progress and goal badges', () => {
   const ud = blankUserData(); ud.settings.goals.dailyMin = 60;
   ud.sessions = [S(10, 12, 9, 70, 'CARS', { activity: 'Flashcards' }), S(10, 13, 9, 70), S(10, 14, 9, 130), S(10, 15, 9, 70), S(10, 16, 5, 30), S(10, 17, 9, 70), S(10, 18, 9, 70)];
-  const A = a.achievements(ud), by = Object.fromEntries(A.map(x => [x.id, x]));
-  assert.ok(A.length >= 40, 'roughly doubled badge set');
-  assert.equal(new Set(A.map(x => x.id)).size, A.length, 'unique ids');
-  for (const id of ['first', 'h1', 's3', 's7', 'sess1h', 'sess2h', 'day2', 'week7', 'weekend', 'early', 'g3']) assert.equal(by[id].earned, true, id);
-  for (const id of ['h10', 's14', 'marathon', 'n10', 'day4', 'g7']) assert.equal(by[id].earned, false, id);
-  assert.equal(by.n10.value, 7); assert.equal(by.n10.target, 10); assert.ok(Math.abs(by.n10.progress - 0.7) < 1e-9);
+  const A = a.achievements(ud).global, by = Object.fromEntries(A.map(x => [x.id, x]));
+  assert.ok(A.length >= 60);
+  for (const id of ['first', 'h1', 's3', 's7', 'sess1h', 'sess2h', 'day2', 'week7', 'weekend', 'early', 'g3', 'week1', 'goal200']) assert.equal(by[id].earned, true, id);
+  for (const id of ['h10', 's14', 'marathon', 'n10', 'day4', 'g7', 'month1', 'early7']) assert.equal(by[id].earned, false, id);
+  assert.equal(by.n10.value, 7); assert.ok(Math.abs(by.n10.progress - 0.7) < 1e-9);
   assert.equal(by.g3.value, 3); assert.equal(by.g7.value, 4, 'Oct 16 (30 min) breaks the goal streak');
 });
+test('achievements: earnedCounts aggregates across users', () => {
+  const u1 = blankUserData(), u2 = blankUserData(); u1.sessions = [S(10, 12, 9, 70)];
+  const E = a.earnedCounts([[u1, 0], [u2, 0]]); assert.equal(E.users, 2); assert.equal(E.counts.first, 1); assert.equal(E.counts.h10, undefined);
+  assert.deepEqual(Object.keys(E).sort(), ['counts', 'users']);
+});
 test('achievements: empty user has locked badges with zero progress and no goal badges without a goal', () => {
-  const ud = blankUserData(); ud.settings.goals.dailyMin = 0; const A = a.achievements(ud);
-  assert.ok(A.every(x => !x.earned && x.progress === 0)); assert.ok(!A.some(x => /^g\d+$/.test(x.id) || x.group === 'activity'));
+  const ud = blankUserData(); ud.settings.goals.dailyMin = 0; const R = a.achievements(ud);
+  assert.ok(R.global.every(x => !x.earned && x.progress === 0)); assert.ok(!R.global.some(x => /^g\d+$/.test(x.id))); assert.equal(R.personal.length, 0);
 });

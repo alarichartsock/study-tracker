@@ -112,7 +112,7 @@ test('subjects meta/rename, activities, goals/settings validation, plan, exams, 
   assert.equal((await app.user('/api/tasks')).body.length, 0); assert.equal((await app.user('/api/tasks/' + tk.id, 'DELETE')).status, 404);
   assert.equal((await c('/api/tasks/' + tk.id, 'DELETE')).status, 200);
   const g = (await c('/api/stats')).body; assert.ok(g.goals.day); assert.ok(g.goals.week);
-  assert.ok(Array.isArray((await c('/api/achievements')).body));
+  assert.ok(Array.isArray((await c('/api/achievements')).body.global));
 });
 
 test('JSON export/import', async t => {
@@ -148,4 +148,19 @@ test('PWA assets served', async t => {
   const m = await fetch(app.base + '/manifest.webmanifest'); assert.equal(m.status, 200); assert.equal((await m.json()).display, 'standalone');
   const sw = await fetch(app.base + '/sw.js'); assert.equal(sw.status, 200); assert.match(sw.headers.get('content-type'), /javascript/);
   assert.equal((await fetch(app.base + '/icon-192.png')).status, 200);
+});
+
+test('achievements API: earnedBy counts across users without leaking other users data; flags', async t => {
+  const app = await start(); t.after(app.close); const { admin, user } = app;
+  await admin('/api/sessions', 'POST', { subject: 'CARS', activity: 'SecretAdminTask', start: '2026-10-20T09:00:00.000Z', end: '2026-10-20T11:00:00.000Z' });
+  const A = (await user('/api/achievements')).body, first = A.global.find(x => x.id === 'first');
+  assert.deepEqual(first.earnedBy, { count: 1, users: 2, pct: 50 }); assert.equal(first.earned, false);
+  assert.equal(A.personal.length, 0); assert.ok(!JSON.stringify(A).includes('SecretAdminTask') && !JSON.stringify(A).includes('alaric'));
+  const B = (await admin('/api/achievements')).body; assert.equal(B.global.find(x => x.id === 'first').earned, true); assert.ok(B.personal.some(x => x.key === 'SecretAdminTask'));
+  assert.equal((await user('/api/flags', 'POST', { key: 'evil' })).status, 400);
+  assert.equal((await user('/api/flags', 'POST', { key: 'onboarded' })).status, 200);
+  for (const v of ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set']) await user('/api/flags', 'POST', { key: 'view:' + v });
+  await user('/api/settings', 'POST', { medals: { bronze: 30 } });
+  const C = Object.fromEntries((await user('/api/achievements')).body.global.map(x => [x.id, x.earned]));
+  assert.equal(C.onboard, true); assert.equal(C.explore, true); assert.equal(C.tinker, true);
 });
