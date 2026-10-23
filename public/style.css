@@ -286,3 +286,6 @@ dialog .link{font-size:14px}
 .mode-tabs.anim-out{animation:modeOut .4s ease forwards}
 .mode-tabs.anim-in{animation:modeIn .4s ease both}
 @media (prefers-reduced-motion:reduce){.mode-tabs.anim-out,.mode-tabs.anim-in{animation:none}}
+
+/* v14: timer ring uses the selected subject color */
+.tring .ring-fg,.running .tring .ring-fg{stroke:var(--subj,var(--acc));filter:drop-shadow(0 0 6px color-mix(in srgb,var(--subj,var(--acc)) 45%,transparent))}
