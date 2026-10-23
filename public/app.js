@@ -80,7 +80,7 @@ $('authForm').onsubmit = async e => {
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 $('themeBtn').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = localStorage.theme = t; };
-function applyAccent() { const a = S?.settings.accent, st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
+function applyAccent() { const a = S?.settings.accent || (S && sel && S.subjectMeta[sel]?.color), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
@@ -148,7 +148,7 @@ ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.tar
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
 ACT.useSuggestion = () => { UI.target = Math.round(ST.suggestion / 60); localStorage.countdownMin = UI.target; render(); };
 ACT.goto = b => go(b.dataset.v);
-ACT.pick = async b => { if (S.active && !S.active.paused) return toast('Pause or stop the timer to switch subjects'); sel = localStorage.subject = b.dataset.s; if (S.active) S.active.subject = sel; ST = await api('/api/stats?subject=' + encodeURIComponent(sel)); render(); };
+ACT.pick = async b => { if (S.active && !S.active.paused) return toast('Pause or stop the timer to switch subjects'); sel = localStorage.subject = b.dataset.s; if (S.active) S.active.subject = sel; applyAccent(); ST = await api('/api/stats?subject=' + encodeURIComponent(sel)); render(); };
 const tFields = () => ({ subject: sel, activity: $('tAct')?.value || '', note: $('tNote')?.value || '' });
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {
@@ -461,7 +461,7 @@ ACT.feedOff = async () => { await api('/api/feed', 'DELETE'); refresh(); };
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme;
   return `<div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
-    <span class="muted small">Accent</span><input type="color" id="sAccent" value="${s.accent || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Save</button><button class="btn" data-act="resetAccent">Reset</button></div></div>
+    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div></div>
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="MCAT prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
