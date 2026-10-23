@@ -1,6 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const tip = (t, focus = true) => ' data-tip="' + esc(t) + '" aria-label="' + esc(t) + '"' + (focus ? ' tabindex="0"' : '');
 const pad = n => String(n).padStart(2, '0');
 const DAY = 864e5;
 const dk = d => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -203,7 +204,7 @@ document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTA
 // ================= DASHBOARD =================
 VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
-  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub">${fmtH(g.done)} / ${fmtH(g.goal)}</span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
+  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + (g.goal ? Math.round(g.done / g.goal * 100) : 0) + "%)")}><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub">${fmtH(g.done)} / ${fmtH(g.goal)}</span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const due = S.tasks.filter(x => !x.done && x.due && x.due <= ST.todayKey);
@@ -215,9 +216,9 @@ VIEWS.dash = () => {
   <div class="grid2">
     <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
       ${due.length ? `<h3 class="mt">Due to-dos</h3>${due.map(x => `<div class="subj-row"><input type="checkbox" class="chk" data-chg="taskDone" data-id="${x.id}"><span>${esc(x.title)}</span>${x.due < ST.todayKey ? '<span class="pill high">overdue</span>' : ''}</div>`).join('')}` : ''}</div>
-    <div class="card"><h3>Last 7 days</h3>${(() => { const vals = week.map(d => (ST.byDay[dk(d)] || 0) + (dk(d) === ST.todayKey ? l : 0)), mx = Math.max(ST.goalSec || 0, 3600, ...vals); return `<div class="week7">${week.map((d, i) => { const v = vals[i], m = medalOf(v); return `<div class="w7-row${dk(d) === ST.todayKey ? ' today' : ''}"><span class="w7-lbl">${fmtDate(d, { weekday: 'short', day: 'numeric' })}</span><div class="w7-track">${v > 0 ? `<i style="width:max(6px,${(v / mx * 100).toFixed(1)}%)"></i>` : ''}</div><span class="w7-medal">${m ? `<span class="medal m-${m}" title="${m}"></span>` : ''}</span><b class="w7-val${v ? '' : ' muted'}">${fmtH(v)}</b></div>`; }).join('')}</div>`; })()}</div>
+    <div class="card"><h3>Last 7 days</h3>${(() => { const vals = week.map(d => (ST.byDay[dk(d)] || 0) + (dk(d) === ST.todayKey ? l : 0)), mx = Math.max(ST.goalSec || 0, 3600, ...vals); return `<div class="week7">${week.map((d, i) => { const v = vals[i], m = medalOf(v); return `<div class="w7-row${dk(d) === ST.todayKey ? ' today' : ''}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : '') + (ST.goalSec ? ' \u00b7 ' + Math.round(v / ST.goalSec * 100) + '% of goal' : ''))}><span class="w7-lbl">${fmtDate(d, { weekday: 'short', day: 'numeric' })}</span><div class="w7-track">${v > 0 ? `<i style="width:max(6px,${(v / mx * 100).toFixed(1)}%)"></i>` : ''}</div><span class="w7-medal">${m ? `<span class="medal m-${m}"></span>` : ''}</span><b class="w7-val${v ? '' : ' muted'}">${fmtH(v)}</b></div>`; }).join('')}</div>`; })()}</div>
   </div>
-  ${subjGoals.length ? `<div class="card"><h3>Weekly subject goals</h3>${subjGoals.map(([k, g]) => `<div class="sbar"><div class="row"><span><span class="dot" style="background:${color(k)}"></span> ${esc(k)}</span><b>${fmtH(g.done)} / ${fmtH(g.goal)}</b></div><div class="bar"><i style="width:${Math.min(100, g.done / g.goal * 100)}%;background:${color(k)}"></i></div></div>`).join('')}</div>` : ''}
+  ${subjGoals.length ? `<div class="card"><h3>Weekly subject goals</h3>${subjGoals.map(([k, g]) => `<div class="sbar"${tip(k + ' \u00b7 ' + fmtH(g.done) + ' of ' + fmtH(g.goal) + ' this week (' + Math.round(g.done / g.goal * 100) + '%)')}><div class="row"><span><span class="dot" style="background:${color(k)}"></span> ${esc(k)}</span><b>${fmtH(g.done)} / ${fmtH(g.goal)}</b></div><div class="bar"><i style="width:${Math.min(100, g.done / g.goal * 100)}%;background:${color(k)}"></i></div></div>`).join('')}</div>` : ''}
   <div class="card"><h3>Last 14 days</h3><div class="chart">${stackChart()}</div><div class="legend">${legend()}</div></div>
   <div class="card"><h3>Study calendar</h3><div class="heat-scroll" id="heatS">${heatmap(ST.byDay)}</div>
     <div class="heat-key muted small">Less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> More · dots = medal days</div></div>`;
@@ -229,7 +230,7 @@ function stackChart() {
   const order = [...S.subjects.filter(s => subs.has(s)), ...[...subs].filter(s => !S.subjects.includes(s))];
   const tot = d => Object.values(bd[dk(d)] || {}).reduce((a, b) => a + b, 0), max = Math.max(ST.goalSec, 3600, ...days.map(tot)), W = 700, H = 200, top = 10, bot = 22, bw = W / 14;
   let out = `<div class="hcols stack">${ST.goalSec ? `<div class="goal-line" style="bottom:calc(22px + (100% - 22px) * )"></div>` : ''}`;
-  days.forEach(d => { out += `<div class="hcol"><div class="hcol-bar">${order.map(s => { const v = (bd[dk(d)] || {})[s]; return v ? `<i style="height:${(v / max * 100).toFixed(2)}%;background:${color(s)}" title="${esc(s)}: ${fmtH(v)}"></i>` : ''; }).join('')}</div><span>${d.toLocaleDateString([], { weekday: 'narrow' })}${d.getDate()}</span></div>`; });
+  days.forEach(d => { const dl = fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }); out += `<div class="hcol"${tip(dl + ' \u00b7 ' + fmtH(tot(d)))}><div class="hcol-bar">${order.map(s => { const v = (bd[dk(d)] || {})[s]; return v ? `<i style="height:${(v / max * 100).toFixed(2)}%;background:${color(s)}"${tip(dl + ' \u00b7 ' + s + ': ' + fmtH(v), false)}></i>` : ''; }).join('')}</div><span>${d.toLocaleDateString([], { weekday: 'narrow' })}${d.getDate()}</span></div>`; });
   legend.order = order; return out + '</div>';
 }
 const legend = () => (legend.order || []).map(s => `<span><i class="dot" style="background:${color(s)}"></i>${esc(s)}</span>`).join('') + (ST.goalSec ? '<span>- - daily goal</span>' : '');
@@ -241,7 +242,7 @@ function heatmap(byDay) {
   for (let d = new Date(start), i = 0; d <= end; d = addD(d, 1), i++) {
     const w = Math.floor(i / 7), r = (d.getDay() + 6) % 7, v = byDay[dk(d)] || 0, lv = v <= 0 ? 0 : v < goal * 0.25 ? 1 : v < goal * 0.5 ? 2 : v < goal ? 3 : 4, m = medalOf(v), x = 30 + w * (c + g), y = 20 + r * (c + g);
     if (r === 0 && d.getMonth() !== lastM) { lastM = d.getMonth(); out += `<text x="${x}" y="10">${d.toLocaleDateString([], { month: 'short' })}</text>`; }
-    out += `<rect class="l${lv}" x="${x}" y="${y}" width="${c}" height="${c}" rx="2"><title>${d.toDateString()}: ${fmtH(v)}${m ? ' · ' + m : ''}</title></rect>${m ? `<circle cx="${x + c / 2}" cy="${y + c / 2}" r="2.5" style="fill:${MEDAL_COLORS[m]}"/>` : ''}`;
+    out += `<rect class="l${lv}" x="${x}" y="${y}" width="${c}" height="${c}" rx="2"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : ''), false)}></rect>${m ? `<circle cx="${x + c / 2}" cy="${y + c / 2}" r="2.5" style="fill:${MEDAL_COLORS[m]}"/>` : ''}`;
   }
   return out + '</svg>';
 }
@@ -319,7 +320,7 @@ VIEWS.cal = () => {
   for (let i = 0; i < 42; i++) { const d = addD(start, i), k = dk(d), v = ST.byDay[k] || 0, plan = S.plan[k], md = medalOf(v), ex = S.exams.filter(e => e.date === k), tk = S.tasks.filter(t => t.due === k && !t.done);
     if (d.getMonth() === m - 1) { mTot += v; mPlan += plan != null ? plan * 60 : 0; }
     const goal = plan != null ? plan * 60 : ST.goals.day.goal;
-    cells += `<div class="cday ${d.getMonth() !== m - 1 ? 'out' : ''} ${k === ST.todayKey ? 'today' : ''}" data-act="calDay" data-k="${k}"><div class="row" style="margin:0;justify-content:space-between"><b>${d.getDate()}</b>${md ? `<span class="medal m-${md}"></span>` : ''}</div>
+    cells += `<div class="cday ${d.getMonth() !== m - 1 ? 'out' : ''} ${k === ST.todayKey ? 'today' : ''}" data-act="calDay" data-k="${k}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + (v ? fmtH(v) : 'no study') + (goal ? ' \u00b7 ' + Math.round(v / goal * 100) + '% of goal' : ''), false)}><div class="row" style="margin:0;justify-content:space-between"><b>${d.getDate()}</b>${md ? `<span class="medal m-${md}"></span>` : ''}</div>
       ${v ? `<span>${fmtH(v)}</span>` : ''}${plan != null ? `<span class="muted tx">plan ${fmtH(plan * 60)}</span>` : ''}${ex.map(e => `<span class="ex tx">📝 ${esc(e.name)}</span>`).join('')}${tk.length ? `<span class="muted tx">☐ ${tk.length} to-do</span>` : ''}
       ${goal ? `<div class="bar"><i style="width:${Math.min(100, v / goal * 100)}%;background:var(--acc)"></i></div>` : ''}</div>`; }
   return `<div class="card"><div class="row" style="margin:0 0 12px"><button class="btn" data-act="calNav" data-d="-1">‹</button><h3 class="grow center" style="margin:0">${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3><button class="btn" data-act="calNav" data-d="0">Today</button><button class="btn" data-act="calNav" data-d="1">›</button></div>
@@ -342,11 +343,13 @@ function rangeDates(r) { const t = k2d(ST.todayKey), term = S.settings.term;
     case 'month': return [dk(new Date(t.getFullYear(), t.getMonth(), 1)), dk(new Date(t.getFullYear(), t.getMonth() + 1, 0))]; case 'term': return term.start && term.end ? [term.start, term.end] : [dk(addD(t, -89)), ST.todayKey];
     case 'year': return [dk(addD(t, -364)), ST.todayKey]; case 'custom': return [UI.cFrom || dk(addD(t, -29)), UI.cTo || ST.todayKey]; default: return [null, null]; } }
 const bars = (obj, total, colFn) => { const e = Object.entries(obj).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]), mx = Math.max(1, ...e.map(x => x[1]));
-  return e.map(([k, v]) => `<div class="sbar"><div class="row"><span>${esc(k)}</span><b>${fmtH(v)} <small class="muted">${total ? Math.round(v / total * 100) : 0}%</small></b></div><div class="bar"><i style="width:${v / mx * 100}%;background:${colFn(k)}"></i></div></div>`).join('') || '<p class="muted small">No data</p>'; };
-const colChart = (arr, labels) => { const mx = Math.max(1, ...arr); return `<div class="hcols">${arr.map((v, i) => `<div class="hcol" title="${labels[i] || i}: ${fmtH(v)}"><div class="hcol-bar">${v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : ''}</div><span>${labels[i]}</span></div>`).join('')}</div>`; };
+  return e.map(([k, v]) => `<div class="sbar"${tip(k + ' \u00b7 ' + fmtH(v) + ' \u00b7 ' + (total ? Math.round(v / total * 100) : 0) + '% of total')}><div class="row"><span>${esc(k)}</span><b>${fmtH(v)} <small class="muted">${total ? Math.round(v / total * 100) : 0}%</small></b></div><div class="bar"><i style="width:${v / mx * 100}%;background:${colFn(k)}"></i></div></div>`).join('') || '<p class="muted small">No data</p>'; };
+const colChart = (arr, labels, names = labels) => { const mx = Math.max(1, ...arr), tot = arr.reduce((a, b) => a + b, 0); return `<div class="hcols">${arr.map((v, i) => `<div class="hcol"${tip(names[i] + ' \u00b7 ' + fmtH(v) + (tot ? ' \u00b7 ' + Math.round(v / tot * 100) + '%' : ''))}><div class="hcol-bar">${v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : ''}</div><span>${labels[i]}</span></div>`).join('')}</div>`; };
+function cumHits(cum) { const n = Math.min(cum.length, 60), seg = [...Array(n)].map((_, i) => cum[Math.round((i + 1) / n * cum.length) - 1]);
+  return '<div class="cum-hit">' + seg.map(([k, v], i) => { const prev = i ? seg[i - 1][1] : 0; return '<i' + tip(fmtDate(k2d(k), { month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + ' total' + (v > prev ? ' (+' + fmtH(v - prev) + ')' : ''), false) + '></i>'; }).join('') + '</div>'; }
 function donut(by, total) { if (!total) return ''; let a0 = 0;
   return `<svg viewBox="-1.1 -1.1 2.2 2.2" style="width:160px;height:160px;transform:rotate(-90deg)">${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => { const a1 = a0 + v / total * Math.PI * 2 - 1e-6, L = a1 - a0 > Math.PI ? 1 : 0;
-    const p = `M ${Math.cos(a0)} ${Math.sin(a0)} A 1 1 0 ${L} 1 ${Math.cos(a1)} ${Math.sin(a1)} L ${Math.cos(a1) * 0.6} ${Math.sin(a1) * 0.6} A 0.6 0.6 0 ${L} 0 ${Math.cos(a0) * 0.6} ${Math.sin(a0) * 0.6} Z`; a0 = a1 + 1e-6; return `<path d="${p}" fill="${color(k)}"><title>${esc(k)}: ${fmtH(v)}</title></path>`; }).join('')}</svg>`; }
+    const p = `M ${Math.cos(a0)} ${Math.sin(a0)} A 1 1 0 ${L} 1 ${Math.cos(a1)} ${Math.sin(a1)} L ${Math.cos(a1) * 0.6} ${Math.sin(a1) * 0.6} A 0.6 0.6 0 ${L} 0 ${Math.cos(a0) * 0.6} ${Math.sin(a0) * 0.6} Z`; a0 = a1 + 1e-6; return `<path d="${p}" fill="${color(k)}"${tip(k + ' \u00b7 ' + fmtH(v) + ' \u00b7 ' + Math.round(v / total * 100) + '%')}></path>`; }).join('')}</svg>`; }
 VIEWS.stats = async () => {
   const [from, to] = rangeDates(UI.range), qs = new URLSearchParams(); if (from) qs.set('from', from); if (to) qs.set('to', to); if (UI.sSubj) qs.set('subject', UI.sSubj);
   const R = await api('/api/report?' + qs), c = R.current, chg = R.change, cum = R.cumulative, cMax = Math.max(1, ...cum.map(x => x[1]));
@@ -365,8 +368,8 @@ VIEWS.stats = async () => {
     <div class="card"><h3>Records</h3><div class="subj-row"><span>Best week</span><b>${c.bestWeek ? `${fmtH(c.bestWeek[1])} <small class="muted">${esc(c.bestWeek[0])}</small>` : '–'}</b></div><div class="subj-row"><span>Best month</span><b>${c.bestMonth ? `${fmtH(c.bestMonth[1])} <small class="muted">${esc(c.bestMonth[0])}</small>` : '–'}</b></div>
       <div class="subj-row"><span>Longest session</span><b>${fmtH(c.longestSession)}</b></div><div class="subj-row"><span>Longest streak</span><b>${c.streak} days</b></div><div class="subj-row"><span>Breaks</span><b>${fmtH(c.breakSec)}</b></div>
       <div class="subj-row"><span>Medals</span><b>${MEDAL_ORDER.map(m => `<span class="medal m-${m}"></span> ${c.medals[m]}`).join(' &nbsp;')}</b></div></div></div>
-  <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))))}</div></div>
-  <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? `<svg viewBox="0 0 700 160" preserveAspectRatio="none" style="width:100%;height:160px"><polyline vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="2" points="${cum.map(([, v], i) => `${cum.length > 1 ? i / (cum.length - 1) * 700 : 0},${155 - v / cMax * 145}`).join(' ')}"/></svg><p class="muted small">${fmtH(cMax)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
+  <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))), [...Array(24)].map((_, i) => pad(i) + ':00-' + pad((i + 1) % 24) + ':00'))}</div></div>
+  <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? `<div class="cum-wrap"><svg viewBox="0 0 700 160" preserveAspectRatio="none" style="width:100%;height:160px"><polyline vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="2" points="${cum.map(([, v], i) => `${cum.length > 1 ? i / (cum.length - 1) * 700 : 0},${155 - v / cMax * 145}`).join(' ')}"/></svg>${cumHits(cum)}</div><p class="muted small">${fmtH(cMax)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
   <div class="card scroll"><h3>Data room · activities × subjects</h3>${acts.length ? `<table class="tbl"><tr><th></th>${subjects.map(s => `<th class="num">${esc(s)}</th>`).join('')}</tr>${acts.map(a => `<tr><th>${esc(a)}</th>${subjects.map(s => cell(c.matrix.activitySubject[a][s])).join('')}</tr>`).join('')}</table>` : '<p class="muted small">No data</p>'}</div>
   <div class="card scroll"><h3>Data room · subjects × weeks</h3>${weeks.length ? `<table class="tbl"><tr><th></th>${weeks.map(w => `<th class="num">${esc(w.slice(5))}</th>`).join('')}</tr>${subjects.map(s => `<tr><th><span class="dot" style="background:${color(s)}"></span> ${esc(s)}</th>${weeks.map(w => cell((c.matrix.subjectWeek[s] || {})[w])).join('')}</tr>`).join('')}<tr><th>Total</th>${weeks.map(w => `<td class="num"><b>${fmtH(c.byWeek[w])}</b></td>`).join('')}</tr></table>` : '<p class="muted small">No data</p>'}</div>`;
 };
@@ -543,3 +546,18 @@ setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'd
 setInterval(() => { if (ME && !document.hidden) checkAchievements(); }, 120000);
 document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && view === 'timer') refresh().catch(() => {}); });
 boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to load: ' + esc(e.message) + '</p>'; });
+
+// ---------- shared chart tooltip (data-tip) ----------
+(() => { const el = document.createElement('div'); el.id = 'chartTip'; el.className = 'chart-tip'; el.setAttribute('role', 'tooltip'); document.body.appendChild(el); let cur = null;
+  const place = (x, y) => { const w = el.offsetWidth, h = el.offsetHeight; let top = y - h - 14; if (top < 8) top = y + 18; el.style.left = Math.max(8, Math.min(innerWidth - w - 8, x - w / 2)) + 'px'; el.style.top = Math.max(8, Math.min(innerHeight - h - 8, top)) + 'px'; };
+  const show = (t, x, y) => { if (cur !== t) { hide(); cur = t; t.classList.add('tip-hot'); t.setAttribute('aria-describedby', 'chartTip'); el.textContent = t.dataset.tip; el.classList.add('on'); } place(x, y); };
+  const hide = () => { if (cur) { cur.classList.remove('tip-hot'); cur.removeAttribute('aria-describedby'); } cur = null; el.classList.remove('on'); };
+  const at = e => e.target.closest && e.target.closest('[data-tip]');
+  document.addEventListener('pointermove', e => { if (e.pointerType === 'touch') return; const t = at(e); t ? show(t, e.clientX, e.clientY) : hide(); }, { passive: true });
+  document.addEventListener('pointerdown', e => { const t = at(e); if (e.pointerType === 'mouse') return; t ? show(t, e.clientX, e.clientY) : hide(); }, { passive: true });
+  document.addEventListener('focusin', e => { const t = at(e); if (t) { const r = t.getBoundingClientRect(); show(t, r.left + r.width / 2, r.top); } else hide(); });
+  document.addEventListener('focusout', () => hide());
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  addEventListener('scroll', hide, { passive: true, capture: true }); addEventListener('resize', hide);
+  new MutationObserver(() => { if (cur && !cur.isConnected) hide(); }).observe(document.body, { childList: true, subtree: true });
+})();

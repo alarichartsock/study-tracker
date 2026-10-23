@@ -36,3 +36,12 @@ test('goal rings use HTML labels instead of scaled SVG text', () => {
   assert.match(js, /class="g-pct"/);
   assert.match(pub('style.css'), /\.goal-ring\{[^}]*width:160px/);
 });
+
+test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
+  const js = pub('app.js'), css = pub('style.css');
+  assert.ok((js.match(/\$\{tip\(/g) || []).length >= 10, 'chart markup uses tip()');
+  assert.match(js, /data-tip="/); assert.match(js, /aria-describedby/); assert.match(js, /role', 'tooltip'/);
+  for (const re of [/class="hcol"\$\{tip\(/, /class="sbar"\$\{tip\(/, /rx="2"\$\{tip\(/, /class="goal-ring"\$\{tip\(/, /fill="\$\{color\(k\)\}"\$\{tip\(/, /cumHits\(cum\)/, /class="w7-row[^\n]*\$\{tip\(/]) assert.match(js, re);
+  assert.ok(!/<title>/.test(js), 'native SVG titles replaced'); assert.ok(!/class="hcol" title=/.test(js));
+  assert.match(css, /\.chart-tip\{/); assert.match(css, /\.tip-hot/);
+});
