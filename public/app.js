@@ -418,13 +418,13 @@ VIEWS.trophy = async () => {
   return '<div class="card"><h3>Medals</h3><p class="muted small">Earned for days above your thresholds (Settings): ' + MEDAL_ORDER.slice().reverse().map(m => '<span class="medal m-' + m + '"></span> ' + m + ' ' + fmtH((S.settings.medals[m] || 0) * 60)).join(' &middot; ') + '</p>' +
     statCards(MEDAL_ORDER.map(m => ['<span class="medal m-' + m + '"></span> ' + md[m], m[0].toUpperCase() + m.slice(1)])) + '</div>' +
     '<div class="card"><h3>Achievements &middot; ' + all.filter(x => x.earned).length + '/' + all.length + '</h3>' +
-    '<div class="ach-cats" role="tablist">' + cats.map(c => { const l = inCat(c.id); return '<button role="tab" data-act="achCat" data-v="' + c.id + '" class="' + (c.id === cat ? 'on' : '') + '">' + esc(c.name) + ' <span>' + l.filter(x => x.earned).length + '/' + l.length + '</span></button>'; }).join('') + '</div>' +
+    '<div class="ach-wrap"><div class="ach-cats" role="tablist">' + cats.map(c => { const l = inCat(c.id); return '<button role="tab" data-act="achCat" data-v="' + c.id + '" class="' + (c.id === cat ? 'on' : '') + '">' + esc(c.name) + ' <span>' + l.filter(x => x.earned).length + '/' + l.length + '</span></button>'; }).join('') + '</div></div>' +
     '<div class="tabs ach-filter">' + ['all', 'earned', 'locked'].map(v => '<button data-act="achFilter" data-v="' + v + '" class="' + (filt === v ? 'on' : '') + '">' + v[0].toUpperCase() + v.slice(1) + '</button>').join('') + '</div>' + body + '</div>';
 };
 ACT.achCat = b => { localStorage.achCat = b.dataset.v; render(); };
 ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; render(); };
 const achAll = A => [...A.global, ...A.personal];
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); const t = document.querySelector('.ach-cats .on'); if (t) t.scrollIntoView({ block: 'nearest', inline: 'center' }); };
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); const t = document.querySelector('.ach-cats .on'); if (t) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); };
 async function checkAchievements() { try { const A = achAll(await api('/api/achievements')), stored = JSON.parse(localStorage.seenAch || 'null'), seen = new Set(stored || A.filter(a => a.earned).map(a => a.id));
   if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name + (a.key ? ' (' + a.key + ')' : ''), a.desc); seen.add(a.id); }
   localStorage.seenAch = JSON.stringify([...seen]); } catch { /* ignore */ } }
