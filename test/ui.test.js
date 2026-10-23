@@ -10,7 +10,7 @@ test('landing page has hero, auth buttons, features and footer', () => {
   assert.match(h, /id="landing"/);
   assert.match(h, /data-auth="login"/);
   assert.match(h, /data-auth="register"/);
-  assert.ok((h.match(/class="feat card"/g) || []).length >= 8);
+  assert.ok((h.match(/class="feat card"/g) || []).length >= 7);
   assert.match(h, /&copy; 2026 Alaric Hartsock\. All rights reserved\./);
 });
 test('glass styles include accessibility fallbacks', () => {

@@ -410,15 +410,12 @@ async function checkAchievements() { try { const A = await api('/api/achievement
 
 // ================= IMPORT / EXPORT (Athenify wizard) =================
 const W = UI.wiz;
-VIEWS.data = () => `<div class="card wizard" id="wiz"><h3>Import from Athenify</h3>${wizardHTML()}</div>
-  <div class="card"><h3>Import CSV (other apps)</h3><p class="muted small">Columns are detected automatically (date, start, end, duration, subject/category, note). If detection is wrong, type the exact header names.</p>
+VIEWS.data = () => `<div class="card"><h3>Import CSV</h3><p class="muted small">Columns are detected automatically (date, start, end, duration, subject/category, note). If detection is wrong, type the exact header names.</p>
     <input type="file" id="csvFile" accept=".csv,text/csv"><div class="grid3 maps">${['date', 'start', 'end', 'duration', 'subject', 'note'].map(k => `<input id="m_${k}" placeholder="${k} column">`).join('')}</div>
     <button class="btn primary" data-act="csvImport">Import CSV</button><pre id="csvRes" class="muted small"></pre></div>
   <div class="card"><h3>Backup &amp; export</h3><div class="row wrap gap"><a class="btn" href="/api/export.csv">Sessions CSV</a><a class="btn" href="/api/export.json">Full JSON backup</a>
     <label class="btn" style="margin:0">Restore JSON backup<input type="file" accept=".json,application/json" class="hid" data-chg="jsonImport"></label></div>
-    <p class="muted small">Restoring merges and never deletes; sessions already present are skipped.</p></div>
-  <div class="card"><h3>Calendar feed (iCal)</h3><p class="muted small">Subscribe to your sessions, exams and to-dos in Google Calendar, Apple Calendar or Outlook. The link is secret; make a new one if it leaks.</p>
-    <div class="row wrap gap">${S.settings.hasFeed ? '<button class="btn" data-act="feedNew">Make a new link</button><button class="btn danger" data-act="feedOff">Disable feed</button>' : '<button class="btn primary" data-act="feedNew">Create feed link</button>'}</div><input id="feedUrl" class="mt hid" readonly></div>`;
+    <p class="muted small">Restoring merges and never deletes; sessions already present are skipped.</p></div>`;
 function wizardHTML() {
   const rs = S.athenifyResync;
   if (W.step === 1) return `<ol class="steps"><li>Open <b>Athenify</b> in your browser and sign in.</li><li>Find its <b>calendar feed</b> (iCal) option, usually under Settings or integrations. Athenify lists it as “Export your study sessions as an iCal calendar feed”.</li>
@@ -535,11 +532,11 @@ ACT.repReview = async b => { const r = (await api('/api/admin/reports')).find(x 
 // ---------- onboarding ----------
 ACT.onboard = () => onboarding();
 function onboarding() {
-  dialog(`<h3>Welcome to your MCAT tracker 👋</h3><ol class="steps"><li>Set a <b>daily goal</b>. Weekly, monthly and test-day goals are in Settings.</li><li>Pick a subject and hit <b>Start</b>, or use Pomodoro / Countdown mode.</li><li>Coming from <b>Athenify</b>? Import your history in a few clicks.</li></ol>
+  dialog(`<h3>Welcome to your MCAT tracker 👋</h3><ol class="steps"><li>Set a <b>daily goal</b>. Weekly, monthly and test-day goals are in Settings.</li><li>Pick a subject and hit <b>Start</b>, or use Pomodoro / Countdown mode.</li><li>Coming from another app? Import a CSV export from the Data tab.</li></ol>
     <label>Daily goal (hours)</label><input type="number" name="goal" step="0.5" min="0" value="${S.settings.goals.dailyMin / 60}"><label>MCAT test date (optional)</label><input type="date" name="mcat">
-    <div class="row"><button class="btn" value="athenify">Import from Athenify</button><span class="sp"></span><button class="btn primary" value="ok">Let's go</button></div>`,
+    <div class="row"><span class="sp"></span><button class="btn primary" value="ok">Let's go</button></div>`,
   async (v, f) => { await api('/api/settings', 'POST', { goals: { dailyMin: Math.round(+f.goal.value * 60) } }); if (f.mcat.value) await api('/api/exams', 'POST', { name: 'MCAT', date: f.mcat.value });
-    await refresh(); if (v === 'athenify') { W.step = 1; go('data'); } });
+    await refresh(); });
 }
 
 // ---------- periodic refresh ----------
