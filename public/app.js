@@ -159,7 +159,17 @@ ACT.start = async () => {
 };
 ACT.pause = async () => { await api('/api/timer/pause', 'POST'); await refresh(); };
 ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); await refresh(); };
-ACT.stop = async () => { const f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: sel }); UI.pomo = null; savePomo(); keepAwake(false); exitFs(); await afterSave(r.session); };
+ACT.stop = async () => { const f = tFields(), a = S.active; if (!a) return;
+  const secs = (a.accum || 0) + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000), short = secs < 30;
+  const finish = async () => { UI.pomo = null; savePomo(); keepAwake(false); exitFs(); };
+  dialog(`<h3>Save this session?</h3><p class="muted">${esc(sel || a.subject || '')} \u00b7 ${fmtH(secs)}${short ? ' \u00b7 under 30 seconds, too short to save' : ''}</p>
+    ${short ? '' : `<div class="row"><div><label>Focus</label>${stars('focus', null)}</div><div><label>Progress</label>${stars('progress', null)}</div></div>`}
+    <div class="row wrap"><button class="btn danger" value="discard">Discard</button><span class="sp"></span><button class="btn" value="cancel">Keep going</button>${short ? '' : '<button class="btn primary" value="save">Save</button>'}</div>`,
+  async (v, fm) => {
+    if (v === 'discard') { if (!confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await finish(); await refresh(); return toast('Session discarded'); }
+    const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
+    await finish(); await refresh(); checkAchievements(); if (r.session) toast(`Saved ${fmtH(dur(r.session))} of ${r.session.subject}`); });
+};
 async function afterSave(s) { await refresh(); checkAchievements(); if (!s) return toast('Too short to save (<30s)'); toast(`Saved ${fmtH(dur(s))} of ${s.subject}`, 'Rate it', () => rateSession(s)); }
 function rateSession(s) {
   dialog(`<h3>How did it go?</h3><label>Focus</label>${stars('focus', s.focus)}<label>Progress</label>${stars('progress', s.progress)}
