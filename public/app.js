@@ -561,3 +561,5 @@ boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to
   addEventListener('scroll', hide, { passive: true, capture: true }); addEventListener('resize', hide);
   new MutationObserver(() => { if (cur && !cur.isConnected) hide(); }).observe(document.body, { childList: true, subtree: true });
 })();
+
+addEventListener('resize', () => { if (document.querySelector('.ach-cats')) achIndicator(true); });
