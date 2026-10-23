@@ -327,7 +327,7 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
    transform/filter/backdrop-filter/will-change (they would become the containing block of the fixed nav). */
 .top{transform:none!important;filter:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;will-change:auto!important;isolation:auto}
 .tabbar{z-index:100;isolation:isolate}.top{z-index:90}
-:root{view-transition-name:none}#achGrid{view-transition-name:ach-grid}
+
 .trophy{-webkit-backdrop-filter:none;backdrop-filter:none}
 @media(max-width:760px){
  .card,.stat,.item,.trophy,.ach-cats button,.ach-filter{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
