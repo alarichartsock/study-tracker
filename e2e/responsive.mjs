@@ -9,6 +9,7 @@ const pw = await import('playwright');
 const OUT = process.env.UI_SHOTS || path.resolve('ui-shots'); fs.mkdirSync(OUT, { recursive: true });
 const BROWSERS = (process.env.UI_BROWSERS || 'chromium,webkit').split(',');
 const WIDTHS = (process.env.UI_WIDTHS || '320,375,390,414,768,1024,1280,1440').split(',').map(Number);
+const SHOT_W = process.env.UI_SHOT_WIDTHS ? process.env.UI_SHOT_WIDTHS.split(',').map(Number) : null, DPR = +process.env.UI_DPR || 0;
 const VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 
 // ---- server on a temp data dir with a seeded, fake test user ----
@@ -70,20 +71,21 @@ function pageChecks(phone) {
 const failures = []; let shots = 0;
 const note = (tag, list) => { for (const f of list) failures.push(tag + ': ' + f); };
 async function runWidth(browser, bname, w) {
-    const phone = w <= 520, opts = { viewport: { width: w, height: phone ? 844 : 900 }, deviceScaleFactor: phone ? 2 : 1, hasTouch: phone, ...(bname === 'firefox' ? {} : { isMobile: phone }), serviceWorkers: 'block' };
+    const t0 = Date.now(), wantShots = !SHOT_W || SHOT_W.includes(w), shotFn = page => async o => { if (wantShots) { await page.screenshot(o); shots++; } };
+    const phone = w <= 520, opts = { viewport: { width: w, height: phone ? 844 : 900 }, deviceScaleFactor: DPR || (phone ? 2 : 1), hasTouch: phone, ...(bname === 'firefox' ? {} : { isMobile: phone }), serviceWorkers: 'block' };
     const tag0 = bname + '@' + w;
     // landing (signed out)
     { const ctx = await browser.newContext(opts), page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
       await page.goto(BASE + '/'); await page.waitForTimeout(700); note(tag0 + ' landing', [...errs, ...await page.evaluate(pageChecks, phone)]);
-      await page.screenshot({ path: path.join(OUT, `${tag0}-landing.png`) }); shots++; await ctx.close(); }
+      await shotFn(page)({ path: path.join(OUT, `${tag0}-landing.png`) }); await ctx.close(); }
     const ctx = await browser.newContext(opts); await ctx.addCookies([{ name: 'sid', value: sid, url: BASE }]);
     const page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
     await page.goto(BASE + '/'); await page.waitForTimeout(800); await page.evaluate(() => document.querySelector('dialog[open]')?.close());
     const check = async (tag, shot = true) => { await page.waitForTimeout(250); note(tag0 + ' ' + tag, [...errs.splice(0), ...await page.evaluate(pageChecks, phone)]);
-      if (shot) { await page.screenshot({ path: path.join(OUT, `${tag0}-${tag}.png`) }); shots++; }
+      if (shot) { await shotFn(page)({ path: path.join(OUT, `${tag0}-${tag}.png`) }); }
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(200);
       note(tag0 + ' ' + tag + ' (scrolled to bottom)', await page.evaluate(pageChecks, phone));
-      if (shot) { await page.screenshot({ path: path.join(OUT, `${tag0}-${tag}-bottom.png`) }); shots++; }
+      if (shot) { await shotFn(page)({ path: path.join(OUT, `${tag0}-${tag}-bottom.png`) }); }
       await page.evaluate(() => window.scrollTo(0, 0)); };
     for (const v of VIEWS) { await page.evaluate(v => document.querySelector(`#nav button[data-v="${v}"]`).click(), v); await page.waitForTimeout(300); await check(v); }
     // achievements: every category + filters
@@ -97,15 +99,15 @@ async function runWidth(browser, bname, w) {
       if (!dlg) return ['sheet did not open']; const r = dlg.getBoundingClientRect(); if (r.left < -1 || r.right > vw + 1) f.push('sheet wider than viewport');
       for (const el of dlg.querySelectorAll('input,select,textarea,button')) { const q = el.getBoundingClientRect(); if (q.width && (q.left < r.left - 1 || q.right > r.right + 1)) f.push('control outside sheet: ' + (el.name || el.textContent.trim().slice(0, 20))); }
       return f; }));
-    await page.screenshot({ path: path.join(OUT, `${tag0}-add-session.png`) }); shots++;
+    await shotFn(page)({ path: path.join(OUT, `${tag0}-add-session.png`) });
     await page.evaluate(() => document.querySelector('dialog[open]')?.close()); await page.waitForTimeout(300);
     // timer fullscreen
     await page.evaluate(() => document.querySelector('#nav button[data-v="timer"]').click()); await page.waitForTimeout(500);
     const hasFs = await page.evaluate(() => { const b = document.querySelector('[data-act="fullscreen"]'); if (b) b.click(); return !!b; }); await page.waitForTimeout(600);
     if (!hasFs) note(tag0 + ' timer fullscreen', ['fullscreen button missing']);
     else { note(tag0 + ' timer fullscreen', [...errs.splice(0), ...await page.evaluate(() => { const vw = document.documentElement.clientWidth; return document.documentElement.scrollWidth > vw + 1 ? ['horizontal overflow in fullscreen'] : []; })]);
-      await page.screenshot({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); shots++; await page.keyboard.press('Escape'); }
-    await ctx.close();
+      await shotFn(page)({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); await page.keyboard.press('Escape'); }
+    await ctx.close(); console.log(bname + '@' + w + ' done in ' + Math.round((Date.now() - t0) / 1000) + 's');
 }
 const T = +process.env.UI_TASK_TIMEOUT || 8 * 60e3, CONC = +process.env.UI_CONCURRENCY || 4;
 for (const bname of BROWSERS) { const browser = await pw[bname].launch(), queue = [...WIDTHS];

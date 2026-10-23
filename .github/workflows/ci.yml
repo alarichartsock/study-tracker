@@ -31,6 +31,9 @@ jobs:
         timeout-minutes: 20
         env:
           UI_SHOTS: ui-shots
+          UI_CONCURRENCY: '2'
+          UI_DPR: '1'
+          UI_SHOT_WIDTHS: '320,390,1024,1440'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
