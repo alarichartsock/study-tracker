@@ -337,3 +337,10 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 
 /* data room table */
 .tbl-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}.tbl.dr{table-layout:fixed;width:100%}.tbl.dr col.dr-first{width:30%}.tbl.dr th,.tbl.dr td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tbl.dr thead th.num{text-align:right}.tbl.dr th.dr-h,.tbl.dr tbody th,.tbl.dr tfoot th{text-align:left}.tbl.dr tfoot td,.tbl.dr tfoot th{border-top:1px solid var(--line);border-bottom:0}
+
+/* goal ring text fits inside the ring */
+.goal-ring{container-type:inline-size}
+.goal-ring .ring-center{inset:17%;width:auto;height:auto;overflow:hidden;gap:1px}
+.goal-ring .g-pct{font-size:clamp(16px,21cqi,36px);max-width:100%}
+.goal-ring .g-sub{display:flex;flex-direction:column;align-items:center;font-size:clamp(9px,7.6cqi,13px);line-height:1.2;max-width:100%;overflow:hidden}
+.goal-ring .g-sub>span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
