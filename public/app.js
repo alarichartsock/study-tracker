@@ -431,7 +431,7 @@ function achIndicator(instant) { const bar = document.querySelector('.ach-cats')
   if (instant || reduceMotion()) ind.style.transition = 'none'; ind.style.width = on.offsetWidth + 'px'; ind.style.height = on.offsetHeight + 'px'; ind.style.transform = 'translate(' + on.offsetLeft + 'px,' + on.offsetTop + 'px)';
   if (instant) { void ind.offsetWidth; ind.style.transition = ''; } bar.classList.add('has-ind'); on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 function achSwap() { const g = $('achGrid'); if (!g || !ACH) return render(); const { body } = achBody(localStorage.achCat || 'all', localStorage.achFilter || 'all');
-  const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); };
+  const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); clearTimeout(g._achT); g._achT = setTimeout(() => { g.classList.remove('in'); g.querySelectorAll('.trophy').forEach(t => { t.style.animationDelay = ''; }); }, 700); };
   if (reduceMotion()) { g.innerHTML = body; return; }
   g.style.minHeight = g.offsetHeight + 'px'; const unlock = () => setTimeout(() => { g.style.minHeight = ''; }, 450);
   if (document.startViewTransition) { document.startViewTransition(() => { g.innerHTML = body; stagger(); }); unlock(); return; }

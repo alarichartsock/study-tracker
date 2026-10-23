@@ -322,3 +322,15 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 @media (max-width:520px){.ach-cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.ach-cats button{min-width:0;font-size:12px;padding:7px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}.ach-cats button span{font-size:11px}}
 @media (max-width:380px){.ach-cats button{font-size:11.5px;padding:6px 5px;letter-spacing:-.01em}.ach-cats button span{font-size:10.5px}}
 @media (max-width:380px){.ach-cats button{white-space:normal;line-height:1.2;text-overflow:clip}}
+
+/* nav/header robustness on long pages. The bottom/side nav lives inside .top, so .top must never get
+   transform/filter/backdrop-filter/will-change (they would become the containing block of the fixed nav). */
+.top{transform:none!important;filter:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;will-change:auto!important;isolation:auto}
+.tabbar{z-index:100;isolation:isolate}.top{z-index:90}
+:root{view-transition-name:none}#achGrid{view-transition-name:ach-grid}
+.trophy{-webkit-backdrop-filter:none;backdrop-filter:none}
+@media(max-width:760px){
+ .card,.stat,.item,.trophy,.ach-cats button,.ach-filter{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+ .top::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--bg) 72%,transparent);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+}
+@media(max-width:760px) and (prefers-reduced-transparency:reduce){.top::before{background:var(--bg)}}
