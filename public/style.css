@@ -334,3 +334,6 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
  .top::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--bg) 72%,transparent);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
 }
 @media(max-width:760px) and (prefers-reduced-transparency:reduce){.top::before{background:var(--bg)}}
+
+/* data room table */
+.tbl-wrap{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}.tbl.dr{table-layout:fixed;width:100%}.tbl.dr col.dr-first{width:30%}.tbl.dr th,.tbl.dr td{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tbl.dr thead th.num{text-align:right}.tbl.dr th.dr-h,.tbl.dr tbody th,.tbl.dr tfoot th{text-align:left}.tbl.dr tfoot td,.tbl.dr tfoot th{border-top:1px solid var(--line);border-bottom:0}
