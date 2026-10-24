@@ -63,6 +63,9 @@ function pageChecks(phone) {
       if (el.scrollWidth > el.clientWidth + 1) fails.push('goal ring text clipped: "' + el.textContent + '"');
       const far = Math.max(...[[q.left, q.top], [q.right, q.top], [q.left, q.bottom], [q.right, q.bottom]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
       if (far > inner + 2) fails.push('goal ring text exceeds inner circle: "' + el.textContent + '" (' + Math.round(far) + '>' + Math.round(inner) + ')'); } }
+  for (const rt of document.querySelectorAll('.range-tabs')) { const row = rt.parentElement, rb = row.getBoundingClientRect();
+    if (rt.scrollWidth > rt.clientWidth + 1) fails.push('stats range tabs overflow (' + rt.scrollWidth + '>' + rt.clientWidth + ')');
+    for (const el of [...rt.children, ...row.children]) { const q = el.getBoundingClientRect(); if (q.width && (q.right > rb.right + 1 || q.left < rb.left - 1 || q.right > vw + 1)) fails.push('stats range control clipped: "' + (el.textContent || el.tagName).trim().slice(0, 20) + '"'); } }
   for (const t of document.querySelectorAll('.tbl.dr')) { const rows = [...t.rows], n = rows[0] ? rows[0].cells.length : 0; if (rows.some(r => r.cells.length !== n)) fails.push('data room: row cell counts differ from header');
     if (t.getBoundingClientRect().right > vw + 1 && !t.closest('.tbl-wrap')) fails.push('data room table overflows page'); }
   return fails;

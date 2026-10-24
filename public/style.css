@@ -359,3 +359,7 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .mix-chip>span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mix-dots{display:inline-flex}.mix-dots i{width:12px;height:12px;border-radius:50%;border:2px solid var(--bg);margin-left:-4px}.mix-dots i:first-child{margin-left:0}.mix-dots i.def{background:linear-gradient(135deg,var(--wp1),var(--wp2))}
 .mix-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0}.mix-item{display:inline-flex;align-items:center;gap:6px;font-size:14px}
+
+/* Stats range tabs: wrap instead of clipping; subject select drops to its own line when needed */
+.tabs.range-tabs{flex:1 1 340px;flex-wrap:wrap;overflow:visible;row-gap:4px;border-radius:20px;min-width:0}.tabs.range-tabs button{flex:1 0 auto;white-space:nowrap}
+.range-tabs+select,.range-tabs~select{flex:1 0 160px;max-width:100%}
