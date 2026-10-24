@@ -4,10 +4,11 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
 const reports = require('./lib/reports');
 const mix = require('./public/mix.js');
+const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
 
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
-const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
+const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
@@ -235,6 +236,10 @@ function createApp(opts = {}) {
       if (p === '/api/plan' && M === 'POST') { if (!isDateKey(j.date)) return send(res, 400, { error: 'date required' });
         if (j.minutes === null || j.minutes === '') delete ud.plan[j.date]; else ud.plan[j.date] = Math.round(numIn(j.minutes, 0, 1440)); save(); return send(res, 200, ud.plan); }
       const r1 = crud(ud, 'exams', p, M, j, cleanExam, res); if (r1 !== false) return r1;
+      // ---- MCAT practice exams ----
+      if (p === '/api/practice' || p.startsWith('/api/practice/')) ud.practice ||= [];
+      const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' ? crud(ud, 'practice', p, M, j, MCAT.cleanPractice, res) : false; if (r3 !== false) return r3;
+      if (p === '/api/practice-goal' && M === 'POST') { ud.settings.mcatGoal = MCAT.cleanGoal(j.goal); save(); return send(res, 200, { goal: ud.settings.mcatGoal }); }
       const r2 = crud(ud, 'tasks', p, M, j, cleanTask, res); if (r2 !== false) return r2;
       // ---- settings ----
       if (p === '/api/settings' && M === 'POST') {

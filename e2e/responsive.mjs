@@ -10,7 +10,7 @@ const OUT = process.env.UI_SHOTS || path.resolve('ui-shots'); fs.mkdirSync(OUT, 
 const BROWSERS = (process.env.UI_BROWSERS || 'chromium,webkit').split(',');
 const WIDTHS = (process.env.UI_WIDTHS || '320,375,390,414,768,1024,1280,1440').split(',').map(Number);
 const SHOT_W = process.env.UI_SHOT_WIDTHS ? process.env.UI_SHOT_WIDTHS.split(',').map(Number) : null, DPR = +process.env.UI_DPR || 0;
-const VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
+const VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'mcat', 'plan', 'trophy', 'data', 'set'];
 
 // ---- server on a temp data dir with a seeded, fake test user ----
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'st-ui-'));
@@ -29,6 +29,8 @@ for (let d = 0; d < 45; d++) for (let k = 0; k < 1 + (d % 3); k++) {
   await api('/api/sessions', 'POST', { subject: subjects[(d + k) % 4], activity: acts[(d * 2 + k) % acts.length], note: d % 4 ? '' : 'Sample note', start: st.toISOString(), end: new Date(+st + mins * 6e4).toISOString(), breakSec: d % 6 ? 0 : 300, focus: 1 + (d % 5), progress: 1 + ((d + 2) % 5) });
 }
 await api('/api/exams', 'POST', { name: 'Practice exam 1', date: new Date(+now + 9 * 864e5).toISOString().slice(0, 10), subject: 'CARS' });
+for (const [i, x] of [[124, 123, 125, 126], [125, 125, 126, 127], [127, 124, 128, 128], [128, 127, 129, 130]].entries()) await api('/api/practice', 'POST', { date: new Date(+now - (40 - i * 10) * 864e5).toISOString().slice(0, 10), source: ['AAMC Sample', 'Blueprint 2 with a long provider name', 'AAMC FL1', 'AAMC FL2'][i], cp: x[0], cars: x[1], bb: x[2], ps: x[3], notes: i === 1 ? 'Ran out of time on CARS' : '' });
+await api('/api/practice-goal', 'POST', { goal: 515 });
 await api('/api/tasks', 'POST', { title: 'Review amino acids', priority: 'high' });
 const sid = cookie.split('=')[1];
 
@@ -63,6 +65,9 @@ function pageChecks(phone) {
       if (el.scrollWidth > el.clientWidth + 1) fails.push('goal ring text clipped: "' + el.textContent + '"');
       const far = Math.max(...[[q.left, q.top], [q.right, q.top], [q.left, q.bottom], [q.right, q.bottom]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
       if (far > inner + 2) fails.push('goal ring text exceeds inner circle: "' + el.textContent + '" (' + Math.round(far) + '>' + Math.round(inner) + ')'); } }
+  for (const c of document.querySelectorAll('.px-chart')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1 || q.width < 100) fails.push('mcat chart overflows/collapsed (' + Math.round(q.width) + ')');
+    for (const d of c.querySelectorAll('.px-dot')) { const r = d.getBoundingClientRect(); if (r.right > vw + 1 || r.left < -1) fails.push('mcat chart point off screen'); } }
+  for (const el of document.querySelectorAll('.px-sec b, .px-sec span, .px-secs')) if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') fails.push('mcat section tile clipped');
   for (const rt of document.querySelectorAll('.range-tabs')) { const row = rt.parentElement, rb = row.getBoundingClientRect();
     if (rt.scrollWidth > rt.clientWidth + 1) fails.push('stats range tabs overflow (' + rt.scrollWidth + '>' + rt.clientWidth + ')');
     for (const el of [...rt.children, ...row.children]) { const q = el.getBoundingClientRect(); if (q.width && (q.right > rb.right + 1 || q.left < rb.left - 1 || q.right > vw + 1)) fails.push('stats range control clipped: "' + (el.textContent || el.tagName).trim().slice(0, 20) + '"'); } }

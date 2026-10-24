@@ -18,7 +18,7 @@ const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
 
 const BRAND = 'Study Tracker';
-const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports' };
+const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', mcat: 'MCAT practice exams', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports' };
 document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND)); document.title = BRAND;
 let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
@@ -90,7 +90,7 @@ async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/ap
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
-async function render() { if (!S) return; if (view !== 'admin') markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
+async function render() { if (!S) return; if (view !== 'admin' && view !== 'mcat') markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -361,7 +361,7 @@ VIEWS.stats = async () => {
   const subjects = Object.keys(c.bySubject), acts = Object.keys(c.matrix.activitySubject), weeks = [...new Set(Object.values(c.matrix.subjectWeek).flatMap(Object.keys))].sort().slice(-12);
   const cell = v => v ? `<td class="num" style="background:color-mix(in srgb,var(--acc) ${Math.round(Math.min(70, v / Math.max(1, c.total) * 300))}%,transparent)">${fmtH(v)}</td>` : '<td class="num muted">–</td>';
   const range = c.from ? `${fmtDate(k2d(c.from), { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(k2d(c.to), { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No data yet';
-  return `${mixChip()}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  return `${mixChip()}${(S.practice || []).length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(S.practice).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(S.practice).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <select data-chg="sSubj" style="width:auto">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
     ${UI.range === 'custom' ? `<div class="row"><input type="date" value="${from}" data-chg="cRange" data-k="cFrom"><input type="date" value="${to}" data-chg="cRange" data-k="cTo"></div>` : ''}
     <p class="muted small" style="margin:8px 0 0">${range}${R.previous ? ` · previous period: ${fmtH(R.previous.total)} ${chg == null ? '' : `<b style="color:${chg >= 0 ? 'var(--ok)' : 'var(--danger)'}">${chg >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(chg * 100))}%</b>`}` : ''}</p></div>
@@ -595,3 +595,51 @@ function bgSettingsCard() { const b = bgSet(), tab = (act, v, cur, l) => '<butto
     '<div class="row wrap gap"><span class="muted small">Window</span><div class="tabs">' + [['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([v, l]) => tab('bgWin', v, b.window, l)).join('') + '</div>' +
     '<label class="row" style="gap:8px;margin:0"><input type="checkbox" class="chk" data-chg="bgMotion" ' + (b.motion !== false ? 'checked' : '') + '> Ambient motion</label></div>' +
     '<p class="muted small">' + (b.mode === 'auto' ? 'Colors come from what you studied ' + WIN_LBL[b.window] + ':' : b.mode === 'subject' ? 'Uses the selected subject\'s color.' : b.mode === 'accent' ? 'Uses your accent color.' : 'Uses the default wallpaper.') + '</p>' + (b.mode === 'auto' ? '<div class="mix-legend">' + mixLegend() + '</div>' : '') + '</div>'; }
+
+// ================= MCAT PRACTICE EXAMS =================
+const PX_FALLBACK = { cp: '#f59e0b', cars: '#ec4899', bb: '#22c55e', ps: '#6366f1' };
+const pxColor = k => { const sec = MCAT.SECTIONS.find(s => s[0] === k), m = S.subjectMeta || {}, hit = Object.keys(m).find(n => n.toLowerCase() === sec[2].toLowerCase() || n.toLowerCase() === sec[1].toLowerCase()); return hit ? color(hit) : PX_FALLBACK[k]; };
+const pxDelta = v => v == null ? '' : `<span class="px-d ${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '\u25b2 +' + v : v < 0 ? '\u25bc ' + v : '\u00b1 0'}</span>`;
+const pxDate = d => fmtDate(k2d(d), { month: 'short', day: 'numeric', year: 'numeric' });
+function pxChart(xs, series, lo, hi, goal) {
+  const n = xs.length, X = i => n > 1 ? 4 + i / (n - 1) * 92 : 50, Y = v => 92 - (v - lo) / (hi - lo) * 84;
+  const grid = [0, .25, .5, .75, 1].map(f => Math.round(lo + f * (hi - lo))).map(v => `<span class="px-gl" style="top:${Y(v)}%"><i>${v}</i></span>`).join('');
+  const lines = series.map(s => `<polyline vector-effect="non-scaling-stroke" fill="none" stroke="${s.c}" stroke-width="${s.w || 2}" stroke-linejoin="round" stroke-linecap="round" points="${xs.map((x, i) => X(i) + ',' + Y(x[s.k])).join(' ')}"/>`).join('');
+  const g = goal != null && goal >= lo && goal <= hi ? `<span class="px-goal" style="top:${Y(goal)}%"><i>Goal ${goal}</i></span>` : '';
+  const dots = series.flatMap(s => xs.map((x, i) => { const p = s.k === 'total' ? MCAT.pctTotal(x.total) : MCAT.pctSection(s.k, x[s.k]), pv = i ? x[s.k] - xs[i - 1][s.k] : null;
+    return `<b class="px-dot" style="left:${X(i)}%;top:${Y(x[s.k])}%;--c:${s.c}"${tip(esc(x.source) + ' \u00b7 ' + pxDate(x.date) + ' \u00b7 ' + s.l + ' ' + x[s.k] + ' \u00b7 ' + MCAT.fmtPct(p) + 'th percentile' + (pv != null ? ' \u00b7 ' + (pv >= 0 ? '+' : '') + pv + ' vs previous' : ''))}></b>`; })).join('');
+  return `<div class="px-chart">${grid}${g}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${dots}</div>`;
+}
+VIEWS.mcat = () => {
+  const P = MCAT.summary(S.practice || []), goal = S.settings.mcatGoal ?? null, src = MCAT.SOURCE;
+  const head = `<div class="card"><div class="row wrap gap" style="margin:0"><h3 class="grow" style="margin:0">Practice exams</h3><button class="btn" data-act="pxGoal">${goal ? 'Goal ' + goal : 'Set goal'}</button><button class="btn primary" data-act="pxEdit">+ Practice exam</button></div>
+    <p class="muted small" style="margin:8px 0 0">Log full-length scores (AAMC FL, Blueprint, Kaplan...) to track your score and percentile over time.</p></div>`;
+  const foot = `<p class="muted small px-foot">Percentiles: <a class="link" href="${src.url}" target="_blank" rel="noopener">${esc(src.name)}</a>, ranks in effect ${src.effective}. Practice-exam scores only approximate real MCAT scores, so these percentiles are estimates.</p>`;
+  if (!P.n) return head + '<div class="card"><p class="muted small">No practice exams yet. Add your first full-length to see your trend and percentiles.</p></div>' + foot;
+  const L = P.last, B = P.best, secs = MCAT.SECTIONS;
+  const cards = statCards([[L.total + ' <small class="muted">' + MCAT.fmtPct(MCAT.pctTotal(L.total)) + 'th</small>', 'Latest \u00b7 ' + esc(L.source)], [B.total + ' <small class="muted">' + MCAT.fmtPct(MCAT.pctTotal(B.total)) + 'th</small>', 'Best \u00b7 ' + esc(B.source)],
+    [(P.change.total.prev == null ? '\u2013' : (P.change.total.prev >= 0 ? '+' : '') + P.change.total.prev), 'vs previous exam'], [(P.change.total.first == null ? '\u2013' : (P.change.total.first >= 0 ? '+' : '') + P.change.total.first), 'vs first exam']]);
+  const tl = Math.min(...P.exams.map(x => x.total), goal ?? 528) - 3, th = Math.max(...P.exams.map(x => x.total), goal ?? 472) + 3;
+  const tLo = Math.max(472, Math.floor(tl / 2) * 2), tHi = Math.min(528, Math.max(tLo + 8, Math.ceil(th / 2) * 2));
+  const sl = Math.min(...P.exams.flatMap(x => secs.map(([k]) => x[k]))) - 1, sh = Math.max(...P.exams.flatMap(x => secs.map(([k]) => x[k]))) + 1;
+  const sLo = Math.max(118, sl), sHi = Math.min(132, Math.max(sLo + 4, sh));
+  const legend = secs.map(([k, l]) => `<span class="px-leg"><i style="background:${pxColor(k)}"></i>${l}</span>`).join('');
+  const secTiles = `<div class="px-secs">${secs.map(([k, l, long]) => { const v = L[k], p = MCAT.pctSection(k, v); return `<div class="stat px-sec" style="--c:${pxColor(k)}"><b>${v}</b><span>${l} \u00b7 ${MCAT.fmtPct(p)}th pct</span><span class="px-ch">${pxDelta(P.change[k].prev)}${P.change[k].first != null ? ' <span class="muted">' + (P.change[k].first >= 0 ? '+' : '') + P.change[k].first + ' since first</span>' : ''}</span></div>`; }).join('')}</div>`;
+  const rows = P.exams.slice().reverse().map(x => { const i = P.exams.indexOf(x), pv = i ? P.exams[i - 1] : null;
+    return `<div class="item" data-act="pxEdit" data-id="${x.id}"><div class="grow"><div>${esc(x.source)}</div><div class="n">${pxDate(x.date)} \u00b7 ${secs.map(([k, l]) => l + ' ' + x[k]).join(' \u00b7 ')}${x.notes ? ' \u00b7 ' + esc(x.notes) : ''}</div></div><div class="t">${x.total} <span class="muted small">${MCAT.fmtPct(MCAT.pctTotal(x.total))}th</span> ${pv ? pxDelta(x.total - pv.total) : ''}</div></div>`; }).join('');
+  return head + cards + `<div class="card"><h3>Total score</h3>${pxChart(P.exams, [{ k: 'total', l: 'Total', c: 'var(--acc)', w: 2.5 }], tLo, tHi, goal)}${goal ? `<p class="muted small">Goal ${goal} (${MCAT.fmtPct(MCAT.pctTotal(goal))}th percentile) \u00b7 ${L.total >= goal ? 'reached' : goal - L.total + ' to go from latest'}</p>` : ''}</div>
+    <div class="card"><h3>Sections (latest)</h3>${secTiles}<div class="px-legs">${legend}</div>${pxChart(P.exams, secs.map(([k, l]) => ({ k, l, c: pxColor(k) })), sLo, sHi, null)}</div>
+    <div class="card"><h3>All practice exams</h3><div class="list">${rows}</div></div>` + foot;
+};
+ACT.pxGoal = () => { const g = S.settings.mcatGoal ?? '';
+  dialog(`<h3>Goal score</h3><label>Target MCAT total (472\u2013528)</label><input type="number" name="goal" min="472" max="528" step="1" value="${g}" placeholder="e.g. 515">
+    <div class="row"><span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+  async (v, f) => { await api('/api/practice-goal', 'POST', { goal: f.goal.value }); refresh(); }); };
+ACT.pxEdit = b => { const e = b.dataset.id ? (S.practice || []).find(x => x.id === +b.dataset.id) : null;
+  const sec = MCAT.SECTIONS.map(([k, l]) => `<div><label>${l}</label><input type="number" name="${k}" min="118" max="132" step="1" inputmode="numeric" value="${e?.[k] ?? ''}" required></div>`).join('');
+  dialog(`<h3>${e ? 'Edit practice exam' : 'Add practice exam'}</h3><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ST.todayKey}" required></div><div><label>Source</label><input name="source" list="pxSrc" maxlength="80" value="${esc(e?.source || '')}" placeholder="AAMC FL1, Blueprint 2..." required></div></div>
+    <datalist id="pxSrc">${['AAMC Sample', 'AAMC FL1', 'AAMC FL2', 'AAMC FL3', 'AAMC FL4', 'AAMC FL5', 'AAMC FL6', 'Blueprint', 'Kaplan', 'Princeton Review', 'Altius', 'Jack Westin'].map(s => `<option value="${s}">`).join('')}</datalist>
+    <div class="px-form">${sec}</div><p class="muted small" id="pxTot">Total: ${e ? e.total + ' (' + MCAT.fmtPct(MCAT.pctTotal(e.total)) + 'th percentile)' : '\u2013'}</p><label>Notes</label><input name="notes" maxlength="1000" value="${esc(e?.notes || '')}">
+    <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+  async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; MCAT.SECTIONS.forEach(([k]) => { body[k] = f[k].value; }); await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); } refresh(); });
+  const f = $('dlgForm'); f.oninput = () => { const vs = MCAT.SECTIONS.map(([k]) => +f[k].value), ok = vs.every(v => Number.isInteger(v) && v >= 118 && v <= 132), t = vs.reduce((a, b) => a + b, 0); $('pxTot').textContent = 'Total: ' + (ok ? t + ' (' + MCAT.fmtPct(MCAT.pctTotal(t)) + 'th percentile)' : '\u2013'); }; };
