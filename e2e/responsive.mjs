@@ -65,6 +65,8 @@ function pageChecks(phone) {
       if (el.scrollWidth > el.clientWidth + 1) fails.push('goal ring text clipped: "' + el.textContent + '"');
       const far = Math.max(...[[q.left, q.top], [q.right, q.top], [q.left, q.bottom], [q.right, q.bottom]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
       if (far > inner + 2) fails.push('goal ring text exceeds inner circle: "' + el.textContent + '" (' + Math.round(far) + '>' + Math.round(inner) + ')'); } }
+  for (const c of document.querySelectorAll('.px-home')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1) fails.push('mcat home card overflows'); if (c.scrollWidth > c.clientWidth + 1) fails.push('mcat home card content overflows (' + c.scrollWidth + '>' + c.clientWidth + ')'); }
+  if (location.hash !== '#x' && document.querySelector('#nav button.on')?.dataset.v === 'dash' && !document.querySelector('.px-home')) fails.push('mcat home card missing on dashboard');
   for (const c of document.querySelectorAll('.px-chart')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1 || q.width < 100) fails.push('mcat chart overflows/collapsed (' + Math.round(q.width) + ')');
     for (const d of c.querySelectorAll('.px-dot')) { const r = d.getBoundingClientRect(); if (r.right > vw + 1 || r.left < -1) fails.push('mcat chart point off screen'); } }
   for (const el of document.querySelectorAll('.px-sec b, .px-sec span, .px-secs')) if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') fails.push('mcat section tile clipped');

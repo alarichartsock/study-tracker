@@ -375,3 +375,10 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .px-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.px-form label{margin-top:8px}
 .px-foot{margin:4px 4px 16px;line-height:1.5}.stat small{font-size:13px;font-weight:500}
 @media(max-width:700px){.px-secs,.px-form{grid-template-columns:repeat(2,minmax(0,1fr))}.px-chart{height:170px}}
+
+/* MCAT card on dashboard */
+.px-home{cursor:pointer}.px-home:focus-visible{outline:2px solid var(--acc);outline-offset:2px}.px-home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;align-items:center}
+.px-home-nums{min-width:0}.px-home-nums>div{overflow-wrap:anywhere}.px-big{font-size:30px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.mt-xs{margin-top:6px}
+.px-gbar{height:6px;border-radius:99px;background:var(--card2);margin:8px 0 4px;overflow:hidden}.px-gbar i{display:block;height:100%;background:var(--acc);border-radius:inherit}
+.px-spark .px-chart{height:96px;margin:4px 0 4px 26px}.px-spark .px-gl:nth-child(2n){display:none}.px-spark .px-dot{width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-width:2px}
+@media(max-width:600px){.px-home-grid{grid-template-columns:1fr;gap:8px}}

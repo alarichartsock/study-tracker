@@ -214,6 +214,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
     ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
+  ${pxHomeCard()}
   <div class="grid2">
     <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
       ${due.length ? `<h3 class="mt">Due to-dos</h3>${due.map(x => `<div class="subj-row"><input type="checkbox" class="chk" data-chg="taskDone" data-id="${x.id}"><span>${esc(x.title)}</span>${x.due < ST.todayKey ? '<span class="pill high">overdue</span>' : ''}</div>`).join('')}` : ''}</div>
@@ -643,3 +644,13 @@ ACT.pxEdit = b => { const e = b.dataset.id ? (S.practice || []).find(x => x.id =
     <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
   async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; MCAT.SECTIONS.forEach(([k]) => { body[k] = f[k].value; }); await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); } refresh(); });
   const f = $('dlgForm'); f.oninput = () => { const vs = MCAT.SECTIONS.map(([k]) => +f[k].value), ok = vs.every(v => Number.isInteger(v) && v >= 118 && v <= 132), t = vs.reduce((a, b) => a + b, 0); $('pxTot').textContent = 'Total: ' + (ok ? t + ' (' + MCAT.fmtPct(MCAT.pctTotal(t)) + 'th percentile)' : '\u2013'); }; };
+
+function pxHomeCard() { const P = MCAT.summary(S.practice || []), goal = S.settings.mcatGoal ?? null;
+  if (!P.n) return '<div class="card px-home px-empty"><div class="row wrap gap" style="margin:0"><div class="grow"><h3 style="margin:0">MCAT practice exams</h3><p class="muted small" style="margin:4px 0 0">Log a full-length to track your score and percentile over time.</p></div><button class="btn primary" data-act="pxEdit">+ Log first exam</button></div></div>';
+  const L = P.last, ch = P.change.total.prev, pct = MCAT.fmtPct(MCAT.pctTotal(L.total)), xs = P.exams.slice(-12);
+  const lo = Math.max(472, Math.min(...xs.map(x => x.total), goal ?? 528) - 2), hi = Math.min(528, Math.max(lo + 6, Math.max(...xs.map(x => x.total), goal ?? 472) + 2));
+  const gp = goal ? Math.max(0, Math.min(100, Math.round((L.total - 472) / (goal - 472) * 100))) : 0;
+  return `<div class="card px-home" data-act="goto" data-v="mcat" role="link" tabindex="0" aria-label="Open MCAT practice exams"><div class="row" style="margin:0 0 6px"><h3 class="grow" style="margin:0">MCAT practice exams</h3><span class="muted small">View all \u2192</span></div>
+    <div class="px-home-grid"><div class="px-home-nums"><div><b class="px-big">${L.total}</b> <span class="muted small">${pct}th pct</span> ${ch != null ? pxDelta(ch) : ''}</div><div class="muted small">Latest \u00b7 ${esc(L.source)} \u00b7 ${pxDate(L.date)}</div><div class="small mt-xs">Best <b>${P.best.total}</b> <span class="muted">(${MCAT.fmtPct(MCAT.pctTotal(P.best.total))}th)</span></div>
+    ${goal ? `<div class="px-gbar"${tip('Goal ' + goal + ' \u00b7 latest ' + L.total + (L.total >= goal ? ' \u00b7 reached' : ' \u00b7 ' + (goal - L.total) + ' to go'))}><i style="width:${gp}%"></i></div><div class="muted small">${L.total >= goal ? 'Goal ' + goal + ' reached' : (goal - L.total) + ' to goal ' + goal}</div>` : ''}</div>
+    <div class="px-spark">${pxChart(xs, [{ k: 'total', l: 'Total', c: 'var(--acc)', w: 2 }], lo, hi, goal)}</div></div></div>`; }
