@@ -32,6 +32,7 @@ await api('/api/exams', 'POST', { name: 'Practice exam 1', date: new Date(+now +
 for (const [i, x] of [[124, 123, 125, 126], [125, 125, 126, 127], [127, 124, 128, 128], [128, 127, 129, 130]].entries()) await api('/api/practice', 'POST', { date: new Date(+now - (40 - i * 10) * 864e5).toISOString().slice(0, 10), source: ['AAMC Sample', 'Blueprint 2 with a long provider name', 'AAMC FL1', 'AAMC FL2'][i], cp: x[0], cars: x[1], bb: x[2], ps: x[3], notes: i === 1 ? 'Ran out of time on CARS' : '' });
 await api('/api/practice-goal', 'POST', { goal: 515 });
 await api('/api/tasks', 'POST', { title: 'Review amino acids', priority: 'high' });
+for (let i = 0; i < 24; i++) await api('/api/tasks', 'POST', { title: (i % 5 ? 'Practice set ' + i : 'A very long to-do title that should be truncated cleanly instead of wrapping ' + i), due: i % 4 === 3 ? '' : new Date(+now + (i % 9 - 3) * 864e5).toISOString().slice(0, 10), subject: i % 3 ? subjects[i % 4] : '', priority: i % 7 ? 'normal' : 'high' });
 const sid = cookie.split('=')[1];
 
 // ---- checks run inside the page ----
@@ -69,6 +70,13 @@ function pageChecks(phone) {
     if (ls.length < 3) fails.push('chart y-axis has ' + ls.length + ' tick labels');
     for (const q of ls) if (q.left < card.left - 1 || q.left < -1) fails.push('y-axis label clipped (' + Math.round(q.left) + ')');
     const sorted = ls.slice().sort((a, b) => a.top - b.top); for (let i = 1; i < sorted.length; i++) if (sorted[i].top < sorted[i - 1].bottom - 0.5) fails.push('y-axis labels overlap'); }
+  for (const c of document.querySelectorAll('.todo-card')) { const q = c.getBoundingClientRect(), want = parseFloat(getComputedStyle(c).height), list = c.querySelector('.todo-list'), lb = list.getBoundingClientRect();
+    if (Math.abs(c.offsetHeight - (window.innerWidth <= 600 ? 400 : 360)) > 1.5) fails.push('to-do card height not fixed (' + Math.round(q.height) + ')'); void want;
+    if (c.scrollHeight > c.clientHeight + 1 || c.scrollWidth > c.clientWidth + 1) fails.push('to-do card content overflows');
+    const shown = [...list.querySelectorAll('.todo-it')].filter(i => !i.hidden); for (const i of shown) { if (i.offsetTop + i.offsetHeight > list.clientHeight + 1 || i.offsetLeft + i.offsetWidth > list.clientWidth + 1) fails.push('to-do item spills out of card (' + (i.offsetTop + i.offsetHeight) + '>' + list.clientHeight + ')'); } void lb;
+    if (shown.length < 2) fails.push('to-do card shows ' + shown.length + ' items'); const more = c.querySelector('.todo-more'); if (list.querySelectorAll('.todo-it[hidden]').length && (more.hidden || !/more/.test(more.textContent))) fails.push('to-do card hides items without a +N more note');
+    if (!more.hidden && more.offsetTop + more.offsetHeight > c.clientHeight + 1) fails.push('to-do +N more clipped'); }
+  if (document.querySelector('#nav button.on')?.dataset.v === 'dash' && !document.querySelector('.todo-card')) fails.push('to-do card missing on dashboard');
   for (const c of document.querySelectorAll('.px-home')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1) fails.push('mcat home card overflows'); if (c.scrollWidth > c.clientWidth + 1) fails.push('mcat home card content overflows (' + c.scrollWidth + '>' + c.clientWidth + ')'); }
   if (location.hash !== '#x' && document.querySelector('#nav button.on')?.dataset.v === 'dash' && !document.querySelector('.px-home')) fails.push('mcat home card missing on dashboard');
   for (const c of document.querySelectorAll('.px-chart')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1 || q.width < 100) fails.push('mcat chart overflows/collapsed (' + Math.round(q.width) + ')');

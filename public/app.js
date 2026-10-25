@@ -212,16 +212,16 @@ VIEWS.dash = () => {
   const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + (g.goal ? Math.round(g.done / g.goal * 100) : 0) + "%)")}><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub"><span>${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
-  const due = S.tasks.filter(x => !x.done && x.due && x.due <= ST.todayKey);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
   return `${statCards([[fmtH(ST.today + l), 'Today'], [fmtH(ST.week + l), 'This week'], [fmtH(ST.month + l), 'This month'], [`${ST.streak}d <small class="muted">best ${ST.bestStreak}d</small>`, 'Streak']])}
   <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
     ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
   ${pxHomeCard()}
+  ${todoCard()}
   <div class="grid2">
     <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
-      ${due.length ? `<h3 class="mt">Due to-dos</h3>${due.map(x => `<div class="subj-row"><input type="checkbox" class="chk" data-chg="taskDone" data-id="${x.id}"><span>${esc(x.title)}</span>${x.due < ST.todayKey ? '<span class="pill high">overdue</span>' : ''}</div>`).join('')}` : ''}</div>
+</div>
     <div class="card"><h3>Last 7 days</h3>${(() => { const vals = week.map(d => (ST.byDay[dk(d)] || 0) + (dk(d) === ST.todayKey ? l : 0)), mx = Math.max(ST.goalSec || 0, 3600, ...vals); return `<div class="week7">${week.map((d, i) => { const v = vals[i], m = medalOf(v); return `<div class="w7-row${dk(d) === ST.todayKey ? ' today' : ''}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : '') + (ST.goalSec ? ' \u00b7 ' + Math.round(v / ST.goalSec * 100) + '% of goal' : ''))}><span class="w7-lbl">${fmtDate(d, { weekday: 'short', day: 'numeric' })}</span><div class="w7-track">${v > 0 ? `<i style="width:max(6px,${(v / mx * 100).toFixed(1)}%)"></i>` : ''}</div><span class="w7-medal">${m ? `<span class="medal m-${m}"></span>` : ''}</span><b class="w7-val${v ? '' : ' muted'}">${fmtH(v)}</b></div>`; }).join('')}</div>`; })()}</div>
   </div>
   ${subjGoals.length ? `<div class="card"><h3>Weekly subject goals</h3>${subjGoals.map(([k, g]) => `<div class="sbar"${tip(k + ' \u00b7 ' + fmtH(g.done) + ' of ' + fmtH(g.goal) + ' this week (' + Math.round(g.done / g.goal * 100) + '%)')}><div class="row"><span><span class="dot" style="background:${color(k)}"></span> ${esc(k)}</span><b>${fmtH(g.done)} / ${fmtH(g.goal)}</b></div><div class="bar"><i style="width:${Math.min(100, g.done / g.goal * 100)}%;background:${color(k)}"></i></div></div>`).join('')}</div>` : ''}
@@ -229,7 +229,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Study calendar</h3><div class="heat-scroll" id="heatS">${heatmap(ST.byDay)}</div>
     <div class="heat-key muted small">Less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> More · dots = medal days</div></div>`;
 };
-AFTER.dash = () => { const h = $('heatS'); if (h) h.scrollLeft = 1e5; };
+AFTER.dash = () => { const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
 function stackChart() {
   const days = [...Array(14)].map((_, i) => addD(k2d(ST.todayKey), i - 13)), bd = ST.byDaySubject, subs = new Set();
   days.forEach(d => Object.keys(bd[dk(d)] || {}).forEach(s => subs.add(s)));
@@ -658,3 +658,24 @@ function pxHomeCard() { const P = MCAT.summary(S.practice || []), goal = S.setti
     <div class="px-home-grid"><div class="px-home-nums"><div><b class="px-big">${L.total}</b> <span class="muted small">${pct}th pct</span> ${ch != null ? pxDelta(ch) : ''}</div><div class="muted small">Latest \u00b7 ${esc(L.source)} \u00b7 ${pxDate(L.date)}</div><div class="small mt-xs">Best <b>${P.best.total}</b> <span class="muted">(${MCAT.fmtPct(MCAT.pctTotal(P.best.total))}th)</span></div>
     ${goal ? `<div class="px-gbar"${tip('Goal ' + goal + ' \u00b7 latest ' + L.total + (L.total >= goal ? ' \u00b7 reached' : ' \u00b7 ' + (goal - L.total) + ' to go'))}><i style="width:${gp}%"></i></div><div class="muted small">${L.total >= goal ? 'Goal ' + goal + ' reached' : (goal - L.total) + ' to goal ' + goal}</div>` : ''}</div>
     <div class="px-spark">${pxChart(xs, [{ k: 'total', l: 'Total', c: 'var(--acc)', w: 2 }], lo, hi, goal)}</div></div></div>`; }
+
+// ================= DASHBOARD TO-DOS =================
+function todoCard() { const T = ST.todayKey, wk = dk(addD(k2d(T), 7)), open = S.tasks.filter(x => !x.done), by = (a, b) => (a.due || '').localeCompare(b.due || '') || PRI[a.priority] - PRI[b.priority] || a.id - b.id;
+  const groups = [['overdue', open.filter(x => x.due && x.due < T).sort(by)], ['today', open.filter(x => x.due === T).sort(by)], ['soon', open.filter(x => x.due > T && x.due <= wk).sort(by)], ['inbox', open.filter(x => !x.due).sort(by).slice(0, 3)]];
+  const lbl = (g, x) => g === 'overdue' ? 'Overdue' : g === 'today' ? 'Today' : g === 'soon' ? fmtDate(k2d(x.due), { weekday: 'short', day: 'numeric' }) : 'Inbox';
+  const items = groups.flatMap(([g, xs]) => xs.map(x => `<div class="todo-it ${g}" data-id="${x.id}"><input type="checkbox" class="chk" data-chg="todoChk" data-id="${x.id}" aria-label="Mark done: ${esc(x.title)}"><span class="todo-t">${esc(x.title)}</span>${x.subject ? `<span class="dot" style="background:${color(x.subject)}" title="${esc(x.subject)}"></span>` : ''}<span class="pill todo-when ${g === 'overdue' ? 'high' : ''}">${lbl(g, x)}</span></div>`)).join('');
+  const later = open.filter(x => x.due > wk).length;
+  return `<div class="card todo-card"><div class="row" style="margin:0 0 8px"><h3 class="grow" style="margin:0">To-dos</h3><button class="btn" data-act="todoAll">See all \u2192</button></div>
+    <div class="todo-add"><input id="tdT" placeholder="Add a to-do..." maxlength="200" data-inp="todoKey" aria-label="New to-do"><input type="date" id="tdD" aria-label="Due date"><select id="tdS" aria-label="Subject">${opt(S.subjects, '', 'Subject')}</select><button class="btn primary" data-act="todoAdd">Add</button></div>
+    <div class="todo-list" id="todoList">${items || '<p class="muted small todo-empty">Nothing due. Add a to-do above, or plan your week on the <a href="#" class="link" data-act="todoAll">To-dos page</a>.</p>'}</div>
+    <div class="todo-more muted small" id="todoMore" hidden></div>${later ? `<span hidden id="todoLater" data-n="${later}"></span>` : ''}</div>`; }
+const todoRO = window.ResizeObserver ? new ResizeObserver(() => todoFit()) : null;
+function todoFit() { const L = $('todoList'), M = $('todoMore'); if (!L || !M) return; if (todoRO && !L._ro) { L._ro = 1; todoRO.observe(L); } const its = [...L.querySelectorAll('.todo-it')]; its.forEach(i => { i.hidden = false; }); M.hidden = false; M.innerHTML = '+0 more';
+  const later = +($('todoLater')?.dataset.n || 0), lim = L.clientHeight; let hid = 0;
+  for (const i of its) if (hid || i.offsetTop + i.offsetHeight > lim + 0.5) { i.hidden = true; hid++; }
+  const n = hid + later; M.hidden = !n; M.innerHTML = n ? `+${n} more \u00b7 <a href="#" class="link" data-act="todoAll">see all</a>` : ''; }
+addEventListener('resize', () => { if (view === 'dash') todoFit(); });
+ACT.todoAll = () => { UI.taskView = 'scheduled'; go('plan'); };
+ACT.todoAdd = async () => { const t = $('tdT').value.trim(); if (!t) return $('tdT').focus(); await api('/api/tasks', 'POST', { title: t, due: $('tdD').value, subject: $('tdS').value }); toast('To-do added'); await refresh(); $('tdT')?.focus(); };
+ACT.todoKey = (b, e) => { b.onkeydown ||= ev => { if (ev.key === 'Enter') { ev.preventDefault(); ACT.todoAdd(); } }; };
+ACT.todoChk = async b => { const row = b.closest('.todo-it'); if (b.checked && row) { row.classList.add('done'); await new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420)); } return ACT.taskDone(b); };
