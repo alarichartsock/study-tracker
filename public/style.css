@@ -404,3 +404,9 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .todo-more{flex:0 0 auto;padding-top:6px}.todo-empty{margin:8px 0}
 @media(max-width:600px){.todo-card{height:400px}.todo-add{grid-template-columns:1fr 1fr auto}.todo-add #tdT{grid-column:1/-1}.todo-add input[type=date],.todo-add select{max-width:none;width:100%;min-width:0}}
 @media (prefers-reduced-motion:reduce){.todo-it{transition:none}}
+
+/* share-price chart hover: hit strips above the line, with a marker dot */
+.cum-wrap .cum-hit{z-index:2;touch-action:pan-y}.cum-hit i{position:relative;cursor:crosshair}.cum-hit i b{position:absolute;left:50%;width:10px;height:10px;margin:0 0 -5px -5px;border-radius:50%;background:var(--card);border:2.5px solid var(--ok);opacity:0;transition:opacity .15s}
+.cum-hit i.tip-hot b,.cum-hit i:focus-visible b{opacity:1}.cum-hit i:focus-visible{outline:none}
+/* spacing under Stats header chips */
+.px-link{margin:0 0 12px;vertical-align:top}.mix-chip{margin-right:6px;vertical-align:top}

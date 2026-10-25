@@ -70,6 +70,8 @@ function pageChecks(phone) {
     if (ls.length < 3) fails.push('chart y-axis has ' + ls.length + ' tick labels');
     for (const q of ls) if (q.left < card.left - 1 || q.left < -1) fails.push('y-axis label clipped (' + Math.round(q.left) + ')');
     const sorted = ls.slice().sort((a, b) => a.top - b.top); for (let i = 1; i < sorted.length; i++) if (sorted[i].top < sorted[i - 1].bottom - 0.5) fails.push('y-axis labels overlap'); }
+  for (const h of document.querySelectorAll('.cum-hit')) { const w = h.closest('.cum-wrap'), svg = w.querySelector('svg'), q = h.getBoundingClientRect(), cy = q.top + q.height / 2, el = cy > 0 && cy < innerHeight ? document.elementFromPoint(q.left + q.width / 2, cy) : null; if (q.width && el && !el.closest('#nav, .topbar, header, .chart-tip') && !el.closest('.cum-hit')) fails.push('share-price hover strips are covered'); if (!h.querySelector('[data-tip]')) fails.push('share-price chart has no tooltips'); void svg; }
+  for (const ch of document.querySelectorAll('.px-link, .mix-chip')) { if (!vis(ch)) continue; const r = ch.getBoundingClientRect(), nx = ch.parentElement.querySelector('.card'); if (nx) { const g = nx.getBoundingClientRect().top - r.bottom; if (g < 8) fails.push('Stats chip too close to the card below (' + Math.round(g) + 'px)'); } }
   for (const c of document.querySelectorAll('.todo-card')) { const q = c.getBoundingClientRect(), want = parseFloat(getComputedStyle(c).height), list = c.querySelector('.todo-list'), lb = list.getBoundingClientRect();
     if (Math.abs(c.offsetHeight - (window.innerWidth <= 600 ? 400 : 360)) > 1.5) fails.push('to-do card height not fixed (' + Math.round(q.height) + ')'); void want;
     if (c.scrollHeight > c.clientHeight + 1 || c.scrollWidth > c.clientWidth + 1) fails.push('to-do card content overflows');
@@ -130,6 +132,10 @@ async function runWidth(browser, bname, w) {
     if (!hasFs) note(tag0 + ' timer fullscreen', ['fullscreen button missing']);
     else { note(tag0 + ' timer fullscreen', [...errs.splice(0), ...await page.evaluate(() => { const vw = document.documentElement.clientWidth; return document.documentElement.scrollWidth > vw + 1 ? ['horizontal overflow in fullscreen'] : []; })]);
       await shotFn(page)({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); await page.keyboard.press('Escape'); }
+    if (w === 1024 || w === 390) { await page.evaluate(() => document.querySelector('#nav button[data-v="stats"]').click()); await page.waitForTimeout(700);
+      const strip = page.locator('.cum-hit i').nth(-3); await strip.scrollIntoViewIfNeeded(); if (phone) await strip.tap(); else await strip.hover(); await page.waitForTimeout(200);
+      const tipTxt = await page.evaluate(() => { const t = document.getElementById('chartTip'); return t && t.classList.contains('on') ? t.textContent : ''; });
+      if (!/total/.test(tipTxt) || !/\d{4}/.test(tipTxt)) note(tag0 + ' share-price tooltip', ['no tooltip on ' + (phone ? 'tap' : 'hover') + ' (got "' + tipTxt + '")']); }
     if (w === 1024) note(tag0 + ' live wallpaper', await page.evaluate(async () => { const f = [], wait = ms => new Promise(r => setTimeout(r, ms)), sig = () => [...document.querySelectorAll('#wallpaper i.on')].map(i => i.style.getPropertyValue('--c') + '@' + i.style.getPropertyValue('--s')).join('|');
       await refresh(); await wait(50); const a = sig(), now = Date.now();
       const s = await api('/api/sessions', 'POST', { subject: 'Live Mix Test', start: new Date(now - 3 * 3600e3).toISOString(), end: new Date(now - 60e3).toISOString() }); await refresh(); await wait(50); const b = sig(); if (a === b) f.push('wallpaper did not update after adding a session');
