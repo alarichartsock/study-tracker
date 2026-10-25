@@ -410,3 +410,11 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .cum-hit i.tip-hot b,.cum-hit i:focus-visible b{opacity:1}.cum-hit i:focus-visible{outline:none}
 /* spacing under Stats header chips */
 .px-link{margin:0 0 12px;vertical-align:top}.mix-chip{margin-right:6px;vertical-align:top}
+
+/* One clean edge on every primary/pill button (generalizes the + Session pill fix from 031ceea):
+   the old gradient + lighter border + inset highlight + glow read as two stacked layers. */
+.btn.primary{border-color:transparent;background:var(--acc);box-shadow:0 4px 12px color-mix(in srgb,var(--acc) 28%,transparent);-webkit-backdrop-filter:none;backdrop-filter:none}
+.btn.primary:hover{background:var(--acc2)}.btn.primary:active{box-shadow:0 2px 6px color-mix(in srgb,var(--acc) 24%,transparent)}
+/* stacked inputs in cards/dialogs get consistent spacing (the base input reset zeroed .mt) */
+input.mt,select.mt,textarea.mt{margin-top:10px}
+.card>input:not([type=checkbox]):not([type=radio]):not([type=color])+input:not([type=checkbox]):not([type=radio]):not([type=color]),.card>input+select,.card>select+input,.card>select+select{margin-top:10px}
