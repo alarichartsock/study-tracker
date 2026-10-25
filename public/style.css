@@ -382,3 +382,9 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .px-gbar{height:6px;border-radius:99px;background:var(--card2);margin:8px 0 4px;overflow:hidden}.px-gbar i{display:block;height:100%;background:var(--acc);border-radius:inherit}
 .px-spark .px-chart{height:96px;margin:4px 0 4px 26px}.px-spark .px-gl:nth-child(2n){display:none}.px-spark .px-dot{width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-width:2px}
 @media(max-width:600px){.px-home-grid{grid-template-columns:1fr;gap:8px}}
+
+/* y-axes on charts (all widths) */
+.yax{margin-left:44px}.yg{position:absolute;left:0;right:0;height:0;border-top:1px solid color-mix(in srgb,var(--muted) 22%,transparent);pointer-events:none;z-index:0}
+.yg i{position:absolute;right:100%;top:0;margin-right:6px;transform:translateY(-50%);font-style:normal;font-size:10.5px;line-height:1;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.yax .hcol{position:relative;z-index:1}.cum-wrap.yax svg{position:relative;z-index:1}
+.px-gl{border-top-style:solid;border-top-color:color-mix(in srgb,var(--muted) 22%,transparent)}.px-gl i{font-size:10.5px;line-height:1}

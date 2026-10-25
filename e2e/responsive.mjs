@@ -65,6 +65,10 @@ function pageChecks(phone) {
       if (el.scrollWidth > el.clientWidth + 1) fails.push('goal ring text clipped: "' + el.textContent + '"');
       const far = Math.max(...[[q.left, q.top], [q.right, q.top], [q.left, q.bottom], [q.right, q.bottom]].map(([x, y]) => Math.hypot(x - cx, y - cy)));
       if (far > inner + 2) fails.push('goal ring text exceeds inner circle: "' + el.textContent + '" (' + Math.round(far) + '>' + Math.round(inner) + ')'); } }
+  for (const ax of document.querySelectorAll('.yax, .px-chart:not(.px-spark .px-chart)')) { if (!vis(ax)) continue; const card = ax.closest('.card').getBoundingClientRect(), ls = [...ax.querySelectorAll('.yg i, .px-gl i')].map(i => i.getBoundingClientRect());
+    if (ls.length < 3) fails.push('chart y-axis has ' + ls.length + ' tick labels');
+    for (const q of ls) if (q.left < card.left - 1 || q.left < -1) fails.push('y-axis label clipped (' + Math.round(q.left) + ')');
+    const sorted = ls.slice().sort((a, b) => a.top - b.top); for (let i = 1; i < sorted.length; i++) if (sorted[i].top < sorted[i - 1].bottom - 0.5) fails.push('y-axis labels overlap'); }
   for (const c of document.querySelectorAll('.px-home')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1) fails.push('mcat home card overflows'); if (c.scrollWidth > c.clientWidth + 1) fails.push('mcat home card content overflows (' + c.scrollWidth + '>' + c.clientWidth + ')'); }
   if (location.hash !== '#x' && document.querySelector('#nav button.on')?.dataset.v === 'dash' && !document.querySelector('.px-home')) fails.push('mcat home card missing on dashboard');
   for (const c of document.querySelectorAll('.px-chart')) { const q = c.getBoundingClientRect(); if (q.right > vw + 1 || q.width < 100) fails.push('mcat chart overflows/collapsed (' + Math.round(q.width) + ')');
