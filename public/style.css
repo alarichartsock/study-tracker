@@ -388,3 +388,7 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 .yg i{position:absolute;right:100%;top:0;margin-right:6px;transform:translateY(-50%);font-style:normal;font-size:10.5px;line-height:1;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .yax .hcol{position:relative;z-index:1}.cum-wrap.yax svg{position:relative;z-index:1}
 .px-gl{border-top-style:solid;border-top-color:color-mix(in srgb,var(--muted) 22%,transparent)}.px-gl i{font-size:10.5px;line-height:1}
+
+/* background period tabs + quicker recolor when ambient motion is off */
+.tabs.bg-win{flex-wrap:wrap;overflow:visible;max-width:100%}.tabs.bg-win button{flex:1 0 auto}
+.wallpaper:not(.drift) i{transition-duration:.45s}

@@ -575,7 +575,7 @@ boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to
 addEventListener('resize', () => { if (document.querySelector('.ach-cats')) achIndicator(true); });
 
 // ---------- study-mix wallpaper ----------
-const WIN_LBL = { day: 'today', week: 'this week', month: 'this month' }, WIN_CHIP = { day: 'your day', week: 'your week', month: 'your month' };
+const WIN_LBL = { day: 'today', week: 'this week', month: 'this month', all: 'across all time' }, WIN_CHIP = { day: 'your day', week: 'your week', month: 'your month', all: 'all time' };
 const bgSet = () => ({ mode: 'auto', window: 'week', motion: true, ...(S?.settings.background || {}) });
 function currentMix() { const b = bgSet(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: +S?.settings.dayStartHour || 0 }); }
 function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.StudyMix) return; const b = bgSet(), dots = [...wp.children];
@@ -591,13 +591,13 @@ function mixLegend(m = currentMix()) { if (!m.parts.length) return '<span class=
 function mixChip() { const b = bgSet(); if (b.mode !== 'auto') return '';
   const m = currentMix(); return '<button class="mix-chip glass" data-act="mixInfo" aria-haspopup="dialog" title="Why these colors?"><span class="mix-dots">' + (m.parts.length ? m.parts.map(p => '<i style="background:' + color(p.subject) + '"></i>').join('') : '<i class="def"></i>') + '</span><span>Background: ' + WIN_CHIP[m.win] + '</span></button>'; }
 ACT.mixInfo = () => { const m = currentMix();
-  dialog('<h3>Your study-mix background</h3><p>Colors come from what you studied ' + WIN_LBL[m.win] + '. Each subject adds a soft blob in its color, sized by its share of your ' + fmtH(m.total) + '.</p><div class="mix-legend">' + mixLegend(m) + '</div><p class="muted small">Change the window, mode or motion in Settings &rarr; Background. Subject colors are set under Subjects.</p><div class="row"><span class="sp"></span><button type="button" class="btn" data-dact="close">Close</button><button type="button" class="btn primary" data-dact="toSettings">Settings</button></div>');
+  dialog('<h3>Your study-mix background</h3><p>Colors come from what you studied ' + WIN_LBL[m.win] + '. Each subject adds a soft blob in its color, sized by its share of your ' + fmtH(m.total) + '.</p><div class="mix-legend">' + mixLegend(m) + '</div><p class="muted small">Change the period, mode or motion in Settings &rarr; Background. Subject colors are set under Subjects.</p><div class="row"><span class="sp"></span><button type="button" class="btn" data-dact="close">Close</button><button type="button" class="btn primary" data-dact="toSettings">Settings</button></div>');
   if (dialog.acts) { dialog.acts.close = () => $('dlg').close(); dialog.acts.toSettings = () => { $('dlg').close(); go('set'); }; } };
 async function saveBg(patch) { const r = await api('/api/settings', 'POST', { background: patch }); void r; S.settings.background = { ...bgSet(), ...patch }; applyWallpaper(); render(); }
 ACT.bgMode = b => saveBg({ mode: b.dataset.v }); ACT.bgWin = b => saveBg({ window: b.dataset.v }); ACT.bgMotion = b => saveBg({ motion: !!b.checked });
 function bgSettingsCard() { const b = bgSet(), tab = (act, v, cur, l) => '<button data-act="' + act + '" data-v="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + l + '</button>';
   return '<div class="card"><h3>Background</h3><div class="row wrap gap"><div class="tabs">' + [['auto', 'Auto (study mix)'], ['subject', 'Selected subject'], ['accent', 'Accent'], ['static', 'Static default']].map(([v, l]) => tab('bgMode', v, b.mode, l)).join('') + '</div></div>' +
-    '<div class="row wrap gap"><span class="muted small">Window</span><div class="tabs">' + [['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([v, l]) => tab('bgWin', v, b.window, l)).join('') + '</div>' +
+    '<div class="row wrap gap"><div class="tabs bg-win" role="group" aria-label="Background period">' + [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']].map(([v, l]) => tab('bgWin', v, b.window, l)).join('') + '</div>' +
     '<label class="row" style="gap:8px;margin:0"><input type="checkbox" class="chk" data-chg="bgMotion" ' + (b.motion !== false ? 'checked' : '') + '> Ambient motion</label></div>' +
     '<p class="muted small">' + (b.mode === 'auto' ? 'Colors come from what you studied ' + WIN_LBL[b.window] + ':' : b.mode === 'subject' ? 'Uses the selected subject\'s color.' : b.mode === 'accent' ? 'Uses your accent color.' : 'Uses the default wallpaper.') + '</p>' + (b.mode === 'auto' ? '<div class="mix-legend">' + mixLegend() + '</div>' : '') + '</div>'; }
 

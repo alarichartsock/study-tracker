@@ -121,6 +121,13 @@ async function runWidth(browser, bname, w) {
     if (!hasFs) note(tag0 + ' timer fullscreen', ['fullscreen button missing']);
     else { note(tag0 + ' timer fullscreen', [...errs.splice(0), ...await page.evaluate(() => { const vw = document.documentElement.clientWidth; return document.documentElement.scrollWidth > vw + 1 ? ['horizontal overflow in fullscreen'] : []; })]);
       await shotFn(page)({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); await page.keyboard.press('Escape'); }
+    if (w === 1024) note(tag0 + ' live wallpaper', await page.evaluate(async () => { const f = [], wait = ms => new Promise(r => setTimeout(r, ms)), sig = () => [...document.querySelectorAll('#wallpaper i.on')].map(i => i.style.getPropertyValue('--c') + '@' + i.style.getPropertyValue('--s')).join('|');
+      await refresh(); await wait(50); const a = sig(), now = Date.now();
+      const s = await api('/api/sessions', 'POST', { subject: 'Live Mix Test', start: new Date(now - 3 * 3600e3).toISOString(), end: new Date(now - 60e3).toISOString() }); await refresh(); await wait(50); const b = sig(); if (a === b) f.push('wallpaper did not update after adding a session');
+      await api('/api/subjects', 'PUT', { name: 'Live Mix Test', color: '#123456' }); await load(); await wait(50); if (!sig().includes('#123456')) f.push('wallpaper did not update after a subject color change');
+      const dot = document.querySelector('#wallpaper i.on'); if (dot && !(parseFloat(getComputedStyle(dot).transitionDuration) > 0)) f.push('wallpaper change is not animated');
+      await api('/api/sessions/' + s.id, 'DELETE'); await refresh(); await wait(50); if (sig() !== a) f.push('wallpaper did not revert after deleting the session');
+      await api('/api/subjects', 'DELETE', { name: 'Live Mix Test' }); await refresh(); return f; }));
     await ctx.close(); console.log(bname + '@' + w + ' done in ' + Math.round((Date.now() - t0) / 1000) + 's');
 }
 const T = +process.env.UI_TASK_TIMEOUT || 8 * 60e3, CONC = +process.env.UI_CONCURRENCY || 4;

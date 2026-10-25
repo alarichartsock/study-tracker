@@ -1,10 +1,10 @@
 // Study-mix wallpaper: pure helpers shared by the browser (window.StudyMix) and tests (require).
 (function (root) {
   'use strict';
-  const MODES = ['auto', 'subject', 'accent', 'static'], WINDOWS = ['day', 'week', 'month'], MAX = 5;
+  const MODES = ['auto', 'subject', 'accent', 'static'], WINDOWS = ['day', 'week', 'month', 'all'], MAX = 5;
   const secs = s => Math.max(0, (new Date(s.end) - new Date(s.start)) / 1000 - (+s.breakSec || 0));
-  // Start of the current day/week(Mon)/month, honouring the "day starts at hour" setting.
-  function windowStart(win, now = new Date(), h = 0) { const d = new Date(+now - h * 3600e3); d.setHours(0, 0, 0, 0);
+  // Start of the current day/week(Mon)/month (or the epoch for 'all'), honouring the "day starts at hour" setting.
+  function windowStart(win, now = new Date(), h = 0) { if (win === 'all') return new Date(0); const d = new Date(+now - h * 3600e3); d.setHours(0, 0, 0, 0);
     if (win === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); else if (win === 'month') d.setDate(1);
     return new Date(+d + h * 3600e3); }
   // Share of study time per subject in the window. At most MAX parts; the rest is folded into the biggest.

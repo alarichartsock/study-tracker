@@ -28,3 +28,10 @@ test('cleanBackground: whitelist validation', () => {
   assert.deepEqual(M.cleanBackground({ mode: 'static', motion: false }, { mode: 'auto', window: 'month', motion: true }), { mode: 'static', window: 'month', motion: false });
   for (const bad of [{ mode: 'rainbow' }, { window: 'year' }, { motion: 'yes' }, { mode: '<script>' }]) assert.throws(() => M.cleanBackground(bad));
 });
+
+test("studyMix: 'all' window covers the whole history and is a valid background setting", () => {
+  const ss = [S('CARS', 22, 9, 60), S('Bio', 1, 9, 60), { subject: 'Old', start: '2019-03-01T10:00:00.000Z', end: '2019-03-01T12:00:00.000Z' }];
+  const all = M.studyMix(ss, { win: 'all', now }); assert.deepEqual(all.parts.map(p => p.subject), ['Old', 'Bio', 'CARS']); assert.equal(all.total, 4 * 3600); assert.equal(all.win, 'all');
+  assert.equal(+M.windowStart('all', now), 0); assert.ok(M.WINDOWS.includes('all'));
+  assert.equal(M.cleanBackground({ window: 'all' }, {}).window, 'all'); assert.throws(() => M.cleanBackground({ window: 'year' }, {}));
+});
