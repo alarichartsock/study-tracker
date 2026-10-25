@@ -83,9 +83,11 @@ function createApp(opts = {}) {
     if (M === 'DELETE') ud[coll].splice(i, 1); else if (M === 'PUT') Object.assign(ud[coll][i], clean(j, ud[coll][i])); else return send(res, 405, { error: 'method' });
     store.save(); return send(res, 200, M === 'DELETE' ? { ok: true } : ud[coll][i]);
   }
+  // Exams are MCAT sittings: one combined score (472-528). Legacy subject/weight fields are no longer written or used,
+  // but are left in place on existing records (PUT merges), so no data is lost.
   const cleanExam = (j, old) => { const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
-    return { name: str(j.name ?? old.name, 100) || 'Exam', date, subject: str(j.subject ?? old.subject, 60), notes: str(j.notes ?? old.notes, 1000),
-      grade: j.grade !== undefined ? (j.grade === '' || j.grade === null ? null : numIn(j.grade, 0, 10000)) : old.grade ?? null, weight: j.weight !== undefined ? numIn(j.weight || 0, 0, 1000) : old.weight ?? 1 }; };
+    let grade = old.grade ?? null; if (j.grade !== undefined) { if (j.grade === '' || j.grade === null) grade = null; else { const g = Number(j.grade); if (!Number.isInteger(g) || g < 472 || g > 528) throw new Error('score must be a whole number from 472 to 528'); grade = g; } }
+    return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade }; };
   const cleanTask = (j, old) => { const due = j.due !== undefined ? j.due : old.due; if (due && !isDateKey(due)) throw new Error('due must be YYYY-MM-DD');
     const done = j.done !== undefined ? !!j.done : !!old.done;
     return { title: str(j.title ?? old.title, 200) || 'Task', due: due || '', priority: ['low', 'normal', 'high'].includes(j.priority) ? j.priority : old.priority || 'normal',
@@ -162,7 +164,7 @@ function createApp(opts = {}) {
         const d = (j.data || j); const key = s => `${s.start}|${s.end}|${s.subject}`, have = new Set(ud.sessions.map(key)); let added = 0, skipped = 0;
         for (const s of Array.isArray(d.sessions) ? d.sessions : []) { let c; try { c = cleanSession(s); } catch { skipped++; continue; } if (have.has(key(c))) { skipped++; continue; }
           ensureSubject(ud, c.subject); ensureActivity(ud, c.activity); ud.sessions.push({ id: ud.nextId++, ...c, ...(s.extUid ? { extUid: str(s.extUid, 210) } : {}) }); have.add(key(c)); added++; }
-        for (const e of Array.isArray(d.exams) ? d.exams : []) { try { ud.exams.push({ id: ud.nextId++, ...cleanExam(e, {}) }); } catch { /* skip */ } }
+        for (const e of Array.isArray(d.exams) ? d.exams : []) { try { let x; try { x = cleanExam(e, {}); } catch { x = cleanExam({ ...e, grade: null }, {}); } ud.exams.push({ id: ud.nextId++, ...x }); } catch { /* skip */ } }
         for (const t of Array.isArray(d.tasks) ? d.tasks : []) { try { ud.tasks.push({ id: ud.nextId++, ...cleanTask(t, {}) }); } catch { /* skip */ } }
         save(); return send(res, 200, { added, skipped });
       }

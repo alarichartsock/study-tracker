@@ -104,7 +104,8 @@ test('subjects meta/rename, activities, goals/settings validation, plan, exams, 
     assert.equal((await c('/api/settings', 'POST', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await c('/api/plan', 'POST', { date: '2026-10-23', minutes: 90 })).body['2026-10-23'], 90);
   assert.equal((await c('/api/plan', 'POST', { date: '2026-10-23', minutes: null })).body['2026-10-23'], undefined);
-  const ex = (await c('/api/exams', 'POST', { name: 'AAMC FL 1', date: '2026-11-07', subject: 'CARS' })).body; assert.equal(ex.weight, 1);
+  const ex = (await c('/api/exams', 'POST', { name: 'AAMC FL 1', date: '2026-11-07', subject: 'CARS', weight: 3 })).body; assert.equal(ex.weight, undefined); assert.equal(ex.subject, undefined);
+  assert.equal((await c('/api/exams/' + ex.id, 'PUT', { grade: 600 })).status, 400); assert.equal((await c('/api/exams/' + ex.id, 'PUT', { grade: 500.5 })).status, 400); assert.equal((await c('/api/exams/' + ex.id, 'PUT', { grade: 471 })).status, 400);
   assert.equal((await c('/api/exams', 'POST', { name: 'bad' })).status, 400);
   assert.equal((await c('/api/exams/' + ex.id, 'PUT', { grade: 510 })).body.grade, 510);
   const tk = (await c('/api/tasks', 'POST', { title: 'Review amino acids', due: '2026-10-25', priority: 'high' })).body;
