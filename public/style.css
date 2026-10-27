@@ -452,3 +452,5 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 @keyframes achConf{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(110px) rotate(320deg)}}
 .ach-notif-set{margin-bottom:12px}.ach-notif-set p{margin:6px 0}
 @media (prefers-reduced-motion:reduce){.ach-cele,.ach-cele::after,.ach-conf i{transition:none;animation:none}}
+.ach-notif-set>label{display:flex;justify-content:flex-start;align-items:center;font-weight:600}
+.ach-notif-set>label{gap:10px}.ach-notif-set>label>input{flex:0 0 auto;width:auto;margin:0}
