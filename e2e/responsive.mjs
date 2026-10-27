@@ -134,6 +134,20 @@ async function runWidth(browser, bname, w) {
     if (!hasFs) note(tag0 + ' timer fullscreen', ['fullscreen button missing']);
     else { note(tag0 + ' timer fullscreen', [...errs.splice(0), ...await page.evaluate(() => { const vw = document.documentElement.clientWidth; return document.documentElement.scrollWidth > vw + 1 ? ['horizontal overflow in fullscreen'] : []; })]);
       await shotFn(page)({ path: path.join(OUT, `${tag0}-timer-fullscreen.png`) }); await page.keyboard.press('Escape'); }
+    // calendar: add a to-do from a day sheet, see it on the day, check it off
+    { await page.evaluate(() => document.querySelector('#nav button[data-v="cal"]').click()); await page.waitForTimeout(500);
+      const day = page.locator('.cday.today'); if (phone) await day.tap(); else await day.click(); await page.waitForTimeout(400);
+      const f = []; const dlg = page.locator('dialog[open]'); if (!(await dlg.count())) f.push('day sheet did not open'); else {
+        const t = 'Cal todo ' + w + bname; await dlg.locator('input[name=tdText]').fill(t); await dlg.locator('button[value=addTodo]').click(); await page.waitForTimeout(700);
+        const inSheet = await page.evaluate(t => [...document.querySelectorAll('dialog[open] .cal-todos .todo-t')].some(e => e.textContent === t), t); if (!inSheet) f.push('new to-do not shown in day sheet');
+        f.push(...await page.evaluate(() => { const d = document.querySelector('dialog[open]'), vw = document.documentElement.clientWidth, o = []; if (d && d.getBoundingClientRect().right > vw + 1) o.push('day sheet overflows'); for (const e of d ? d.querySelectorAll('.cal-add > *') : []) if (e.getBoundingClientRect().right > d.getBoundingClientRect().right + 1) o.push('day sheet control clipped'); return o; }));
+        const box = page.locator('dialog[open] .cal-todos label.todo-it', { hasText: t }).locator('input[type=checkbox]'); await box.check(); await page.waitForTimeout(400);
+        await page.evaluate(() => document.querySelector('dialog[open]')?.close('cancel')); await page.waitForTimeout(700);
+        await page.waitForTimeout(500); const done = await page.evaluate(async t => { const ts = await api('/api/tasks'); return (ts.find(x => x.title === t) || {}).done; }, t); if (!done) f.push('checking the to-do in the sheet did not save');
+        await page.evaluate(async t => { const x = (await api('/api/tasks')).find(y => y.title === t); if (x) await api('/api/tasks/' + x.id, 'DELETE'); await refresh(); }, t); }
+      await page.waitForTimeout(600);
+      const onDay = await page.evaluate(() => { const c = document.querySelector('.cday.today'); return c ? (c.getBoundingClientRect().right <= document.documentElement.clientWidth + 1 ? '' : 'today cell overflows: ' + Math.round(c.getBoundingClientRect().right) + '>' + document.documentElement.clientWidth + ' view=' + view) : 'today cell missing, view=' + view; }); if (onDay) f.push(onDay);
+      note(tag0 + ' calendar to-do', f); }
     if (w === 1024 || w === 390) { await page.evaluate(() => document.querySelector('#nav button[data-v="stats"]').click()); await page.waitForTimeout(700);
       const strip = page.locator('.cum-hit i').nth(-3); await strip.scrollIntoViewIfNeeded(); if (phone) await strip.tap(); else await strip.hover(); await page.waitForTimeout(200);
       const tipTxt = await page.evaluate(() => { const t = document.getElementById('chartTip'); return t && t.classList.contains('on') ? t.textContent : ''; });

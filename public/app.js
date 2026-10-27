@@ -327,20 +327,26 @@ VIEWS.cal = () => {
     if (d.getMonth() === m - 1) { mTot += v; mPlan += plan != null ? plan * 60 : 0; }
     const goal = plan != null ? plan * 60 : ST.goals.day.goal;
     cells += `<div class="cday ${d.getMonth() !== m - 1 ? 'out' : ''} ${k === ST.todayKey ? 'today' : ''}" data-act="calDay" data-k="${k}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + (v ? fmtH(v) : 'no study') + (goal ? ' \u00b7 ' + Math.round(v / goal * 100) + '% of goal' : ''), false)}><div class="row" style="margin:0;justify-content:space-between"><b>${d.getDate()}</b>${md ? `<span class="medal m-${md}"></span>` : ''}</div>
-      ${v ? `<span>${fmtH(v)}</span>` : ''}${plan != null ? `<span class="muted tx">plan ${fmtH(plan * 60)}</span>` : ''}${ex.map(e => `<span class="ex tx">📝 ${esc(e.name)}</span>`).join('')}${tk.length ? `<span class="muted tx">☐ ${tk.length} to-do</span>` : ''}
+      ${v ? `<span>${fmtH(v)}</span>` : ''}${plan != null ? `<span class="muted tx">plan ${fmtH(plan * 60)}</span>` : ''}${ex.map(e => `<span class="ex tx">📝 ${esc(e.name)}</span>`).join('')}${tk.slice(0, 2).map(t => `<span class="tk tx"><i class="tk-box"></i>${esc(t.title)}</span>`).join('')}${tk.length > 2 ? `<span class="muted tx">+${tk.length - 2} more</span>` : ''}${tk.length ? `<span class="tk-dot" aria-label="${tk.length} to-do"></span>` : ''}
       ${goal ? `<div class="bar"><i style="width:${Math.min(100, v / goal * 100)}%;background:var(--acc)"></i></div>` : ''}</div>`; }
   return `<div class="card"><div class="row" style="margin:0 0 12px"><button class="btn" data-act="calNav" data-d="-1">‹</button><h3 class="grow center" style="margin:0">${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3><button class="btn" data-act="calNav" data-d="0">Today</button><button class="btn" data-act="calNav" data-d="1">›</button></div>
     <div class="calgrid">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div class="dow">${x}</div>`).join('')}${cells}</div>
-    <p class="muted small mt">Studied ${fmtH(mTot)} this month${mPlan ? ` · planned ${fmtH(mPlan)}` : ''}. Click a day to plan study time, review sessions or log a past session.</p></div>`;
+    <p class="muted small mt">Studied ${fmtH(mTot)} this month${mPlan ? ` · planned ${fmtH(mPlan)}` : ''}. Tap a day to add a to-do, plan study time, review sessions or log a past session.</p></div>`;
 };
+let calChanged = false;
+let calPending = null;
+dialog.acts.calTk = b => { const row = b.closest('.todo-it'); row?.classList.toggle('done', b.checked); calChanged = true; calPending = Promise.all([calPending, api('/api/tasks/' + b.dataset.id, 'PUT', { done: b.checked })]).catch(e => toast(e.message)); };
 ACT.calNav = b => { const d = +b.dataset.d; if (!d) UI.calMonth = dk(new Date()).slice(0, 7); else { const [y, m] = UI.calMonth.split('-').map(Number); UI.calMonth = dk(new Date(y, m - 1 + d, 1)).slice(0, 7); } render(); };
-ACT.calDay = b => { const k = b.dataset.k, list = S.sessions.filter(s => dayKey(s.start) === k).sort((a, c) => a.start.localeCompare(c.start));
+ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventListener('close', () => { if (calChanged) Promise.resolve(calPending).then(refresh); }, { once: true })); const k = b.dataset.k, list = S.sessions.filter(s => dayKey(s.start) === k).sort((a, c) => a.start.localeCompare(c.start));
   dialog(`<h3>${fmtDate(k2d(k), { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
     <label>Planned study time (hours), overrides the daily goal for this day</label><input type="number" name="plan" min="0" max="24" step="0.25" value="${S.plan[k] != null ? S.plan[k] / 60 : ''}" placeholder="default ${fmtH(ST.goals.day.goal)}">
     <div class="list mt">${list.map(s => itemHTML(s)).join('') || '<p class="muted small">No sessions.</p>'}</div>
     ${S.exams.filter(e => e.date === k).map(e => `<p>📝 <b>${esc(e.name)}</b></p>`).join('')}
+    <div class="cal-todos mt"><h4>To-dos due this day</h4>${S.tasks.filter(t => t.due === k).sort((a, b) => a.done - b.done || a.id - b.id).map(t => `<label class="todo-it${t.done ? ' done' : ''}"><input type="checkbox" class="chk" data-dact="calTk" data-id="${t.id}" ${t.done ? 'checked' : ''}><span class="todo-t">${esc(t.title)}</span>${t.subject ? `<span class="dot" style="background:${color(t.subject)}"></span>` : ''}</label>`).join('') || '<p class="muted small">None yet.</p>'}
+      <div class="cal-add"><input name="tdText" placeholder="Add a to-do for this day..." maxlength="200" aria-label="New to-do"><select name="tdSubj" aria-label="Subject">${opt(S.subjects, '', 'Subject')}</select><button class="btn primary" value="addTodo">+ Add to-do</button></div></div>
     <div class="row"><button class="btn" value="addPast">+ Add session</button><span class="sp"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save plan</button></div>`,
-  async (v, f) => { if (v === 'addPast') { const d = k2d(k); d.setHours(9); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
+  async (v, f) => { if (v === 'addTodo') { const t = f.tdText.value.trim(); if (t) { await api('/api/tasks', 'POST', { title: t, due: k, subject: f.tdSubj.value }); toast('To-do added'); } await refresh(); return ACT.calDay(b); }
+    if (v === 'addPast') { const d = k2d(k); d.setHours(9); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
     await api('/api/plan', 'POST', { date: k, minutes: f.plan.value === '' ? null : Math.round(+f.plan.value * 60) }); refresh(); }); };
 
 // ================= STATS / DATA ROOM =================

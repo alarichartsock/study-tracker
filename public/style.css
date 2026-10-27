@@ -418,3 +418,12 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 /* stacked inputs in cards/dialogs get consistent spacing (the base input reset zeroed .mt) */
 input.mt,select.mt,textarea.mt{margin-top:10px}
 .card>input:not([type=checkbox]):not([type=radio]):not([type=color])+input:not([type=checkbox]):not([type=radio]):not([type=color]),.card>input+select,.card>select+input,.card>select+select{margin-top:10px}
+
+/* calendar to-dos */
+.cday .tk{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--text);opacity:.85}.tk-box{flex:0 0 auto;width:9px;height:9px;border:1.5px solid var(--muted);border-radius:3px}
+.tk-dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+@media(max-width:760px){.tk-dot{display:block}}
+.cal-todos h4{margin:0 0 4px;font-size:14px}.cal-todos .todo-it{cursor:pointer}.cal-add{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;margin-top:8px}
+@media(max-width:520px){.cal-add{grid-template-columns:1fr auto}.cal-add input{grid-column:1/-1}.cal-add select{width:100%;min-width:0}}
+
+.calgrid{grid-template-columns:repeat(7,minmax(0,1fr))}.cday{min-width:0;overflow:hidden}
