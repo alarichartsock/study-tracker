@@ -120,6 +120,20 @@ async function runWidth(browser, bname, w) {
     await page.evaluate(() => document.querySelector('#nav button[data-v="trophy"]').click()); await page.waitForTimeout(600);
     const cats = await page.evaluate(() => [...document.querySelectorAll('.ach-cats button')].map(b => b.dataset.v));
     for (const c of cats) { await page.evaluate(c => document.querySelector(`.ach-cats button[data-v="${c}"]`).click(), c); await page.waitForTimeout(350); await check('trophy-' + c, c === 'focus' || c === 'mine'); }
+    // 3D trophies: thumbnails render non-blank pixels; the viewer opens a live non-blank canvas
+    { await page.evaluate(() => { document.querySelector('.ach-cats button[data-v="all"]').click(); }); await page.waitForTimeout(400);
+      await page.evaluate(() => document.querySelector('.ach-filter button[data-v="all"]').click()); await page.waitForTimeout(500);
+      await page.locator('.trophy .t-ic[data-spec]').first().scrollIntoViewIfNeeded(); await page.waitForFunction(() => document.querySelector('canvas.t3d') || window.__t3dFallback, null, { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(600);
+      note(tag0 + ' trophy 3d', await page.evaluate(() => { const f = [], cs = [...document.querySelectorAll('canvas.t3d')]; if (window.__t3dFallback) f.push('WebGL unavailable: fell back to icons'); if (!cs.length) f.push('no 3D thumbnails rendered');
+        for (const c of cs.slice(0, 3)) { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++; if (n < c.width * c.height * 0.05) f.push('3D thumbnail looks blank (' + n + ' px)'); }
+        const r = cs[0]?.getBoundingClientRect(); if (r && r.right > document.documentElement.clientWidth + 1) f.push('3D thumbnail overflows'); return f; }));
+      const t0b = page.locator('.trophy[data-act=trophyView]').first(); if (phone) await t0b.tap(); else await t0b.click(); await page.waitForTimeout(900);
+      note(tag0 + ' trophy viewer', await page.evaluate(() => { const f = [], d = document.querySelector('dialog[open]'), cv = d && d.querySelector('canvas.t3d-live'); if (!d) return ['viewer did not open']; if (!cv) return window.__t3dFallback ? ['viewer fell back to icon'] : ['viewer has no live canvas'];
+        const t = document.createElement('canvas'); t.width = 64; t.height = 64; const x = t.getContext('2d'); x.drawImage(cv, 0, 0, 64, 64); const p = x.getImageData(0, 0, 64, 64).data; let n = 0; for (let i = 3; i < p.length; i += 4) if (p[i] > 20) n++; if (n < 150) f.push('viewer canvas looks blank (' + n + ')');
+        const vw = document.documentElement.clientWidth; if (d.getBoundingClientRect().right > vw + 1 || cv.getBoundingClientRect().right > vw + 1) f.push('viewer overflows'); return f; }));
+      if (w === 390 || w === 1440) await shotFn(page)({ path: path.join(OUT, tag0 + '-trophy-viewer.png') });
+      await page.evaluate(() => document.querySelector('dialog[open]')?.close('cancel')); await page.waitForTimeout(300); }
     for (const f of ['earned', 'locked', 'all']) { await page.evaluate(f => document.querySelector(`.ach-filter button[data-v="${f}"]`).click(), f); await page.waitForTimeout(450); await check('trophy-filter-' + f, false); }
     // add-session sheet
     await page.evaluate(() => document.getElementById('addBtn').click()); await page.waitForTimeout(600);

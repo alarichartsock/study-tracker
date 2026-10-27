@@ -421,7 +421,8 @@ function achBody(cat, filt) { const { A, seen } = ACH, keep = x => filt === 'all
   const cats = [{ id: 'all', name: 'All' }, ...A.categories, { id: 'mine', name: 'Your activities' }];
   const inCat = id => id === 'all' ? [...A.global, ...A.personal] : id === 'mine' ? A.personal : A.global.filter(x => x.cat === id);
   const prog = x => x.unit === 'h' ? fmtH(x.value) + ' / ' + fmtH(x.target) : x.value + ' / ' + x.target + (x.unit === 'd' ? ' days' : '');
-  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + '"><div class="t-ic">' + (x.earned ? '&#127942;' : '&#128274;') + '</div><b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
+  const TT = ACH.tiers ||= window.TrophySpec ? TrophySpec.tiers(achAll(A)) : {}, spec = x => window.TrophySpec ? ' data-spec="' + esc(JSON.stringify(TrophySpec.spec(x, TT[x.id], x.kind === 'subject' ? color(x.key) : null))) + '"' : '';
+  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + '" data-act="trophyView" data-id="' + esc(x.id) + '" role="button" tabindex="0" aria-label="' + esc(x.name + (x.earned ? ', earned' : ', locked')) + ' - open 3D view"><div class="t-ic"' + spec(x) + '>' + (x.earned ? '&#127942;' : '&#128274;') + '</div><b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
     '<div class="muted small">' + esc(x.desc) + '</div>' + (x.earned ? '' : '<div class="bar t-prog"><i style="width:' + Math.round((x.progress || 0) * 100) + '%"></i></div><div class="muted small">' + prog(x) + '</div>') +
     (x.earnedBy ? '<div class="t-by small">Earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') + ' (' + x.earnedBy.pct + '%)</div>' : '') + '</div>';
   const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4><div class="trophies">' + list.map(card).join('') + '</div>' : ''; };
@@ -448,14 +449,24 @@ function achIndicator(instant) { const bar = document.querySelector('.ach-cats')
   if (instant) { void ind.offsetWidth; ind.style.transition = ''; } bar.classList.add('has-ind'); on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 function achSwap() { const g = $('achGrid'); if (!g || !ACH) return render(); const { body } = achBody(localStorage.achCat || 'all', localStorage.achFilter || 'all');
   const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); clearTimeout(g._achT); g._achT = setTimeout(() => { g.classList.remove('in'); g.querySelectorAll('.trophy').forEach(t => { t.style.animationDelay = ''; }); }, 700); };
-  if (reduceMotion()) { g.innerHTML = body; return; }
+  if (reduceMotion()) { g.innerHTML = body; t3dHydrate(); return; }
   g.style.minHeight = g.offsetHeight + 'px'; const unlock = () => setTimeout(() => { g.style.minHeight = ''; }, 450);
   // No View Transitions here: WebKit crashed on repeated grid swaps in CI; the CSS fade below is used everywhere.
-  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); }, 120); }
+  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); t3dHydrate(); }, 120); }
 ACT.achCat = b => { localStorage.achCat = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); }); achIndicator(); achSwap(); };
 ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); achSwap(); };
 const achAll = A => [...A.global, ...A.personal];
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); };
+// 3D trophies (lazy-loaded module; one shared WebGL renderer; emoji stays as fallback)
+let T3D = null; const t3d = () => (T3D ||= import('/trophy3d.js').catch(() => null));
+function t3dHydrate() { if (!window.TrophySpec || !$('achGrid')) return; t3d().then(m => { if (m && m.hydrate($('achGrid')) === false) window.__t3dFallback = true; if (!m) window.__t3dFallback = true; }); }
+ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.dataset.id); if (!x) return;
+  const spec = window.TrophySpec ? TrophySpec.spec(x, (ACH.tiers || {})[x.id], x.kind === 'subject' ? color(x.key) : null) : null;
+  dialog('<h3>' + esc(x.name) + (x.key ? ' <span class="muted small">' + esc(x.key) + '</span>' : '') + '</h3><div class="t3d-host" id="t3dHost"><div class="t-ic big">' + (x.earned ? '&#127942;' : '&#128274;') + '</div></div>' +
+    '<p class="center">' + esc(x.desc) + '</p><p class="muted small center">' + (spec ? spec.tier[0].toUpperCase() + spec.tier.slice(1) + ' tier \u00b7 ' : '') + (x.earned ? 'Earned' : Math.round((x.progress || 0) * 100) + '% there') + (x.earnedBy ? ' \u00b7 earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') : '') + '</p>' +
+    '<p class="muted small center t3d-hint">Drag to rotate</p><div class="row"><span class="sp"></span><button class="btn primary" value="cancel">Close</button></div>', () => {});
+  if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
+$('main').addEventListener('keydown', e => { const t = e.target.closest && e.target.closest('.trophy[data-act]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ACT.trophyView(t); } });
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); t3dHydrate(); };
 async function checkAchievements() { try { const A = achAll(await api('/api/achievements')), stored = JSON.parse(localStorage.seenAch || 'null'), seen = new Set(stored || A.filter(a => a.earned).map(a => a.id));
   if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name + (a.key ? ' (' + a.key + ')' : ''), a.desc); seen.add(a.id); }
   localStorage.seenAch = JSON.stringify([...seen]); } catch { /* ignore */ } }

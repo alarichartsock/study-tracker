@@ -430,3 +430,10 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 
 /* sign-out icon */
 #logoutBtn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* 3D trophies */
+.trophy[data-act]{cursor:pointer}.trophy[data-act]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.trophy .t-ic{height:84px;display:grid;place-items:center}.trophy .t-ic.has-3d{font-size:0}.trophy .t-ic canvas.t3d{width:84px;height:84px;display:block}
+.trophy:not(.on) .t-ic canvas.t3d{filter:grayscale(1) brightness(.8)}
+.t3d-host{display:grid;place-items:center;min-height:220px;margin:4px auto}.t3d-host canvas{max-width:100%;cursor:grab;border-radius:16px}.t3d-host canvas:active{cursor:grabbing}.t-ic.big{font-size:64px}
+.no-3d .t3d-hint{display:none}
