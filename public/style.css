@@ -437,3 +437,5 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 .trophy:not(.on) .t-ic canvas.t3d{filter:grayscale(1) brightness(.8)}
 .t3d-host{display:grid;place-items:center;min-height:220px;margin:4px auto}.t3d-host canvas{max-width:100%;cursor:grab;border-radius:16px}.t3d-host canvas:active{cursor:grabbing}.t-ic.big{font-size:64px}
 .no-3d .t3d-hint{display:none}
+
+.t3dq .tabs{max-width:420px}.t3dq p{margin:6px 0 0}

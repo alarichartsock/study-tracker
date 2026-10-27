@@ -21,6 +21,6 @@ test('vendored three.js is pinned, licensed and served/precached', () => {
   for (const f of ['three.module.min.js', 'three.core.min.js', 'LICENSE']) assert.ok(fs.existsSync(path.join(dir, f)), f);
   assert.match(fs.readFileSync(path.join(dir, 'LICENSE'), 'utf8'), /MIT License/);
   assert.match(fs.readFileSync(path.join(dir, 'three.core.min.js'), 'utf8').slice(0, 300), /REVISION|172/);
-  const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'); for (const f of ['/vendor/three/three.module.min.js', '/vendor/three/three.core.min.js', '/trophy3d.js', '/trophy-spec.js']) assert.ok(sw.includes(f), 'sw precaches ' + f);
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'); for (const f of ['/vendor/three/three.module.min.js', '/vendor/three/three.core.min.js', '/trophy3d.js', '/trophy3d-hq.js', '/trophy-tier.js', '/trophy-spec.js']) assert.ok(sw.includes(f), 'sw precaches ' + f);
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'trophy3d.js'), 'utf8'); assert.ok(!/https?:\/\//.test(js.replace(/\/\/.*$/gm, '')), 'no CDN urls'); assert.equal((js.match(/new THREE\.WebGLRenderer/g) || []).length, 1, 'exactly one renderer');
 });

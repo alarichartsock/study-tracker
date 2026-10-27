@@ -8,7 +8,7 @@ const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
 
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
-const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js',
+const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
