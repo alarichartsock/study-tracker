@@ -427,3 +427,6 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 @media(max-width:520px){.cal-add{grid-template-columns:1fr auto}.cal-add input{grid-column:1/-1}.cal-add select{width:100%;min-width:0}}
 
 .calgrid{grid-template-columns:repeat(7,minmax(0,1fr))}.cday{min-width:0;overflow:hidden}
+
+/* sign-out icon */
+#logoutBtn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
