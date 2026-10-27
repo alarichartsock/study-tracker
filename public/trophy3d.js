@@ -200,5 +200,7 @@ export function openViewer(host, s, { reduced = false } = {}) {
   });
   return () => { stopped = true; cancelAnimationFrame(raf); cleanup(); r.setPixelRatio(1); r.setSize(q.size, q.size, false); viewerOpen = false; pump(); };
 }
+export async function thumbCanvas(s) { if (!renderer()) return null; await whenReady(); if (viewerOpen) return null; const img = thumb(s); if (!img) return null;
+  const c = document.createElement('canvas'); c.width = c.height = q.size; c.className = 't3d'; c.dataset.tier = tier; c.setAttribute('aria-hidden', 'true'); c.getContext('2d').drawImage(img, 0, 0); return c; }
 export const stats = () => ({ tier, info, size: q.size, cached: cache.size, failed, queued: queue.length, hqLoaded: !!HQ,
   thumbMs: Object.fromEntries(Object.entries(times).map(([k, v]) => [k, Math.round(v.ms / v.n * 10) / 10])) });

@@ -152,13 +152,26 @@ async function runWidth(browser, bname, w) {
         note(tag0 + ' trophy tier ' + tq, f); }
       if (w === 390 || w === 1280) { await page.evaluate(async () => { await setT3dQuality('auto'); }); const a = await page.evaluate(() => localStorage.t3dAuto); console.log('T3DAUTO', tag0, a); }
       { await page.evaluate(() => document.querySelector('#nav button[data-v="set"]').click()); await page.waitForTimeout(700);
+        await page.evaluate(() => { achBusy = true; achQ.length = 0; document.querySelectorAll('.ach-cele').forEach(e => e.remove()); }); // real unlocks would cover the buttons
         const f = [], n = await page.locator('.t3dq button').count(); if (n !== 4) f.push('quality tabs: ' + n);
         else { const b = page.locator('.t3dq button[data-q=medium]'); if (phone) await b.tap(); else await b.click(); await page.waitForTimeout(500);
           const st = await page.evaluate(() => ({ ls: localStorage.t3dQuality, on: document.querySelector('.t3dq button.on')?.dataset.q, info: document.getElementById('t3dInfo')?.textContent, over: [...document.querySelectorAll('.t3dq button')].some(x => x.getBoundingClientRect().right > document.documentElement.clientWidth + 1) }));
           if (st.ls !== 'medium' || st.on !== 'medium' || !/Medium/.test(st.info || '')) f.push('override not applied: ' + JSON.stringify(st)); if (st.over) f.push('quality tabs overflow');
           await page.evaluate(async () => { await setT3dQuality('auto'); }); }
+        { const st = await page.evaluate(() => { const e = document.getElementById('achNotifState'), c = document.querySelector('[data-chg=achNotif]'); return { has: !!e && !!c, txt: e?.textContent || '' }; });
+          if (!st.has) f.push('achievement notification toggle missing'); else { const c = page.locator('[data-chg=achNotif]'); await c.uncheck(); await page.waitForTimeout(300); if (await page.evaluate(() => localStorage.achNotif) !== 'off') f.push('toggle did not save'); await page.locator('[data-chg=achNotif]').check(); await page.waitForTimeout(300); } }
         note(tag0 + ' trophy quality setting', f);
-        await page.evaluate(() => document.querySelector('#nav button[data-v="trophy"]').click()); await page.waitForTimeout(600); } }
+        await page.evaluate(() => document.querySelector('#nav button[data-v="trophy"]').click()); await page.waitForTimeout(600); }
+      { const f = [];
+        const bad = await page.evaluate(async () => { await new Promise(r => setTimeout(r, 700)); await checkAchievements(); achQ.length = 0; document.querySelectorAll('.ach-cele').forEach(e => e.remove()); achBusy = false; const r = await api('/api/achievements/new'); if (!Array.isArray(r.new)) return 'bad /api/achievements/new response'; const A = await api('/api/achievements'), all = [...A.global, ...A.personal], a = all.find(x => x.earned) || A.global[0], tiers = TrophySpec.tiers(all);
+          achQ.push({ ...a, spec: TrophySpec.spec(a, tiers[a.id], null) }); achNext(); return ''; });
+        if (bad) f.push(bad); await page.waitForFunction(() => { const c = document.querySelector('.ach-cele.show'); return c && getComputedStyle(c).opacity === '1' && getComputedStyle(c).transform.endsWith(', 0, 0)'); }, null, { timeout: 4000 }).catch(() => {});
+        f.push(...await page.evaluate(() => { const o = [], c = document.querySelector('.ach-cele.show'), vw = document.documentElement.clientWidth; if (!c) return ['celebration card not shown']; const r = c.getBoundingClientRect();
+          if (r.left < -1 || r.right > vw + 1 || r.bottom > innerHeight + 1) o.push('celebration card off-screen'); if (!/Achievement unlocked/i.test(c.textContent)) o.push('no heading'); for (const e of c.querySelectorAll('.ach-tx > *')) if (e.getBoundingClientRect().right > r.right + 1) o.push('text overflows card'); return o; }));
+        if (w === 390 || w === 1280) { await page.waitForTimeout(1200); const c = page.locator('.ach-cele'); if (await c.count()) { if (phone) await c.tap({ position: { x: 30, y: 30 }, force: true, timeout: 5000 }); else await c.click({ position: { x: 30, y: 30 }, force: true, timeout: 5000 });
+            const v = await page.waitForSelector('dialog[open] .t3d-host', { timeout: 8000 }).then(() => true).catch(() => false); if (!v) f.push('tapping the card did not open the trophy viewer'); await page.evaluate(() => document.querySelector('dialog[open]')?.close('cancel')); await page.waitForTimeout(400); } }
+        else { await page.evaluate(() => document.querySelector('.ach-cele .ach-x')?.click()); await page.waitForTimeout(500); if (await page.locator('.ach-cele').count()) f.push('dismiss did not remove the card'); }
+        note(tag0 + ' achievement toast', f); } }
     for (const f of ['earned', 'locked', 'all']) { await page.evaluate(f => document.querySelector(`.ach-filter button[data-v="${f}"]`).click(), f); await page.waitForTimeout(450); await check('trophy-filter-' + f, false); }
     // add-session sheet
     await page.evaluate(() => document.getElementById('addBtn').click()); await page.waitForTimeout(600);
@@ -205,7 +218,7 @@ const T = +process.env.UI_TASK_TIMEOUT || 8 * 60e3, CONC = +process.env.UI_CONCU
 for (const bname of BROWSERS) { const browser = await pw[bname].launch(), queue = [...WIDTHS];
   await Promise.all([...Array(Math.min(CONC, queue.length))].map(async () => { for (let w; (w = queue.shift()) !== undefined;) {
     let timer; try { await Promise.race([runWidth(browser, bname, w), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timed out after ' + T / 1000 + 's')), T); })]); }
-    catch (e) { failures.push(bname + '@' + w + ': run error: ' + String(e && e.message || e).split('\n')[0]); } finally { clearTimeout(timer); } } }));
+    catch (e) { failures.push(bname + '@' + w + ': run error: ' + String(e && e.message || e).split('\n')[0]); console.log('RUNERR', bname, w, String(e && e.message || e).slice(0, 1500)); } finally { clearTimeout(timer); } } }));
   await browser.close(); }
 server.close();
 console.log(`${shots} screenshots in ${OUT}`);

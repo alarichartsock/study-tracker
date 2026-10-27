@@ -2,7 +2,7 @@
 // MCAT Study Tracker - zero-dependency Node server
 const http = require('http'), fs = require('fs'), path = require('path');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
-const reports = require('./lib/reports');
+const reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
@@ -150,10 +150,16 @@ function createApp(opts = {}) {
         const r = from && to ? analytics.compare(list, from, to, o) : { current: analytics.report(list, { ...o, from, to }) };
         return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h) });
       }
-      if (p === '/api/achievements') { const A = analytics.achievements(ud, h);
+      const achFull = () => { const A = analytics.achievements(ud, h);
         const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, +d.settings.dayStartHour || 0]; })); // aggregate counts only
         for (const x of A.global) { const n = E.counts[x.id] || 0; x.earnedBy = { count: n, users: E.users, pct: E.users ? Math.round(n / E.users * 100) : 0 }; }
-        return send(res, 200, A); }
+        return A; };
+      if (p === '/api/achievements') return send(res, 200, achFull());
+      // newly earned since last notification (first call silently records what's already earned)
+      if (p === '/api/achievements/new' && M === 'GET') { const A = achFull(), r = achN.pending(ud, A); if (r.init) save();
+        const all = [...A.global, ...A.personal], tiers = TSpec.tiers(all), want = new Set(r.ids);
+        return send(res, 200, { new: all.filter(a => want.has(a.id)).map(a => ({ ...a, spec: TSpec.spec(a, tiers[a.id], a.kind === 'subject' ? ud.subjectMeta[a.key]?.color : null) })) }); }
+      if (p === '/api/achievements/seen' && M === 'POST') { const A = analytics.achievements(ud, h), n = achN.markSeen(ud, A, Array.isArray(j.ids) ? j.ids.slice(0, 500) : []); if (n) save(); return send(res, 200, { ok: true, marked: n }); }
       if (p === '/api/flags' && M === 'POST') { const fl = ud.flags ||= {}, k = String(j.key || '');
         if (k === 'onboarded') fl.onboarded = 1; else if (k.startsWith('view:') && analytics.VIEW_KEYS.includes(k.slice(5))) { fl.views ||= []; if (!fl.views.includes(k.slice(5))) fl.views.push(k.slice(5)); }
         else return send(res, 400, { error: 'unknown flag' });

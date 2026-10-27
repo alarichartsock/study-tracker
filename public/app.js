@@ -34,6 +34,7 @@ async function api(url, method = 'GET', body) {
   const data = r.headers.get('content-type')?.includes('json') ? await r.json() : await r.text();
   if (r.status === 401 && !url.startsWith('/api/login') && !url.startsWith('/api/password')) { showAuth(); throw new Error('Not logged in'); }
   if (!r.ok) throw new Error(data.error || 'Request failed');
+  if (method !== 'GET' && !url.startsWith('/api/achievements') && !url.startsWith('/api/log')) achSoon();
   return data;
 }
 function toast(msg, action, fn) {
@@ -476,9 +477,30 @@ ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.data
   if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
 $('main').addEventListener('keydown', e => { const t = e.target.closest && e.target.closest('.trophy[data-act]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ACT.trophyView(t); } });
 AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); t3dHydrate(); };
-async function checkAchievements() { try { const A = achAll(await api('/api/achievements')), stored = JSON.parse(localStorage.seenAch || 'null'), seen = new Set(stored || A.filter(a => a.earned).map(a => a.id));
-  if (stored) for (const a of A) if (a.earned && !seen.has(a.id)) { notify('Achievement unlocked: ' + a.name + (a.key ? ' (' + a.key + ')' : ''), a.desc); seen.add(a.id); }
-  localStorage.seenAch = JSON.stringify([...seen]); } catch { /* ignore */ } }
+// ---- achievement notifications: the server diffs earned vs. already-notified (per user, so each unlock is announced once) ----
+const achQ = []; let achBusy = false, achT = 0;
+function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }
+async function checkAchievements() { if (!ME) return; try { const r = await api('/api/achievements/new'); if (!r.new || !r.new.length) return;
+  api('/api/achievements/seen', 'POST', { ids: r.new.map(a => a.id) }).catch(() => {});
+  for (const a of r.new) { achQ.push(a); achSystem(a); } achNext(); } catch { /* ignore */ } }
+const achNotifOn = () => localStorage.achNotif !== 'off';
+async function achSystem(a) { // system notification only when the tab is in the background (the in-app card covers the foreground)
+  if (!achNotifOn() || !document.hidden || !window.isSecureContext || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try { const reg = await navigator.serviceWorker?.getRegistration(), t = 'Achievement unlocked: ' + a.name + (a.key ? ' (' + a.key + ')' : ''), o = { body: a.desc, icon: '/icon-192.png', tag: 'ach-' + a.id, data: { url: '/' } };
+    if (reg) await reg.showNotification(t, o); else new Notification(t, o); } catch { /* ignore */ } }
+function achNext() { if (achBusy || !achQ.length) return; achBusy = true; const a = achQ.shift(), el = document.createElement('div');
+  const by = a.earnedBy ? 'Earned by ' + a.earnedBy.count + ' of ' + a.earnedBy.users + ' user' + (a.earnedBy.users === 1 ? '' : 's') : 'Personal trophy';
+  el.className = 'ach-cele' + (reduceMotion() ? ' still' : ''); el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.tabIndex = 0;
+  el.innerHTML = '<div class="ach-ic">&#127942;</div><div class="ach-tx"><small>Achievement unlocked' + (achQ.length ? ' &middot; ' + (achQ.length + 1) + ' new' : '') + '</small><b>' + esc(a.name) + (a.key ? ' <span class="muted small">' + esc(a.key) + '</span>' : '') + '</b><span>' + esc(a.desc) + '</span><span class="muted small">' + esc(by) + ' &middot; tap to view</span></div><button class="ach-x" aria-label="Dismiss">&times;</button>' +
+    (reduceMotion() ? '' : '<div class="ach-conf" aria-hidden="true">' + Array.from({ length: 14 }, (_, i) => '<i style="--x:' + (i * 7 + 3) + '%;--d:' + (i % 5) * 90 + 'ms;--h:' + (i * 47 % 360) + '"></i>').join('') + '</div>');
+  document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('show')); if (typeof beep === 'function') try { beep(); } catch { /* ignore */ }
+  if (a.spec && window.TrophySpec) t3d().then(m => m && m.thumbCanvas && m.thumbCanvas(a.spec)).then(c => { if (c && el.isConnected) { el.querySelector('.ach-ic').replaceChildren(c); } }).catch(() => {});
+  let done = false; const close = () => { if (done) return; done = true; clearTimeout(tm); el.classList.remove('show'); setTimeout(() => { el.remove(); achBusy = false; achNext(); }, reduceMotion() ? 0 : 300); };
+  const tm = setTimeout(close, 7000);
+  el.addEventListener('click', e => { if (e.target.closest('.ach-x')) return close(); close(); openTrophy(a.id); });
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') { close(); openTrophy(a.id); } else if (e.key === 'Escape') close(); }); }
+async function openTrophy(id) { localStorage.achCat = 'all'; localStorage.achFilter = 'all'; if (view !== 'trophy') go('trophy'); else render();
+  for (let i = 0; i < 40; i++) { await new Promise(r => setTimeout(r, 100)); const t = document.querySelector('.trophy[data-id="' + CSS.escape(id) + '"]'); if (t && ACH) { t.scrollIntoView({ block: 'center' }); return ACT.trophyView(t); } } }
 
 // ================= IMPORT / EXPORT =================
 VIEWS.data = () => `<div class="card"><h3>Import CSV</h3><p class="muted small">Columns are detected automatically (date, start, end, duration, subject/category, note). If detection is wrong, type the exact header names.</p>
@@ -508,7 +530,7 @@ VIEWS.set = async () => {
   <div class="card"><h3>Timer</h3><div class="grid3"><div><label>Focus (min)</label><input type="number" id="pF" value="${pm.focusMin}"></div><div><label>Short break (min)</label><input type="number" id="pS" value="${pm.shortMin}"></div><div><label>Long break (min)</label><input type="number" id="pL" value="${pm.longMin}"></div><div><label>Cycles before long break</label><input type="number" id="pC" value="${pm.cycles}"></div><div><label>Quick durations (min, comma)</label><input id="qD" value="${s.quickDurations.join(', ')}"></div><div><label>&nbsp;</label><label class="switch"><input type="checkbox" id="pA" ${pm.autoStart ? 'checked' : ''}> Auto-start next focus</label></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveTimer">Save timer</button></div></div>
   <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label><span class="medal m-${m}"></span> ${m} (h/day)</label><input type="number" step="0.25" min="0" id="md_${m}" value="${md[m] / 60}"></div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
-  <div class="card"><h3>Notifications &amp; reminders</h3><p class="muted small">${window.isSecureContext ? '' : '⚠️ Browsers only allow system notifications and installing the app over HTTPS. Use the Tailscale HTTPS address (see README); sounds and in-app alerts still work here. '}Reminders fire while the app is open or installed.</p>
+  <div class="card"><h3>Notifications &amp; reminders</h3>${achNotifRow()}<p class="muted small">${window.isSecureContext ? '' : '⚠️ Browsers only allow system notifications and installing the app over HTTPS. Use the Tailscale HTTPS address (see README); sounds and in-app alerts still work here. '}Reminders fire while the app is open or installed.</p>
     <div class="row wrap gap"><button class="btn" data-act="notifPerm">${'Notification' in window && Notification.permission === 'granted' ? 'Notifications enabled ✓' : 'Enable notifications'}</button><span class="muted small">Remind me if I haven't studied by</span><input type="time" id="remT" value="${localStorage.remindAt || ''}" style="width:auto"><button class="btn" data-act="saveRem">Save</button></div></div>
   <div class="card"><h3>Busy Bar</h3><p class="muted small">Optional. Shows your study status on a Busy Bar on your network. Leave the IP blank to disable.</p>
     <label>Busy Bar IP</label><input id="sBip" value="${esc(s.busyIp)}" placeholder="192.168.0.x"><label>API token</label><input id="sBtok" type="password" autocomplete="off" value="${esc(s.busyToken)}">
@@ -549,6 +571,15 @@ ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from 
 ACT.addSubj = async () => { const n = $('newSubj').value.trim(); if (n) { await api('/api/subjects', 'POST', { name: n }); refresh(); } };
 ACT.addAct = async () => { const n = $('newAct').value.trim(); if (n) { await api('/api/activities', 'POST', { name: n }); refresh(); } };
 ACT.actDel = async b => { await api('/api/activities', 'DELETE', { name: b.dataset.a }); refresh(); };
+function achNotifRow() { const sec = window.isSecureContext, has = 'Notification' in window, perm = has ? Notification.permission : 'unsupported';
+  const st = !sec ? 'System notifications are unavailable at this address: it is plain HTTP, and browsers only allow notifications on HTTPS (or localhost). You still get the in-app celebration. To get system alerts, open the app through its Tailscale HTTPS address (see README).'
+    : !has ? 'This browser does not support system notifications. You still get the in-app celebration.'
+    : perm === 'granted' ? 'System notifications are allowed: you get one when a trophy unlocks while the app is in the background.'
+    : perm === 'denied' ? 'System notifications are blocked in this browser\u2019s site settings. You still get the in-app celebration.'
+    : 'Allow system notifications to hear about trophies while the app is in the background.';
+  return '<div class="ach-notif-set"><label class="row" style="gap:8px;margin:0"><input type="checkbox" class="chk" data-chg="achNotif" ' + (achNotifOn() ? 'checked' : '') + '> Achievement notifications</label>' +
+    '<p class="muted small" id="achNotifState" data-sec="' + (sec ? 1 : 0) + '">' + esc(st) + '</p>' + (sec && has && perm === 'default' && achNotifOn() ? '<button class="btn" data-act="notifPerm">Allow system notifications</button>' : '') + '</div>'; }
+ACT.achNotif = b => { localStorage.achNotif = b.checked ? 'on' : 'off'; render(); };
 ACT.notifPerm = async () => { if (!('Notification' in window)) return toast('Notifications are not supported in this browser'); if (!window.isSecureContext) return toast('Notifications need HTTPS (see README: Tailscale HTTPS)'); await Notification.requestPermission(); render(); };
 ACT.saveRem = () => { localStorage.remindAt = $('remT').value; toast($('remT').value ? 'Reminder set' : 'Reminder off'); };
 function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.active) return; const now = new Date(), [h, m] = t.split(':').map(Number);
@@ -579,7 +610,7 @@ function onboarding() { markFlag('onboarded');
 
 // ---------- periodic refresh ----------
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
-setInterval(() => { if (ME && !document.hidden) checkAchievements(); }, 120000);
+setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
 document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && view === 'timer') refresh().catch(() => {}); });
 boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to load: ' + esc(e.message) + '</p>'; });
 

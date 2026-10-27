@@ -440,3 +440,15 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 
 .t3dq .tabs{max-width:420px}.t3dq p{margin:6px 0 0}
 .row.wrap>.tabs.grow{flex:1 1 180px}
+
+.ach-cele{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;width:min(440px,calc(100vw - 24px));transform:translate(-50%,24px) scale(.96);opacity:0;transition:transform .35s var(--ease),opacity .3s;display:flex;gap:12px;align-items:center;padding:12px 40px 12px 12px;border-radius:18px;background:var(--glass-strong,var(--card));border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.25);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);cursor:pointer;overflow:hidden}
+.ach-cele.show{transform:translate(-50%,0) scale(1);opacity:1}.ach-cele.still{transition:none}
+.ach-cele .ach-ic{flex:0 0 64px;height:64px;display:grid;place-items:center;font-size:40px}.ach-cele .ach-ic canvas{width:64px;height:64px}
+.ach-cele .ach-tx{display:flex;flex-direction:column;gap:2px;min-width:0}.ach-cele .ach-tx small{color:var(--acc);font-weight:600;text-transform:uppercase;letter-spacing:.04em;font-size:11px}.ach-cele .ach-tx b{font-size:15px}.ach-cele .ach-tx span{font-size:13px;overflow-wrap:anywhere}
+.ach-cele .ach-x{position:absolute;top:6px;right:8px;background:none;border:0;font-size:20px;color:var(--muted);cursor:pointer;width:28px;height:28px}
+.ach-cele:not(.still)::after{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-100%);animation:achShine 1.4s .3s ease-out;pointer-events:none}
+@keyframes achShine{to{transform:translateX(100%)}}
+.ach-conf{position:absolute;inset:0;pointer-events:none}.ach-conf i{position:absolute;top:-8px;left:var(--x);width:6px;height:10px;border-radius:2px;background:hsl(var(--h) 85% 60%);opacity:0;animation:achConf 1.6s var(--d) ease-in forwards}
+@keyframes achConf{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(110px) rotate(320deg)}}
+.ach-notif-set{margin-bottom:12px}.ach-notif-set p{margin:6px 0}
+@media (prefers-reduced-motion:reduce){.ach-cele,.ach-cele::after,.ach-conf i{transition:none;animation:none}}
