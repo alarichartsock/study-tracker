@@ -2,6 +2,8 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { createApp } = require('../server');
+const { readSnapshot, dbPath } = require('../lib/store');
+const rawStore = f => [dbPath(f), dbPath(f) + '-wal'].filter(p => fs.existsSync(p)).map(p => fs.readFileSync(p, 'latin1')).join('');
 
 async function start(opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcat-')), dataFile = path.join(dir, 'data.json');
@@ -32,7 +34,7 @@ test('auth flow, admin, registration lock, isolation, logout', async t => {
   assert.equal(r.status, 200); assert.equal(r.body.user.admin, true);
   assert.match(r.headers.get('set-cookie'), /HttpOnly/); assert.match(r.headers.get('set-cookie'), /SameSite=Lax/);
   // password is not stored in plaintext
-  const raw = fs.readFileSync(app.dataFile, 'utf8'); assert.ok(!raw.includes('secret-pass-1')); assert.ok(!raw.includes(r.headers.get('set-cookie').split(';')[0].slice(4)));
+  const raw = rawStore(app.dataFile); assert.ok(raw.length > 0); assert.ok(!raw.includes('secret-pass-1')); assert.ok(!raw.includes(r.headers.get('set-cookie').split(';')[0].slice(4)));
   // registration closed by default after first user
   assert.equal((await b('/api/register', 'POST', { username: 'bob', password: '12345678' })).status, 403);
   assert.equal((await b('/api/admin/config', 'POST', { openRegistration: true })).status, 401);
@@ -117,7 +119,7 @@ test('legacy v1 data.json is migrated to the first (admin) user with a backup', 
   await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
   const s = (await c('/api/state')).body;
   assert.equal(s.sessions[0].note, 'old'); assert.deepEqual(s.subjects, ['CARS', 'Custom']); assert.equal(s.settings.dailyGoalMin, 300);
-  assert.equal(JSON.parse(fs.readFileSync(app.dataFile, 'utf8')).version, 3);
+  assert.equal(readSnapshot(app.dataFile).version, 3);
 });
 
 test('static UI and JSON content-type guard', async t => {

@@ -2,6 +2,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { createApp } = require('../server');
+const { readSnapshot } = require('../lib/store');
 
 async function start(opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcat-')), dataFile = path.join(dir, 'data.json'), reportsDir = path.join(dir, 'reports', 'approved');
@@ -131,7 +132,8 @@ test('v2 data file is upgraded to v3 with a backup and nothing lost', async t =>
     userData: { 1: { sessions: [{ id: 5, subject: 'CARS', note: 'keep me', start: '2026-10-01T16:00:00.000Z', end: '2026-10-01T17:00:00.000Z' }], subjects: ['CARS', 'Mine'], settings: { dailyGoalMin: 240, busyIp: '1.2.3.4', busyToken: 't' }, active: null, nextId: 2 } }, nextUserId: 2 };
   fs.writeFileSync(dataFile, JSON.stringify(v2));
   const server = createApp({ dataFile }); t.after(() => server.close());
-  const db = JSON.parse(fs.readFileSync(dataFile, 'utf8')), ud = db.userData[1];
+  const db = readSnapshot(dataFile), ud = db.userData[1];
+  assert.deepEqual(JSON.parse(fs.readFileSync(dataFile, 'utf8')), v2, 'data.json left untouched');
   assert.equal(db.version, 3); assert.equal(ud.sessions[0].note, 'keep me'); assert.deepEqual(ud.subjects, ['CARS', 'Mine']);
   assert.equal(ud.settings.goals.dailyMin, 240); assert.equal(ud.settings.busyIp, '1.2.3.4'); assert.ok(ud.subjectMeta.Mine.color); assert.equal(ud.nextId, 6);
   assert.equal(db.users[0].hash, 'h');

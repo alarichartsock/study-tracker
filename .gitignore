@@ -18,3 +18,7 @@ Thumbs.db
 .idea/
 # UI check screenshots
 ui-shots/
+
+*.db
+*.db-wal
+*.db-shm
