@@ -439,3 +439,4 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 .no-3d .t3d-hint{display:none}
 
 .t3dq .tabs{max-width:420px}.t3dq p{margin:6px 0 0}
+.row.wrap>.tabs.grow{flex:1 1 180px}

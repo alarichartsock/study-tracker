@@ -42,15 +42,15 @@ export function plinth(s, M, q) {
     const geo = new THREE.ExtrudeGeometry(sh, { depth: H - 0.06, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: q.bevel, curveSegments: 6 }); geo.rotateX(-Math.PI / 2); geo.translate(0, 0.03, 0);
     body = new THREE.Mesh(geo, M.base); }
   else body = new THREE.Mesh(new THREE.LatheGeometry(profile(kind === 2 ? 0.9 : 0.86, kind === 2 ? 0.72 : 0.78, H, 0.035, n), kind === 2 ? 6 : round), M.base);
-  body.position.y = y0; g.add(body);
-  const ringGeo = kind === 1 ? new THREE.BoxGeometry(1.5, 0.05, 1.5) : new THREE.TorusGeometry(kind === 2 ? 0.8 : 0.8, 0.028, Math.round(8 * q.seg), kind === 2 ? 6 : round);
-  const band = new THREE.Mesh(ringGeo, M.metal); if (kind !== 1) band.rotation.x = Math.PI / 2; band.position.y = -1.0; g.add(band);
+  body.position.y = y0; if (kind === 2) body.rotation.y = Math.PI / 6; g.add(body); // hex: flat face to the front
+  const ringGeo = kind === 1 ? new THREE.BoxGeometry(1.5, 0.05, 1.5) : new THREE.TorusGeometry(kind === 2 ? 0.735 : 0.79, 0.028, Math.round(8 * q.seg), kind === 2 ? 6 : round);
+  const band = new THREE.Mesh(ringGeo, M.metal); if (kind !== 1) band.rotation.set(Math.PI / 2, 0, 0); band.position.y = -1.0; g.add(band);
   // engraved grooves around the body
-  for (const y of [-1.24, -1.04]) { const gr = new THREE.Mesh(kind === 1 ? new THREE.BoxGeometry(1.475, 0.012, 1.475) : new THREE.TorusGeometry(kind === 2 ? 0.86 - (y + 1.3) * 0.5 : 0.85 - (y + 1.3) * 0.22, 0.008, 4, kind === 2 ? 6 : round), M.engrave);
-    if (kind !== 1) gr.rotation.x = Math.PI / 2; gr.position.y = y; g.add(gr); }
+  for (const y of [-1.24, -1.04]) { const gr = new THREE.Mesh(kind === 1 ? new THREE.BoxGeometry(1.475, 0.012, 1.475) : new THREE.TorusGeometry(kind === 2 ? 0.9 - (y + 1.3) * 0.53 : 0.86 - (y + 1.3) * 0.235, 0.008, 4, kind === 2 ? 6 : round), M.engrave);
+    if (kind !== 1) gr.rotation.set(Math.PI / 2, 0, 0); gr.position.y = y; g.add(gr); }
   // front plaque with engraved lines and bevelled star studs
-  const z = kind === 1 ? 0.755 : kind === 2 ? 0.74 : 0.83, pl = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.17, 0.02), M.metal); pl.position.set(0, -1.14, z); if (kind === 0) pl.rotation.x = -0.23; g.add(pl);
-  for (let i = 0; i < 2; i++) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.44 - i * 0.14, 0.012, 0.012), M.engrave); l.position.set(0, -1.11 - i * 0.05, z + 0.012); if (kind === 0) l.rotation.x = -0.23; g.add(l); }
+  const z = kind === 1 ? 0.755 : kind === 2 ? 0.715 : 0.83, tilt = kind === 2 ? -0.43 : -0.23, pl = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.17, 0.02), M.metal); pl.position.set(0, -1.14, z); if (kind !== 1) pl.rotation.x = tilt; g.add(pl);
+  for (let i = 0; i < 2; i++) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.44 - i * 0.14, 0.012, 0.012), M.engrave); l.position.set(0, -1.11 - i * 0.05, z + 0.012); if (kind !== 1) l.rotation.x = tilt; g.add(l); }
   for (let i = 0; i < s.stars; i++) { const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.06, q.shadow ? 1 : 0), M.accent); st.scale.z = 0.5; st.position.set((i - (s.stars - 1) / 2) * 0.16, -1.215, z + 0.03); g.add(st); }
   return g;
 }
@@ -81,5 +81,4 @@ export function stage(sc, key, obj, q) {
   key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.radius = 4; key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
   const c = key.shadow.camera; c.left = -1.8; c.right = 1.8; c.top = 2; c.bottom = -2; c.near = 0.5; c.far = 12; key.target.position.set(0, -0.3, 0); sc.add(key.target);
   obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.ShadowMaterial({ opacity: 0.28 })); catcher.rotation.x = -Math.PI / 2; catcher.position.y = -1.302; catcher.receiveShadow = true; sc.add(catcher);
 }
