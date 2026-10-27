@@ -27,6 +27,10 @@ function createApp(opts = {}) {
   const userLimiter = new auth.RateLimiter(opts.userMaxAttempts || 5, 15 * 60e3);
   const reportLimiter = new auth.RateLimiter(opts.reportMax || 5, 60 * 60e3);
   store.db.reports ||= []; store.db.nextReportId ||= 1;
+  if (!(store.db.config ||= {}).readyRoomGrant) { // idempotent: runs once per data file; new users after this must take the tour
+    let n = 0; for (const ud of Object.values(store.db.userData || {})) { const fl = ud.flags ||= {}; if (!fl.onboarded) { fl.onboarded = 1; n++; }
+      if (Array.isArray(ud.achNotified) && !ud.achNotified.includes('onboard')) ud.achNotified.push('onboard'); } // silent: already "notified"
+    store.db.config.readyRoomGrant = { at: new Date().toISOString(), users: n }; store.save(); if (n && !opts.quiet) console.log('Granted Ready Room to ' + n + ' existing user(s)'); }
 
   async function busy(ud, text) { // Busy Bar HTTP API; never throws
     const { busyIp, busyToken } = ud.settings; if (!busyIp || !fetchImpl) return false;

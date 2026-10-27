@@ -63,7 +63,7 @@ async function boot() {
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   await load(); go(view);
-  if (localStorage.onboard === '1') { localStorage.onboard = ''; onboarding(); }
+  if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
 }
 async function showAuth(me) {
   me = me || await api('/api/me');
@@ -600,15 +600,68 @@ ACT.repReview = async b => { const r = (await api('/api/admin/reports')).find(x 
   async (v, f) => { await api('/api/admin/reports/' + r.id, 'PUT', { title: f.title.value, description: f.description.value, steps: f.steps.value, adminNote: f.note.value, status: v }); toast('Saved'); render(); }); };
 
 // ---------- onboarding ----------
-ACT.onboard = () => onboarding();
+ACT.onboard = () => tour();
 function markFlag(k) { const seen = JSON.parse(localStorage.flagsSent || '[]'); if (seen.includes(k)) return; api('/api/flags', 'POST', { key: k }).then(() => { localStorage.flagsSent = JSON.stringify([...seen, k]); }).catch(() => {}); }
-function onboarding() { markFlag('onboarded');
-  dialog(`<h3>Welcome to your MCAT tracker 👋</h3><ol class="steps"><li>Set a <b>daily goal</b>. Weekly, monthly and test-day goals are in Settings.</li><li>Pick a subject and hit <b>Start</b>, or use Pomodoro / Countdown mode.</li><li>Coming from another app? Import a CSV export from the Data tab.</li></ol>
-    <label>Daily goal (hours)</label><input type="number" name="goal" step="0.5" min="0" value="${S.settings.goals.dailyMin / 60}"><label>MCAT test date (optional)</label><input type="date" name="mcat">
-    <div class="row"><span class="sp"></span><button class="btn primary" value="ok">Let's go</button></div>`,
-  async (v, f) => { await api('/api/settings', 'POST', { goals: { dailyMin: Math.round(+f.goal.value * 60) } }); if (f.mcat.value) await api('/api/exams', 'POST', { name: 'MCAT', date: f.mcat.value });
-    await refresh(); });
-}
+// Welcome tour: a spotlight walk through the main features, then an optional goal / MCAT-date setup.
+// Finishing or skipping grants "Ready Room" (flag onboarded). Replay from Settings.
+const TOUR = [
+  { t: 'Welcome to Study Tracker', b: 'A one-minute tour of what is here. Use Next and Back, or skip any time. You can replay it from Settings.' },
+  { sel: '#nav', t: 'Getting around', b: 'Every section lives here. On phones it is the bar at the bottom; swipe it sideways for more.' },
+  { v: 'timer', sel: '.mode-tabs', t: 'Timer modes', b: 'Stopwatch for open-ended study, Pomodoro for focus/break cycles, or Countdown for a fixed block. Fullscreen hides everything else.' },
+  { v: 'timer', sel: '.chips', t: 'Subjects and colors', b: 'Pick what you are studying before you start. Each subject has its own color, which tints the accent and the background while you work.' },
+  { v: 'dash', sel: 'card:Goals', t: 'Dashboard: goals', b: 'Daily, weekly, monthly and term goals with rings and pace, so you can see at a glance whether you are on track.' },
+  { v: 'dash', sel: 'card:MCAT practice exams', t: 'Dashboard: MCAT card', b: 'Your latest practice-exam score and percentile, with a shortcut to log a new full-length.' },
+  { v: 'dash', sel: '.todo-card', t: 'Dashboard: to-dos', b: 'Add and check off to-dos right here; the card grows with your list.' },
+  { v: 'stats', sel: '.cum-wrap', alt: '.hcols', t: 'Stats and charts', b: 'Totals, records, weekday and time-of-day charts, and your study "share price". Hover or tap any bar or line for exact numbers.' },
+  { v: 'stats', sel: '.mix-chip', t: 'Background gradient', b: 'This chip shows the subject mix behind the background gradient. Tap it to see how it is calculated.' },
+  { v: 'mcat', sel: 'card:Practice exams', t: 'MCAT practice exams', b: 'Log full-length scores by section and watch your total and percentiles trend toward your goal.' },
+  { v: 'plan', sel: 'card:Exams', t: 'Exams & to-dos', b: 'Upcoming exams with countdowns, plus a full to-do and study-plan list with due dates and priorities.' },
+  { v: 'cal', sel: '.calgrid', t: 'Calendar', b: 'Each day shows study time and to-dos. Tap a day to plan hours, add a to-do, or log a past session.' },
+  { v: 'trophy', sel: '.ach-cats', t: 'Trophies', b: 'Earn 3D trophies for streaks, totals, focus and more. Browse by category, and tap any trophy to spin it.' },
+  { v: 'set', sel: 'card:Appearance', sm: '.t3dq', t: 'Make it yours', b: 'Theme, accent color and 3D trophy quality live in Settings, along with background options, goals, subjects and notifications.' },
+  { setup: true, t: 'Optional: set your targets', b: 'Add a weekly goal and your MCAT date now, or skip and do it later in Settings.' }
+];
+let tourS = null;
+const tourSleep = ms => new Promise(r => setTimeout(r, ms));
+function tourFind(sel) { if (!sel) return null; if (sel.startsWith('card:')) { const k = sel.slice(5); return [...document.querySelectorAll('#main .card')].find(c => (c.querySelector('h3')?.textContent || '').trim().startsWith(k)) || null; } return document.querySelector(sel); }
+async function tour() { if (tourS || !ME) return; document.querySelectorAll('.ach-cele').forEach(e => e.remove());
+  const el = document.createElement('div'); el.className = 'tour init' + (reduceMotion() ? ' still' : ''); el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'Welcome tour');
+  el.innerHTML = '<div class="tour-hole none"></div><div class="tour-card" tabindex="-1"></div>'; document.body.appendChild(el);
+  tourS = { i: 0, back: view, el, tgt: null }; el.addEventListener('click', tourClick); document.addEventListener('keydown', tourKey); addEventListener('resize', tourPlace); addEventListener('scroll', tourPlace, true); addEventListener('scrollend', tourPlace, true);
+  await tourShow(0); }
+async function tourShow(i) { const s = TOUR[i], S0 = tourS; if (!S0) return; S0.i = i; S0.el.classList.add('busy');
+  if (s.v && view !== s.v) go(s.v);
+  const sel = s.sm && innerWidth < 600 && innerHeight < 720 ? s.sm : s.sel; let tgt = null; for (let k = 0; k < 30 && sel; k++) { tgt = tourFind(sel) || (s.alt && tourFind(s.alt)); if (tgt) break; await tourSleep(100); }
+  if (tourS !== S0) return; if (tgt) { const bh = reduceMotion() ? 'auto' : 'smooth'; if (innerWidth < 600 && getComputedStyle(tgt).position !== 'fixed') window.scrollBy({ top: tgt.getBoundingClientRect().top - 72, behavior: bh }); else tgt.scrollIntoView({ block: 'center', behavior: bh }); await tourSleep(reduceMotion() ? 50 : 450); }
+  S0.tgt = tgt; const last = i === TOUR.length - 1, c = S0.el.querySelector('.tour-card'), g = S.settings.goals || {}, mc = (S.exams || []).find(e => /mcat/i.test(e.name) && e.grade == null);
+  c.innerHTML = '<div class="tour-dots" aria-hidden="true">' + TOUR.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('') + '</div><small class="muted">Step ' + (i + 1) + ' of ' + TOUR.length + '</small><h4>' + esc(s.t) + '</h4><p>' + esc(s.b) + '</p>' +
+    (s.setup ? '<div class="tour-setup"><label>Weekly goal (hours)</label><input type="number" min="0" step="0.5" id="tourWk" value="' + (g.weeklyMin ? g.weeklyMin / 60 : '') + '" placeholder="e.g. 25"><label>MCAT test date</label><input type="date" id="tourMcat" value="' + (mc ? mc.date : '') + '"></div>' : '') +
+    '<div class="row tour-btns"><button class="btn link" data-tour="skip">' + (s.setup ? 'Skip setup' : 'Skip tour') + '</button><span class="sp"></span>' + (i ? '<button class="btn" data-tour="back">Back</button>' : '') + '<button class="btn primary" data-tour="next">' + (s.setup ? 'Save & finish' : last ? 'Finish' : i ? 'Next' : 'Start tour') + '</button></div>';
+  tourPlace(); setTimeout(tourPlace, 300); setTimeout(tourPlace, 900); if (S0.el.classList.contains('init')) { void S0.el.offsetWidth; S0.el.classList.remove('init'); } S0.el.classList.remove('busy'); c.focus({ preventScroll: true }); }
+function tourPlace() { if (!tourS) return; const { el, tgt } = tourS, h = el.querySelector('.tour-hole'), c = el.querySelector('.tour-card'), vw = document.documentElement.clientWidth, vh = innerHeight, m = 12;
+  let r = tgt && tgt.isConnected ? tgt.getBoundingClientRect() : null; if (r && (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > vh)) r = null;
+  const nv = $('nav'), nr = nv && getComputedStyle(nv).position === 'fixed' ? nv.getBoundingClientRect() : null, floor = nr && nr.top > vh / 2 && !(tgt && tgt.id === 'nav') ? nr.top - 8 : vh - m; // keep the card above the phone tab bar
+  if (r) { const p = 6, L = Math.max(4, r.left - p), T = Math.max(4, r.top - p), W = Math.min(vw - 4, r.right + p) - L, H = Math.min(vh - 4, r.bottom + p) - T; Object.assign(h.style, { left: L + 'px', top: T + 'px', width: W + 'px', height: H + 'px' }); h.classList.remove('none'); }
+  else { Object.assign(h.style, { left: vw / 2 + 'px', top: vh / 2 + 'px', width: '0px', height: '0px' }); h.classList.add('none'); }
+  c.style.maxHeight = ''; let cw = c.offsetWidth, ch = c.offsetHeight, x, y;
+  if (!r) { x = (vw - cw) / 2; y = Math.min((vh - ch) / 2, floor - ch); }
+  else if (vw < 600) { x = (vw - cw) / 2; const below = floor - (r.bottom + 12), above = r.top - 12 - m;
+    if (below >= ch) y = r.bottom + 12; else if (above >= ch) y = r.top - 12 - ch;
+    else if (Math.max(below, above) >= 170) { c.style.maxHeight = Math.max(below, above) + 'px'; ch = c.offsetHeight; y = below >= above ? r.bottom + 12 : r.top - 12 - ch; }
+    else y = floor - ch; }
+  else { x = Math.min(Math.max(m, r.left), vw - cw - m); y = r.bottom + 14 + ch <= vh - m ? r.bottom + 14 : r.top - 14 - ch >= m ? r.top - 14 - ch : Math.max(m, vh - ch - m);
+    if (y < r.bottom && y + ch > r.top && r.right + 14 + cw <= vw - m) { x = r.right + 14; y = Math.min(Math.max(m, r.top), vh - ch - m); } }
+  c.style.left = Math.round(x) + 'px'; c.style.top = Math.round(y) + 'px'; }
+async function tourEnd(saveSetup) { const S0 = tourS; if (!S0) return; tourS = null;
+  if (saveSetup) { const wk = $('tourWk')?.value, d = $('tourMcat')?.value;
+    try { if (wk !== '' && wk != null && +wk >= 0) await api('/api/settings', 'POST', { goals: { weeklyMin: Math.round(+wk * 60) } });
+      if (d) { const mc = (S.exams || []).find(e => /mcat/i.test(e.name) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : 'MCAT', date: d }); } } catch (e) { toast(e.message); } }
+  S0.el.classList.add('out'); setTimeout(() => S0.el.remove(), reduceMotion() ? 0 : 200);
+  document.removeEventListener('keydown', tourKey); removeEventListener('resize', tourPlace); removeEventListener('scroll', tourPlace, true); removeEventListener('scrollend', tourPlace, true);
+  api('/api/flags', 'POST', { key: 'onboarded' }).catch(() => {}); await refresh().catch(() => {}); go(S0.back || 'timer'); }
+function tourClick(e) { const b = e.target.closest('[data-tour]'); if (!b || !tourS || tourS.el.classList.contains('busy')) return; const a = b.dataset.tour, i = tourS.i, s = TOUR[i];
+  if (a === 'skip') tourEnd(false); else if (a === 'back') tourShow(Math.max(0, i - 1)); else if (s.setup || i === TOUR.length - 1) tourEnd(!!s.setup); else tourShow(i + 1); }
+function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDefault(); tourEnd(false); } else if (e.key === 'ArrowRight' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=next]') }); else if (e.key === 'ArrowLeft' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=back]') || document.body }); }
 
 // ---------- periodic refresh ----------
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);

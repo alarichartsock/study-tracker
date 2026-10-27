@@ -454,3 +454,14 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 @media (prefers-reduced-motion:reduce){.ach-cele,.ach-cele::after,.ach-conf i{transition:none;animation:none}}
 .ach-notif-set>label{display:flex;justify-content:flex-start;align-items:center;font-weight:600}
 .ach-notif-set>label{gap:10px}.ach-notif-set>label>input{flex:0 0 auto;width:auto;margin:0}
+
+.tour{position:fixed;inset:0;z-index:1000}.tour.out{opacity:0;transition:opacity .2s}
+.tour-hole{position:fixed;border-radius:16px;box-shadow:0 0 0 200vmax rgba(6,8,18,.58),0 0 0 2px var(--acc);transition:left .35s var(--ease),top .35s var(--ease),width .35s var(--ease),height .35s var(--ease);pointer-events:none}
+.tour-hole.none{box-shadow:0 0 0 200vmax rgba(6,8,18,.58)}
+.tour-card{position:fixed;left:50%;top:50%;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;padding:16px 16px 12px;border-radius:18px;background:var(--card);color:var(--text);border:1px solid color-mix(in srgb,var(--acc) 40%,transparent);box-shadow:0 16px 48px rgba(0,0,0,.35);transition:left .35s var(--ease),top .35s var(--ease);outline:none}
+.tour-card h4{margin:4px 0 6px;font-size:17px}.tour-card p{margin:0 0 10px;font-size:14px;line-height:1.45}
+.tour-dots{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}.tour-dots i{width:7px;height:7px;border-radius:4px;background:color-mix(in srgb,var(--text) 22%,transparent);transition:width .25s}.tour-dots i.done{background:color-mix(in srgb,var(--acc) 55%,transparent)}.tour-dots i.on{width:18px;background:var(--acc)}
+.tour-btns{gap:6px;flex-wrap:wrap}.tour-setup{display:grid;gap:6px;margin-bottom:10px}.tour-setup label{margin:0;font-size:13px}
+.tour.still .tour-hole,.tour.still .tour-card,.tour.still .tour-dots i{transition:none}
+@media (prefers-reduced-motion:reduce){.tour-hole,.tour-card,.tour-dots i{transition:none}}
+.tour.init .tour-card,.tour.init .tour-hole{transition:none}
