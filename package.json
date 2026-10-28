@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "Personal Athenify-style study time tracker for MCAT prep",
   "private": true,
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "GPL-3.0-or-later",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

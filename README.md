@@ -75,7 +75,7 @@ test/              node:test suites
 ```
 
 ## License
-Proprietary. Copyright (c) 2026 Alaric Hartsock. All rights reserved. See [LICENSE](LICENSE).
+Copyright (C) 2026 Alaric Hartsock. Licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE). The bundled Three.js library in `public/vendor/three/` is MIT-licensed.
 
 ## Responsive UI checks
 
