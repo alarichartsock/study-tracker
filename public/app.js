@@ -33,6 +33,7 @@ async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: body !== undefined ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
   const data = r.headers.get('content-type')?.includes('json') ? await r.json() : await r.text();
   if (r.status === 401 && !url.startsWith('/api/login') && !url.startsWith('/api/password')) { showAuth(); throw new Error('Not logged in'); }
+  if (r.status === 402 && data && data.paywall) { showPaywall(true); throw new Error(data.error); }
   if (!r.ok) throw new Error(data.error || 'Request failed');
   if (method !== 'GET' && !url.startsWith('/api/achievements') && !url.startsWith('/api/log')) achSoon();
   return data;
@@ -59,7 +60,10 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 
 // ---------- auth ----------
 let oauthErr = '', oauthPending = false, oauthProvider = '';
+let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); } oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
+fetch('/api/public-config').then(r => r.json()).then(c => { if (!c || !c.billing) return; $('pricing')?.classList.remove('hid'); $('pricingLink')?.classList.remove('hid');
+  if (location.pathname === '/pricing') setTimeout(() => $('pricing')?.scrollIntoView({ block: 'start' }), 50); }).catch(() => {});
 async function boot() {
   if (oauthErr) landingDone = true;
   const me = await api('/api/me');
@@ -67,7 +71,10 @@ async function boot() {
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   if (me.termsRequired) return termsGate(me.termsRequired);
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
+  BILL = me.billing || { enabled: false }; billBar();
   await load(); go(view);
+  if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
+  else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
 }
 // clickwrap: account creation stays disabled until the box is checked and a birth year is entered
@@ -84,6 +91,42 @@ function termsGate(t) {
   $('tgAgree').onchange = () => { $('tgOk').disabled = !$('tgAgree').checked; };
   $('tgOk').onclick = async () => { try { await api('/api/terms/accept', 'POST', { agree: $('tgAgree').checked }); g.remove(); boot(); } catch (e) { $('tgErr').textContent = e.message; } };
   $('tgOut').onclick = async e => { e.preventDefault(); await api('/api/logout', 'POST'); g.remove(); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
+}
+// ---------- billing: trial banner, paywall, checkout ----------
+const PRICE = { monthly: '$4.99/month', yearly: '$39/year' };
+function billBar() {
+  let el = $('billBar'); if (!el) { el = document.createElement('div'); el.id = 'billBar'; el.className = 'billbar'; $('app').querySelector('header.top').after(el); }
+  const b = BILL, sub = b.subscription || {}; let html = '';
+  if (b.enabled && sub.paymentFailed && b.subscribed) html = `<span>Your last payment failed. Update your card to keep your subscription.</span><button class="btn small" data-act="billPortal">Update payment</button>`;
+  else if (b.enabled && b.readOnly) html = `<span><b>Read-only:</b> your free trial has ended. Your data is safe.</span><button class="btn primary small" data-act="paywall">Subscribe</button>`;
+  else if (b.enabled && b.trial) html = `<span>${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial</span><button class="btn small" data-act="paywall">Subscribe</button>`;
+  el.innerHTML = html; el.classList.toggle('hid', !html);
+}
+function showPaywall(blocked) {
+  if (!BILL.enabled) return; sessionStorage.paywallSeen = '1';
+  let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
+  const over = BILL.readOnly;
+  g.innerHTML = `<div class="glass sheet auth-card paywall" role="dialog" aria-modal="true" aria-labelledby="pwH"><div class="brand big"><img src="/favicon.svg" alt=""> <span>StudyHertz</span></div>
+    <h2 id="pwH">${over ? 'Your free trial has ended' : 'Subscribe to StudyHertz'}</h2>
+    <p class="muted">${over ? (blocked ? "That change wasn't saved. " : '') + 'Your study data is safe. Subscribe to keep tracking; you can still view and export everything.' : `You have ${BILL.trialDaysLeft} day${BILL.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p>
+    <div class="pw-plans"><button class="plan-btn" data-act="subscribe" data-plan="monthly"><b>Monthly</b><span class="price">$4.99<small>/month</small></span></button>
+    <button class="plan-btn best" data-act="subscribe" data-plan="yearly"><span class="pill">Save 35%</span><b>Yearly</b><span class="price">$39<small>/year</small></span></button></div>
+    <p class="muted small">Prices in USD. Renews automatically until you cancel; cancel anytime from Settings. See the <a href="/terms#subscriptions" target="_blank" rel="noopener">Terms</a>.</p>
+    <p class="err" id="pwErr"></p><button class="btn ghost" data-act="paywallClose">${over ? 'View my data (read-only)' : 'Not now'}</button></div>`;
+  g.onclick = e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); ACT[t.dataset.act](t); } };
+}
+async function billingDone() {
+  for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed) break; await new Promise(r => setTimeout(r, 2000)); }
+  if (BILL.conversion) { try { window.SHConsent?.purchase(BILL.conversion); } catch { /* ignore */ } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
+  billBar(); toast(BILL.subscribed ? 'Thanks! Your subscription is active.' : 'Payment received. Your subscription will activate in a moment.'); if (view === 'set') render();
+}
+function billingCard() {
+  const b = BILL; if (!b.enabled) return ''; const sub = b.subscription || {};
+  let body;
+  if (b.exempt) body = `<p class="muted small">${b.exempt === 'admin' ? 'Admin account: no subscription needed.' : b.exempt === 'comp' ? 'Your account has complimentary access.' : 'Thanks for being an early user: your account has free access for life.'}</p>`;
+  else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button></div>`;
+  else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
+  return `<div class="card"><h3>Subscription</h3>${body}</div>`;
 }
 async function showAuth(me) {
   me = me || await api('/api/me');
@@ -571,13 +614,14 @@ VIEWS.set = async () => {
   <div class="card"><h3>Account</h3><p class="muted small">Signed in as ${esc(ME.username)}${ME.admin ? ' (admin)' : ''}</p>
     <input id="pCur" type="password" placeholder="Current password" autocomplete="current-password"><input id="pNew" class="mt" type="password" placeholder="New password (8+ chars)" autocomplete="new-password">
     <div class="row"><button class="btn" data-act="changePw">Update password</button><span class="sp"></span><button class="btn" data-act="onboard">Show welcome tour</button></div></div>
+  ${billingCard()}
   ${ME.admin ? await adminHTML() : ''}`;
 };
 async function adminHTML() {
   const [cfg, users, reps] = await Promise.all([api('/api/admin/config'), api('/api/admin/users'), api('/api/admin/reports')]), f = UI.repFilter || 'pending';
   const list = reps.filter(r => f === 'all' || r.status === f).reverse();
   return `<div class="card"><h3>Admin</h3><label class="switch"><input type="checkbox" data-chg="openReg" ${cfg.openRegistration ? 'checked' : ''}> Allow new users to register</label>
-    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}</span><small class="muted">${new Date(u.created).toLocaleDateString()}</small></div>`).join('')}</div></div>
+    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}${u.billing ? ` <small class="muted">${u.billing.subscribed ? 'subscribed' : u.billing.exempt === 'legacy' ? 'legacy' : u.billing.exempt === 'admin' ? '' : u.billing.readOnly ? 'trial ended' : u.billing.trialDaysLeft != null ? u.billing.trialDaysLeft + 'd trial' : ''}</small>` : ''}</span><span class="row" style="margin:0;gap:10px">${u.billing && !u.admin ? `<label class="switch small"><input type="checkbox" data-chg="comp" data-id="${u.id}" ${u.billing.comp ? 'checked' : ''}> Comp</label>` : ''}<small class="muted">${new Date(u.created).toLocaleDateString()}</small></span></div>`).join('')}</div></div>
   <div class="card"><div class="row wrap" style="margin:0 0 8px"><h3 class="grow" style="margin:0">Bug reports</h3><div class="tabs">${['pending', 'approved', 'rejected', 'all'].map(s => `<button data-act="repFilter" data-f="${s}" class="${f === s ? 'on' : ''}">${s}${s === 'all' ? '' : ' ' + reps.filter(r => r.status === s).length}</button>`).join('')}</div></div>
     <p class="muted small">Report text is user-submitted and untrusted. Approving only saves it to <code>mcat-tracker-reports/approved/</code> so the developer can read it on request. Nothing is changed automatically.</p>
     ${list.map(r => `<div class="report"><div class="row" style="margin:0"><b class="grow">#${r.id} ${esc(r.title)}</b><span class="pill ${esc(r.status)}">${esc(r.status)}</span></div>
@@ -618,6 +662,11 @@ ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); t
 ACT.changePw = async () => { await api('/api/password', 'POST', { current: $('pCur').value, password: $('pNew').value }); toast('Password updated; other devices signed out'); render(); };
 ACT.bugSend = async () => { await api('/api/reports', 'POST', { title: $('bgT').value, description: $('bgD').value, steps: $('bgS').value, page: '#' + view, userAgent: navigator.userAgent }); toast('Thanks! Report sent for review.'); render(); };
 ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistration: b.checked }); toast(b.checked ? 'Registration open' : 'Registration closed'); };
+ACT.paywall = () => showPaywall();
+ACT.paywallClose = () => { $('paywall')?.remove(); };
+ACT.subscribe = async b => { b.disabled = true; try { const r = await api('/api/billing/checkout', 'POST', { plan: b.dataset.plan }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
+ACT.billPortal = async b => { b.disabled = true; try { location.href = (await api('/api/billing/portal', 'POST', {})).url; } catch (e) { b.disabled = false; toast(e.message); } };
+ACT.comp = async b => { await api('/api/admin/users/' + b.dataset.id + '/comp', 'POST', { comp: b.checked }); toast(b.checked ? 'User comped' : 'Comp removed'); };
 ACT.repFilter = b => { UI.repFilter = b.dataset.f; render(); };
 ACT.repSet = async b => { await api('/api/admin/reports/' + b.dataset.id, 'PUT', { status: b.dataset.s }); toast('Report ' + b.dataset.s); render(); };
 ACT.repReview = async b => { const r = (await api('/api/admin/reports')).find(x => x.id === +b.dataset.id);

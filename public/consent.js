@@ -32,6 +32,10 @@
     open: function () { var b = document.getElementById('consent'); if (b) b.remove(); banner(); },
     choose: choose,
     // sign-up conversion: only with consent and a configured label
+    purchase: function (p) {
+      if (get() !== 'granted' || !p || !p.label) return;
+      load(); gtag('event', 'conversion', { send_to: ADS_ID + '/' + p.label, value: p.value, currency: p.currency || 'USD', transaction_id: p.txn });
+    },
     signup: function () {
       if (get() !== 'granted') return;
       fetch('/api/public-config').then(function (r) { return r.json(); }).then(function (c) {

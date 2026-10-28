@@ -7,6 +7,7 @@ const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
 const oauthLib = require('./lib/oauth');
+const billing = require('./lib/billing');
 
 // Google Ads sign-up conversion label (empty = no conversion event). Env var or oauth.config.json-style ads.config.json.
 const ADS_SIGNUP_LABEL = String(process.env.CONVERSION_LABEL_SIGNUP || (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'ads.config.json'), 'utf8')).CONVERSION_LABEL_SIGNUP || ''; } catch { return ''; } })()).replace(/[^A-Za-z0-9_-]/g, '');
@@ -20,7 +21,7 @@ const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '': 'text/plain; charset=utf-8' };
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -69,6 +70,53 @@ function createApp(opts = {}) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
   }
+  // ---- billing (Stripe, TEST mode unless STRIPE_ALLOW_LIVE=1). Off entirely unless all keys are set.
+  const bcfg = opts.billing ? { ...billing.loadConfig({}), ...opts.billing } : billing.loadConfig();
+  if (billing.liveKey(bcfg) && !bcfg.allowLive && !opts.quiet) console.warn('Stripe LIVE key detected: billing stays OFF (test mode only).');
+  const stripe = billing.client(bcfg, opts.stripeFetch || globalThis.fetch);
+  const bstat = u => billing.status(u, store.sql.subscription(u.id), bcfg);
+  const checkoutLimiter = new auth.RateLimiter(opts.checkoutMax || 20, 60 * 60e3);
+  const baseUrl = req => String(opts.baseUrl || process.env.PUBLIC_BASE_URL || process.env.OAUTH_BASE_URL || ('http://' + (req.headers.host || 'localhost'))).replace(/\/$/, '');
+  // paths an expired trial may still POST to (read-only otherwise; data is never deleted)
+  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard']);
+  async function ensureCustomer(user) {
+    const prev = store.sql.subscription(user.id); if (prev && prev.customer_id) return prev.customer_id;
+    const c = await stripe('POST', '/customers', { name: user.username, ...(user.email ? { email: user.email } : {}), metadata: { uid: String(user.id) } }, 'sh-cust-' + user.id + '-' + user.created);
+    store.sql.upsertSub({ user_id: user.id, customer_id: c.id, updated: new Date().toISOString() }); return c.id;
+  }
+  function applySub(uid, sub, extra = {}) {
+    const prev = store.sql.subscription(uid) || {};
+    store.sql.upsertSub({ user_id: uid, customer_id: (typeof sub.customer === 'string' ? sub.customer : sub.customer && sub.customer.id) || prev.customer_id, subscription_id: sub.id, status: sub.status,
+      plan: billing.planOf(sub, bcfg), price_id: (sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price && sub.items.data[0].price.id) || null, current_period_end: billing.periodEnd(sub),
+      cancel_at_period_end: sub.cancel_at_period_end ? 1 : 0, payment_failed: extra.payment_failed !== undefined ? extra.payment_failed : sub.status === 'active' ? 0 : prev.payment_failed || 0, updated: new Date().toISOString() });
+  }
+  const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
+  async function handleStripeEvent(ev) {
+    const o = (ev.data && ev.data.object) || {};
+    if (ev.type === 'checkout.session.completed') {
+      if (o.mode !== 'subscription' || !o.subscription) return;
+      const uid = Number(o.client_reference_id) || uidFor(o.customer, o.metadata); if (!uid || !store.userById(uid)) return;
+      applySub(uid, await stripe('GET', '/subscriptions/' + (typeof o.subscription === 'string' ? o.subscription : o.subscription.id)), { payment_failed: 0 });
+      const u = store.userById(uid); u.billing ||= {}; u.billing.conversion = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id }; store.save();
+    } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
+      const uid = uidFor(o.customer, o.metadata); if (uid) applySub(uid, o);
+    } else if (ev.type === 'invoice.payment_failed') {
+      const uid = uidFor(o.customer, null); if (!uid) return;
+      const sid = o.subscription || (o.parent && o.parent.subscription_details && o.parent.subscription_details.subscription);
+      if (sid) applySub(uid, await stripe('GET', '/subscriptions/' + (typeof sid === 'string' ? sid : sid.id)), { payment_failed: 1 });
+      else store.sql.upsertSub({ user_id: uid, payment_failed: 1, updated: new Date().toISOString() });
+    }
+  }
+  async function stripeWebhook(req, res) {
+    if (!billing.enabled(bcfg)) return send(res, 404, { error: 'not found' });
+    const raw = await readBody(req, 1e6);
+    if (!billing.verifySignature(raw, req.headers['stripe-signature'], bcfg.webhookSecret)) return send(res, 400, { error: 'invalid signature' });
+    let ev; try { ev = JSON.parse(raw); } catch { return send(res, 400, { error: 'invalid payload' }); }
+    if (ev.livemode && !bcfg.allowLive) return send(res, 200, { ignored: 'livemode' });
+    if (!ev.id || !store.sql.eventNew(ev.id, String(ev.type))) return send(res, 200, { duplicate: true });
+    try { await handleStripeEvent(ev); } catch (e) { store.sql.eventForget(ev.id); if (!opts.quiet) console.error('stripe webhook', ev.type, e.message); return send(res, 500, { error: 'retry later' }); }
+    return send(res, 200, { received: true });
+  }
   const pendingSignups = new Map(); // short-lived: social identities waiting for the clickwrap + age gate before an account exists
   async function oauthRoute(req, res, p, step) {
     const ip = clientIp(req), back = (q, cookies = []) => { res.writeHead(302, { Location: '/' + q, 'Set-Cookie': [...cookies, 'oa=; Path=/api/oauth; HttpOnly; Max-Age=0'], 'Cache-Control': 'no-store' }); res.end(); };
@@ -91,6 +139,9 @@ function createApp(opts = {}) {
   store.db.reports ||= []; store.db.nextReportId ||= 1;
   // one-time: open public self sign-up (admins can still close it in Settings)
   if (!(store.db.config ||= {}).publicRegistration) { store.db.config.openRegistration = true; store.db.config.publicRegistration = { at: new Date().toISOString() }; store.save(); }
+  if (!store.db.config.billingGrant) { // one-time: every account that exists before paid plans is comped for life (legacy)
+    let n = 0; for (const x of store.db.users) { x.billing ||= {}; if (!x.billing.legacy) { x.billing.legacy = true; n++; } }
+    store.db.config.billingGrant = { at: new Date().toISOString(), users: n }; store.save(); }
   if (!(store.db.config ||= {}).readyRoomGrant) { // idempotent: runs once per data file; new users after this must take the tour
     let n = 0; for (const ud of Object.values(store.db.userData || {})) { const fl = ud.flags ||= {}; if (!fl.onboarded) { fl.onboarded = 1; n++; }
       if (Array.isArray(ud.achNotified) && !ud.achNotified.includes('onboard')) ud.achNotified.push('onboard'); } // silent: already "notified"
@@ -167,6 +218,7 @@ function createApp(opts = {}) {
     try {
       if (M === 'GET' && STATIC[p]) { const f = path.join(PUBLIC, STATIC[p]); return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)], p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : p.startsWith('/vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {}); }
       if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
+      if (p === '/api/stripe/webhook' && M === 'POST') return stripeWebhook(req, res); // raw body: verified before parsing
       const om = /^\/api\/oauth\/([a-z]+)\/(start|callback)$/.exec(p);
       if (om && (M === 'GET' || (M === 'POST' && om[2] === 'callback'))) return oauthRoute(req, res, om[1], om[2]);
       let j = {};
@@ -178,8 +230,8 @@ function createApp(opts = {}) {
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
-      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL });
-      if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
+      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.PLANS } : null });
+      if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
         const rip = clientIp(req); if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
@@ -220,6 +272,28 @@ function createApp(opts = {}) {
       if (!user) return send(res, 401, { error: 'Not logged in' });
       if (p === '/api/terms/accept' && M === 'POST') { if (j.agree !== true) return send(res, 400, { error: 'Please check the box to continue' }); recordConsent(user, 'reaccept', req); return send(res, 200, { ok: true }); }
       if (user.termsVersion !== LEGAL.terms) return send(res, 403, { error: 'Please review and accept the updated Terms', termsRequired: true });
+
+      // ---- billing ----
+      if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
+        return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.PLANS } : {}), ...(c && bcfg.purchaseLabel ? { conversion: { label: bcfg.purchaseLabel, ...c } } : {}) }); }
+      if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
+      if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {
+        if (!billing.enabled(bcfg)) return send(res, 404, { error: 'Billing is not enabled' });
+        const ck = 'b:' + user.id; if (checkoutLimiter.blocked(ck)) return send(res, 429, { error: 'Too many attempts. Try again later.' }); checkoutLimiter.fail(ck);
+        try {
+          if (p === '/api/billing/portal') { const r = store.sql.subscription(user.id); if (!r || !r.customer_id) return send(res, 400, { error: 'No subscription to manage yet' });
+            return send(res, 200, { url: (await stripe('POST', '/billing_portal/sessions', { customer: r.customer_id, return_url: baseUrl(req) + '/?billing=portal' })).url }); }
+          const plan = j.plan === 'yearly' ? 'yearly' : 'monthly';
+          if (bstat(user).subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
+          const customer = await ensureCustomer(user), base = baseUrl(req);
+          const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
+            success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan }, subscription_data: { metadata: { uid: String(user.id) } },
+            integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
+          return send(res, 200, { url: cs.url });
+        } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }
+      }
+      if (M !== 'GET' && !READONLY_OK.has(p) && !p.startsWith('/api/admin/') && !bstat(user).active)
+        return send(res, 402, { error: 'Your free trial has ended. Subscribe to keep tracking. Your data is safe and you can still view and export it.', paywall: true });
 
       // ---- authenticated, per-user data ----
       const ud = store.data(user.id), save = () => store.save(), h = +ud.settings.dayStartHour || 0;
@@ -376,7 +450,9 @@ function createApp(opts = {}) {
         if (!user.admin) return send(res, 403, { error: 'Admin only' });
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/config' && M === 'POST') { if (j.openRegistration !== undefined) store.db.config.openRegistration = !!j.openRegistration; save(); return send(res, 200, store.db.config); }
-        if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => ({ ...publicUser(x), created: x.created })));
+        if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => { const b = bstat(x); return { ...publicUser(x), created: x.created, billing: b.enabled ? { exempt: b.exempt || null, comp: !!(x.billing && x.billing.comp), subscribed: !!b.subscribed, trialDaysLeft: b.trialDaysLeft ?? null, readOnly: !!b.readOnly } : null }; }));
+        { const cm = /^\/api\/admin\/users\/(\d+)\/comp$/.exec(p); if (cm && M === 'POST') { const x = store.userById(+cm[1]); if (!x) return send(res, 404, { error: 'not found' });
+          x.billing ||= {}; x.billing.comp = !!j.comp; store.save(); return send(res, 200, { ok: true, comp: x.billing.comp }); } }
         if (p === '/api/admin/reports' && M === 'GET') { const st = u.searchParams.get('status'); return send(res, 200, store.db.reports.filter(r => !st || r.status === st)); }
         m = /^\/api\/admin\/reports\/(\d+)$/.exec(p);
         if (m && M === 'PUT') {
