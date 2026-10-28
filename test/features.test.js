@@ -17,9 +17,9 @@ async function start(opts = {}) {
       const text = await r.text(); let json; try { json = JSON.parse(text); } catch { json = text; }
       return { status: r.status, body: json, headers: r.headers };
     }; };
-  const admin = client(); await admin('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  const admin = client(); await admin('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   await admin('/api/admin/config', 'POST', { openRegistration: true });
-  const user = client(); await user('/api/register', 'POST', { username: 'bob', password: 'bob-pass-12' });
+  const user = client(); await user('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'bob', password: 'bob-pass-12' });
   return { server, base, client, admin, user, dataFile, dir, reportsDir, close: () => new Promise(r => server.close(r)) };
 }
 test('bug reports: submit, own-only view, admin queue, edit+approve writes file, reject removes, escaping, rate limit', async t => {

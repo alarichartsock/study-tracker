@@ -72,16 +72,22 @@ async function app(extra = {}) {
   };
   const server = createApp({ dataFile: path.join(dir, 'data.json'), oauth: cfg, fetch: fetchFn, quiet: true, ...extra });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const B = `http://127.0.0.1:${server.address().port}`;
-  const signIn = async (p, { form, bindOverride } = {}) => {
+  const signIn = async (p, { form, bindOverride, complete = {} } = {}) => {
     const s = await fetch(B + `/api/oauth/${p}/start`, { redirect: 'manual' }), loc = new URL(s.headers.get('location'));
     const bind = s.headers.get('set-cookie').match(/oa=([^;]+)/)[1]; st.nonce = loc.searchParams.get('nonce'); st.lastStart = loc;
     const q = { state: loc.searchParams.get('state'), code: 'c0de' }, cookie = 'oa=' + (bindOverride || bind);
     const r = form ? await fetch(B + `/api/oauth/${p}/callback`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie }, body: new URLSearchParams({ ...q, ...form }).toString() })
       : await fetch(B + `/api/oauth/${p}/callback?` + new URLSearchParams(q), { redirect: 'manual', headers: { Cookie: cookie } });
-    const sid = (r.headers.get('set-cookie') || '').match(/sid=([^;]+)/); const me = sid ? await (await fetch(B + '/api/me', { headers: { Cookie: 'sid=' + sid[1] } })).json() : null;
-    return { loc: r.headers.get('location'), me };
+    let to = r.headers.get('location'), sc = r.headers.get('set-cookie') || '';
+    if (to === '/?complete_signup=1') {
+      const ps = sc.match(/ps=([^;]+)/)[1], c = await fetch(B + '/api/oauth/complete', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'ps=' + ps }, body: JSON.stringify({ agree: true, birthYear: complete.birthYear ?? 1990, ...(complete.agree === false ? { agree: false } : {}) }) });
+      const cj = await c.json(); st.lastComplete = { status: c.status, body: cj };
+      if (c.ok) { to = '/?welcome=1'; sc = c.headers.get('set-cookie') || ''; } else { to = '/?oauth_error=' + encodeURIComponent(cj.error); sc = ''; }
+    }
+    const sid = sc.match(/sid=([^;]+)/); const me = sid ? await (await fetch(B + '/api/me', { headers: { Cookie: 'sid=' + sid[1] } })).json() : null;
+    return { loc: to, me };
   };
-  const register = (u, pw) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: pw }) });
+  const register = (u, pw) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: pw, agree: true, birthYear: 1990 }) });
   return { B, st, signIn, register, close: () => server.close() };
 }
 
@@ -134,4 +140,14 @@ test('rejects a forged state, a wrong browser binding, and sign-up floods', asyn
   const b = await app({ regMax: 1 }); t.after(b.close); await b.register('owner', 'pass-12345');
   b.st.claims = { sub: 'g-10', email: 'q@example.com', email_verified: true };
   assert.match((await b.signIn('google')).loc, /oauth_error=Too%20many/, 'social sign-up shares the sign-up rate limit');
+});
+
+test('social sign-up needs the clickwrap and age gate before any account exists; consent is logged', async t => {
+  const a = await app(); t.after(a.close); await a.register('owner', 'pass-12345', true);
+  a.st.claims = { sub: 'kid-1', email: 'kid@example.com', email_verified: true };
+  const kid = await a.signIn('google', { complete: { birthYear: new Date().getUTCFullYear() - 10 } });
+  assert.equal(a.st.lastComplete.status, 403); assert.equal(kid.me, null); assert.doesNotMatch(a.st.lastComplete.body.error, /13|age|old/i, 'neutral message');
+  a.st.claims = { sub: 'nb-1', email: 'nb@example.com', email_verified: true };
+  await a.signIn('google', { complete: { agree: false } }); assert.equal(a.st.lastComplete.status, 400);
+  const ok = await a.signIn('google'); assert.equal(ok.loc, '/?welcome=1'); assert.ok(ok.me.user); assert.equal(ok.me.termsRequired, undefined);
 });

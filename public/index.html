@@ -37,6 +37,8 @@
     <p class="muted" id="authMsg">Sign in to continue</p>
     <input id="aUser" autocomplete="username" placeholder="Username" required>
     <input id="aPass" type="password" autocomplete="current-password" placeholder="Password" required>
+    <input id="aBirth" class="reg-only" inputmode="numeric" maxlength="4" autocomplete="bday-year" placeholder="Birth year (YYYY)" aria-label="Birth year">
+    <label class="agree reg-only"><input type="checkbox" id="aAgree"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and acknowledge the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
     <button class="btn primary" id="aSubmit">Sign in</button>
     <p class="err" id="aErr"></p>
     <div id="oauthBtns" class="oauth hid"><p class="muted small or">or</p></div>

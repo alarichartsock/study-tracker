@@ -30,7 +30,7 @@ test('practice exam API: CRUD, validation, isolation, goal', async t => {
   const client = () => { let cookie = ''; return async (p, method = 'GET', body) => { const r = await fetch(base + p, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0]; return { status: r.status, body: await r.json() }; }; };
   const a = client(), b = client(), anon = client();
-  await a('/api/register', 'POST', { username: 'alice', password: 'password123' });
+  await a('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alice', password: 'password123' });
   await a('/api/admin/registration', 'POST', { open: true }).catch(() => {});
   assert.equal((await anon('/api/practice')).status, 401);
   assert.equal((await a('/api/practice', 'POST', { date: '2026-10-01', cp: 140, cars: 125, bb: 125, ps: 125 })).status, 400);
@@ -41,7 +41,7 @@ test('practice exam API: CRUD, validation, isolation, goal', async t => {
   assert.equal((await a('/api/practice/' + r.body.id, 'PUT', { ps: 'x' })).status, 400);
   assert.equal((await a('/api/practice')).body.length, 1);
   assert.equal((await a('/api/state')).body.practice.length, 1);
-  const bReg = await b('/api/register', 'POST', { username: 'bobby', password: 'password123' });
+  const bReg = await b('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'bobby', password: 'password123' });
   if (bReg.status === 200) { assert.equal((await b('/api/practice')).body.length, 0); assert.equal((await b('/api/practice/' + r.body.id, 'DELETE')).status, 404); }
   assert.equal((await a('/api/practice-goal', 'POST', { goal: 600 })).status, 400);
   assert.equal((await a('/api/practice-goal', 'POST', { goal: '515' })).body.goal, 515);

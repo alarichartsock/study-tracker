@@ -39,7 +39,8 @@
       }).catch(function () {});
     }
   };
-  function init() { var c = get(); if (c === 'granted') load(); else if (c !== 'denied') banner(); }
+  // Global Privacy Control is honored as an opt-out of ad sharing: no banner, no Google requests
+  function init() { var c = get(); if (navigator.globalPrivacyControl === true && c !== 'granted') return; if (c === 'granted') load(); else if (c !== 'denied') banner(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   document.addEventListener('click', function (e) { var t = e.target && e.target.closest && e.target.closest('[data-cookie-settings]'); if (t) { e.preventDefault(); window.SHConsent.open(); } });
 })();

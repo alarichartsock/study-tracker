@@ -58,15 +58,32 @@ async function keepAwake(on) { try { if (on && !wakeLock && 'wakeLock' in naviga
 if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 // ---------- auth ----------
-let oauthErr = '';
-{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error')) { if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); } oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
+let oauthErr = '', oauthPending = false, oauthProvider = '';
+{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); } oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 async function boot() {
   if (oauthErr) landingDone = true;
   const me = await api('/api/me');
+  if (!me.user && oauthPending) { oauthPending = false; const pe = await api('/api/oauth/pending').catch(() => ({})); if (pe.pending) { oauthProvider = pe.provider; landingDone = true; authMode = 'oauth'; showAuth(me); return; } }
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
+  if (me.termsRequired) return termsGate(me.termsRequired);
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   await load(); go(view);
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
+}
+// clickwrap: account creation stays disabled until the box is checked and a birth year is entered
+function syncAgree() { const reg = authMode !== 'login'; $('aSubmit').disabled = reg && !($('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())); }
+$('aAgree').onchange = syncAgree; $('aBirth').oninput = syncAgree;
+// blocking re-acceptance when the Terms version changes
+function termsGate(t) {
+  $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.add('hid');
+  let g = $('termsGate'); if (!g) { g = document.createElement('div'); g.id = 'termsGate'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
+  g.innerHTML = `<div class="glass sheet auth-card" role="dialog" aria-modal="true" aria-labelledby="tgH"><h2 id="tgH">Updated Terms</h2><p class="muted">${esc(t.summary)}</p>
+    <p class="small"><a href="/terms" target="_blank" rel="noopener">Terms of Service v${esc(t.terms)}</a> &middot; <a href="/privacy" target="_blank" rel="noopener">Privacy Policy v${esc(t.privacy)}</a></p>
+    <label class="agree"><input type="checkbox" id="tgAgree"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and acknowledge the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
+    <button class="btn primary" id="tgOk" disabled>Accept and continue</button><p class="err" id="tgErr"></p><a href="#" id="tgOut" class="muted small">Sign out</a></div>`;
+  $('tgAgree').onchange = () => { $('tgOk').disabled = !$('tgAgree').checked; };
+  $('tgOk').onclick = async () => { try { await api('/api/terms/accept', 'POST', { agree: $('tgAgree').checked }); g.remove(); boot(); } catch (e) { $('tgErr').textContent = e.message; } };
+  $('tgOut').onclick = async e => { e.preventDefault(); await api('/api/logout', 'POST'); g.remove(); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 }
 async function showAuth(me) {
   me = me || await api('/api/me');
@@ -80,13 +97,18 @@ async function showAuth(me) {
   $('aToggle').textContent = reg ? 'Have an account? Sign in' : 'New here? Create an account'; $('aErr').textContent = oauthErr; oauthErr = '';
   const ob = $('oauthBtns'), list = (me.oauth || []).filter(() => authMode !== 'setup'); ob.classList.toggle('hid', !list.length);
   ob.querySelectorAll('a').forEach(a => a.remove()); for (const o of list) { const a = document.createElement('a'); a.className = 'btn ghost oauth-btn'; a.href = '/api/oauth/' + o.id + '/start'; a.dataset.oauth = o.id; a.textContent = 'Continue with ' + o.label; ob.appendChild(a); }
+  const oa = authMode === 'oauth'; document.querySelectorAll('#authForm .reg-only').forEach(e => e.classList.toggle('hid', !reg));
+  $('aUser').classList.toggle('hid', oa); $('aPass').classList.toggle('hid', oa); $('aUser').required = $('aPass').required = !oa;
+  if (oa) { ob.classList.add('hid'); $('aToggle').classList.add('hid'); $('aBack').classList.add('hid'); $('authMsg').textContent = 'Finish creating your account' + (oauthProvider ? ' with ' + oauthProvider : ''); }
+  $('aAgree').checked = false; syncAgree();
 }
 document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
 $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth(); };
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
-  try { const r = await api(authMode === 'login' ? '/api/login' : '/api/register', 'POST', { username: $('aUser').value.trim(), password: $('aPass').value }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); } boot(); }
+  try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? legal : { ...cred, ...legal }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); } boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };

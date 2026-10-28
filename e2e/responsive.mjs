@@ -20,7 +20,7 @@ const BASE = 'http://127.0.0.1:' + server.address().port;
 let cookie = '';
 const api = async (p, method = 'GET', body) => { const r = await fetch(BASE + p, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0]; return r.json().catch(() => null); };
-await api('/api/register', 'POST', { username: 'uitest', password: 'ui-test-pass-123' });
+await api('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'uitest', password: 'ui-test-pass-123' });
 await api('/api/settings', 'POST', { goals: { dailyMin: 120, weeklyMin: 900 } });
 const subjects = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'], acts = ['Lecture', 'Flashcards', 'Practice questions', 'Review', 'Reading with a rather long activity name'];
 const now = new Date();

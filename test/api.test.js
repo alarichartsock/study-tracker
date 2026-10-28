@@ -28,20 +28,20 @@ test('auth flow, admin, registration lock, isolation, logout', async t => {
   const a = app.client(), b = app.client(), anon = app.client();
   assert.deepEqual((await anon('/api/me')).body, { user: null, needsSetup: true, registrationOpen: true, oauth: [] });
   assert.equal((await anon('/api/state')).status, 401);
-  assert.equal((await a('/api/register', 'POST', { username: 'al', password: '12345678' })).status, 400);
-  assert.equal((await a('/api/register', 'POST', { username: 'alaric', password: 'short' })).status, 400);
-  const r = await a('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  assert.equal((await a('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'al', password: '12345678' })).status, 400);
+  assert.equal((await a('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'short' })).status, 400);
+  const r = await a('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   assert.equal(r.status, 200); assert.equal(r.body.user.admin, true);
   assert.match(r.headers.get('set-cookie'), /HttpOnly/); assert.match(r.headers.get('set-cookie'), /SameSite=Lax/);
   // password is not stored in plaintext
   const raw = rawStore(app.dataFile); assert.ok(raw.length > 0); assert.ok(!raw.includes('secret-pass-1')); assert.ok(!raw.includes(r.headers.get('set-cookie').split(';')[0].slice(4)));
   // registration stays open after the first user; an admin can close it
   assert.equal((await a('/api/admin/config', 'POST', { openRegistration: false })).body.openRegistration, false);
-  assert.equal((await b('/api/register', 'POST', { username: 'bob', password: '12345678' })).status, 403);
+  assert.equal((await b('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'bob', password: '12345678' })).status, 403);
   assert.equal((await b('/api/admin/config', 'POST', { openRegistration: true })).status, 401);
   assert.equal((await a('/api/admin/config', 'POST', { openRegistration: true })).body.openRegistration, true);
-  assert.equal((await b('/api/register', 'POST', { username: 'alaric', password: '12345678' })).status, 409);
-  const rb = await b('/api/register', 'POST', { username: 'bob', password: '12345678' });
+  assert.equal((await b('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: '12345678' })).status, 409);
+  const rb = await b('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'bob', password: '12345678' });
   assert.equal(rb.body.user.admin, false); assert.equal((await b('/api/admin/users')).status, 403);
   // isolation
   await a('/api/sessions', 'POST', { subject: 'CARS', start: '2026-10-20T16:00:00Z', end: '2026-10-20T17:00:00Z' });
@@ -65,7 +65,7 @@ test('auth flow, admin, registration lock, isolation, logout', async t => {
 test('login rate limiting returns 429', async t => {
   const app = await start({ userMaxAttempts: 3 }); t.after(app.close);
   const c = app.client();
-  await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  await c('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   for (let i = 0; i < 3; i++) assert.equal((await c('/api/login', 'POST', { username: 'alaric', password: 'bad-pass' })).status, 401);
   assert.equal((await c('/api/login', 'POST', { username: 'alaric', password: 'secret-pass-1' })).status, 429);
 });
@@ -74,7 +74,7 @@ test('timer, sessions CRUD, stats, import/export, busy bar calls', async t => {
   const calls = [];
   const app = await start({ fetch: async (url, o) => { calls.push({ url, ...o }); return { ok: true }; } }); t.after(app.close);
   const c = app.client();
-  await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  await c('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   assert.equal((await c('/api/timer/stop', 'POST', {})).status, 409);
   await c('/api/timer/start', 'POST', { subject: 'CARS', note: 'p1' });
   assert.equal(calls.length, 0); // busy bar not configured -> no call
@@ -106,7 +106,7 @@ test('timer, sessions CRUD, stats, import/export, busy bar calls', async t => {
 test('busy bar failures are silent', async t => {
   const app = await start({ fetch: async () => { throw new Error('unreachable'); } }); t.after(app.close);
   const c = app.client();
-  await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  await c('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   await c('/api/settings', 'POST', { busyIp: '192.0.2.1' });
   assert.equal((await c('/api/timer/start', 'POST', { subject: 'CARS' })).status, 200);
   assert.deepEqual((await c('/api/busybar/test', 'POST')).body, { ok: false });
@@ -117,7 +117,7 @@ test('legacy v1 data.json is migrated to the first (admin) user with a backup', 
   const app = await start({ seed }); t.after(app.close);
   assert.ok(fs.readdirSync(app.dir).some(f => /^data\.v1-backup-\d+\.json$/.test(f)));
   const c = app.client();
-  await c('/api/register', 'POST', { username: 'alaric', password: 'secret-pass-1' });
+  await c('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
   const s = (await c('/api/state')).body;
   assert.equal(s.sessions[0].note, 'old'); assert.deepEqual(s.subjects, ['CARS', 'Custom']); assert.equal(s.settings.dailyGoalMin, 300);
   assert.equal(readSnapshot(app.dataFile).version, 3);
@@ -134,11 +134,11 @@ test('static UI and JSON content-type guard', async t => {
 
 test('sign-up is rate limited per IP and new users only get Ready Room after the tour', async () => {
   const app = await start({ regMax: 3 }); const a = app.client();
-  assert.equal((await a('/api/register', 'POST', { username: 'owner', password: 'pass-12345' })).status, 200);
-  const c = app.client(); const r = await c('/api/register', 'POST', { username: 'NewUser', password: 'pass-12345' });
+  assert.equal((await a('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'owner', password: 'pass-12345' })).status, 200);
+  const c = app.client(); const r = await c('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'NewUser', password: 'pass-12345' });
   assert.equal(r.status, 200, 'public sign-up open after the first user'); assert.equal(r.body.onboarding, true);
-  assert.equal((await app.client()('/api/register', 'POST', { username: 'newuser', password: 'pass-12345' })).status, 409, 'case-insensitive duplicate');
-  assert.equal((await app.client()('/api/register', 'POST', { username: 'third', password: 'pass-12345' })).status, 429);
+  assert.equal((await app.client()('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'newuser', password: 'pass-12345' })).status, 409, 'case-insensitive duplicate');
+  assert.equal((await app.client()('/api/register', 'POST', { agree: true, birthYear: 1990, username: 'third', password: 'pass-12345' })).status, 429);
   const rr = async () => (await c('/api/achievements')).body.global.find(x => x.id === 'onboard').earned;
   assert.equal(await rr(), false, 'no Ready Room before the tour');
   assert.equal((await c('/api/flags', 'POST', { key: 'onboarded' })).status, 200);
@@ -153,12 +153,41 @@ test('public config exposes an empty sign-up conversion label by default; privac
   await app.close();
 });
 
-test('DATA_DIR holds the database; health endpoint; forwarded client IP only when trusted', async () => {
+test('DATA_DIR holds the database; health endpoint; forwarded client IP only when trusted', async t => {
   const os = require('os'), dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-')), 'disk'), { createApp } = require('../server');
-  const s = createApp({ dataDir: dir, trustProxy: true, secureCookies: true, regMax: 1, quiet: true }); await new Promise(r => s.listen(0, '127.0.0.1', r)); const B = 'http://127.0.0.1:' + s.address().port;
+  const s = createApp({ dataDir: dir, trustProxy: true, secureCookies: true, regMax: 1, quiet: true }); await new Promise(r => s.listen(0, '127.0.0.1', r)); t.after(() => s.close()); const B = 'http://127.0.0.1:' + s.address().port;
   assert.deepEqual(await (await fetch(B + '/api/health')).json(), { ok: true, users: false });
-  const reg = (ip, u) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip + ', 10.0.0.1' }, body: JSON.stringify({ username: u, password: 'pass-12345' }) });
+  const reg = (ip, u) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip + ', 10.0.0.1' }, body: JSON.stringify({ username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) });
   const r1 = await reg('1.1.1.1', 'one'); assert.equal(r1.status, 200); assert.match(r1.headers.get('set-cookie'), /; Secure/);
   assert.equal((await reg('1.1.1.1', 'two')).status, 429); assert.equal((await reg('2.2.2.2', 'three')).status, 200, 'separate limit per forwarded client');
   assert.ok(fs.existsSync(path.join(dir, 'data.db'))); s.close();
+});
+
+test('sign-up clickwrap, neutral under-13 block, append-only consent log, re-acceptance gate', async t => {
+  const { Store } = require('../lib/store'); const app = await start(); t.after(() => app.close());
+  const c = app.client(), y = new Date().getUTCFullYear();
+  assert.equal((await c('/api/register', 'POST', { username: 'nobox', password: 'pass-12345', birthYear: 1990 })).status, 400, 'unchecked box');
+  const kid = await c('/api/register', 'POST', { username: 'kiddo', password: 'pass-12345', agree: true, birthYear: y - 12 });
+  assert.equal(kid.status, 403); assert.doesNotMatch(kid.body.error, /13|age|old/i);
+  assert.equal((await c('/api/register', 'POST', { username: 'edge', password: 'pass-12345', agree: true, birthYear: y - 13 })).status, 403, 'birth year that may be 12 is blocked');
+  const ok = await c('/api/register', 'POST', { username: 'adult', password: 'pass-12345', agree: true, birthYear: 1990 }, { 'User-Agent': 'ua-test' });
+  assert.equal(ok.status, 200); assert.equal((await c('/api/me')).body.termsRequired, undefined);
+  const st = new Store(app.dataFile), rows = st.sql.consents(ok.body.user.id);
+  assert.equal(rows.length, 1); assert.equal(rows[0].method, 'password'); assert.equal(rows[0].terms_version, '1.0'); assert.equal(rows[0].privacy_version, '1.0');
+  assert.match(rows[0].ts, /Z$/); assert.ok(rows[0].ip); assert.equal(rows[0].checkbox_text, 'I agree to the Terms of Service and acknowledge the Privacy Policy.');
+  assert.ok(!JSON.stringify(st.db.users).includes('1990'), 'birth year not stored');
+  assert.throws(() => st.sql.db.prepare('UPDATE consents SET method = ?').run('x'), /append-only/);
+  assert.throws(() => st.sql.db.prepare('DELETE FROM consents').run(), /append-only/);
+  // an existing user without an accepted version is gated until they accept
+  const u = st.db.users.find(x => x.id === ok.body.user.id); delete u.termsVersion; st.save(); st.close();
+  const app2 = await start({ dataFile: app.dataFile }); t.after(() => app2.close()); const c2 = app2.client();
+  assert.equal((await c2('/api/login', 'POST', { username: 'adult', password: 'pass-12345' })).status, 200);
+  const me = (await c2('/api/me')).body; assert.equal(me.termsRequired.terms, '1.0'); assert.ok(me.termsRequired.summary);
+  assert.equal((await c2('/api/state')).status, 403);
+  assert.equal((await c2('/api/terms/accept', 'POST', {})).status, 400);
+  assert.equal((await c2('/api/terms/accept', 'POST', { agree: true })).status, 200);
+  assert.equal((await c2('/api/state')).status, 200); assert.equal((await c2('/api/me')).body.termsRequired, undefined);
+  const st2 = new Store(app.dataFile); assert.deepEqual(st2.sql.consents(ok.body.user.id).map(r => r.method), ['password', 'reaccept']); st2.close();
+  for (const p of ['/terms', '/terms/v1.0', '/privacy']) { const r = await fetch(app.base + p); assert.equal(r.status, 200); const h = await r.text(); assert.ok(!/\[(DATE|CONTACT EMAIL|SECURITY EMAIL)\]/.test(h), p + ' placeholders filled'); }
+  assert.match(await (await fetch(app.base + '/privacy')).text(), /Render[\s\S]*Cloudflare[\s\S]*Google Ads/);
 });
