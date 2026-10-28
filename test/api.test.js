@@ -26,7 +26,7 @@ async function start(opts = {}) {
 test('auth flow, admin, registration lock, isolation, logout', async t => {
   const app = await start(); t.after(app.close);
   const a = app.client(), b = app.client(), anon = app.client();
-  assert.deepEqual((await anon('/api/me')).body, { user: null, needsSetup: true, registrationOpen: true });
+  assert.deepEqual((await anon('/api/me')).body, { user: null, needsSetup: true, registrationOpen: true, oauth: [] });
   assert.equal((await anon('/api/state')).status, 401);
   assert.equal((await a('/api/register', 'POST', { username: 'al', password: '12345678' })).status, 400);
   assert.equal((await a('/api/register', 'POST', { username: 'alaric', password: 'short' })).status, 400);

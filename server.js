@@ -6,6 +6,7 @@ const reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSp
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
+const oauthLib = require('./lib/oauth');
 
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
@@ -27,6 +28,43 @@ function createApp(opts = {}) {
   const userLimiter = new auth.RateLimiter(opts.userMaxAttempts || 5, 15 * 60e3);
   const reportLimiter = new auth.RateLimiter(opts.reportMax || 5, 60 * 60e3);
   const regLimiter = new auth.RateLimiter(opts.regMax || 10, 60 * 60e3); // sign-up attempts per IP per hour
+  const oauthLimiter = new auth.RateLimiter(opts.oauthMax || 30, 15 * 60e3);
+  const oauth = new oauthLib.OAuth(opts.oauth || oauthLib.loadConfig(process.env, path.join(__dirname, 'oauth.config.json')), { fetchFn: opts.fetch || fetch });
+  const oauthProviders = () => oauth.enabled().map(id => ({ id, label: oauthLib.PROVIDERS[id].label }));
+  // Find or create the account for a verified provider identity. Links to an existing account only by a verified email.
+  function oauthAccount(id, ip) {
+    const same = i => i.provider === id.provider && i.sub === id.sub;
+    let u = store.db.users.find(x => (x.identities || []).some(same)), created = false;
+    if (!u && id.email && id.emailVerified) u = store.db.users.find(x => (x.email && x.emailVerified && x.email === id.email) || (x.identities || []).some(i => i.emailVerified && i.email === id.email));
+    if (!u) {
+      if (store.db.users.length && !store.db.config.openRegistration) throw new Error('Registration is disabled');
+      if (regLimiter.blocked(ip)) throw new Error('Too many sign-up attempts. Try again later.'); regLimiter.fail(ip);
+      const seed = (id.login || (id.email && !id.privateRelay ? id.email.split('@')[0] : '') || id.name || id.provider).replace(/[^a-zA-Z0-9_.-]+/g, '').slice(0, 24) || id.provider;
+      let name = seed.length >= 3 ? seed : seed + '-user', n = 1; while (store.findUser(name)) name = seed.slice(0, 24) + '-' + (++n);
+      u = store.addUser({ username: name, salt: null, hash: null }); created = true;
+      if (id.email && id.emailVerified) { u.email = id.email; u.emailVerified = true; }
+    }
+    u.identities ||= []; const ex = u.identities.find(same);
+    if (ex) Object.assign(ex, { email: id.email, emailVerified: id.emailVerified, lastLogin: new Date().toISOString() });
+    else u.identities.push({ provider: id.provider, sub: id.sub, email: id.email, emailVerified: id.emailVerified, ...(id.privateRelay ? { privateRelay: true } : {}), linked: new Date().toISOString() });
+    if (id.name && !u.displayName) u.displayName = String(id.name).slice(0, 80); // Apple sends the name only once: keep the first one we get
+    store.save(); return { u, created };
+  }
+  async function oauthRoute(req, res, p, step) {
+    const ip = req.socket.remoteAddress || '?', back = (q, cookies = []) => { res.writeHead(302, { Location: '/' + q, 'Set-Cookie': [...cookies, 'oa=; Path=/api/oauth; HttpOnly; Max-Age=0'], 'Cache-Control': 'no-store' }); res.end(); };
+    if (oauthLimiter.blocked(ip)) return back('?oauth_error=' + encodeURIComponent('Too many attempts. Try again in 15 minutes.'));
+    oauthLimiter.fail(ip);
+    if (!oauth.enabled().includes(p)) return back('?oauth_error=' + encodeURIComponent('That sign-in option is not available'));
+    if (step === 'start') { const s = oauth.start(p), secure = oauth.cfg.base.startsWith('https:');
+      res.writeHead(302, { Location: s.url, 'Set-Cookie': `oa=${s.bind}; Path=/api/oauth; HttpOnly; Max-Age=600; ${secure ? 'SameSite=None; Secure' : 'SameSite=Lax'}`, 'Cache-Control': 'no-store' }); return res.end(); }
+    try {
+      const params = Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+      if (req.method === 'POST') Object.assign(params, Object.fromEntries(new URLSearchParams(await readBody(req))));
+      const id = await oauth.callback(p, params, auth.parseCookies(req.headers.cookie).oa);
+      const { u, created } = oauthAccount(id, ip);
+      return back(created ? '?welcome=1' : '', [startSession(u.id)]);
+    } catch (e) { return back('?oauth_error=' + encodeURIComponent(e.message || 'Sign-in failed')); }
+  }
   store.db.reports ||= []; store.db.nextReportId ||= 1;
   // one-time: open public self sign-up (admins can still close it in Settings)
   if (!(store.db.config ||= {}).publicRegistration) { store.db.config.openRegistration = true; store.db.config.publicRegistration = { at: new Date().toISOString() }; store.save(); }
@@ -68,7 +106,7 @@ function createApp(opts = {}) {
     store.db.tokens[auth.tokenKey(t)] = { uid, exp: now + SESSION_DAYS * 864e5 }; store.save();
     return cookie(t, SESSION_DAYS * 86400);
   }
-  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin });
+  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, ...(u.displayName ? { displayName: u.displayName } : {}) });
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
     return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
@@ -106,6 +144,8 @@ function createApp(opts = {}) {
     try {
       if (M === 'GET' && STATIC[p]) { const f = path.join(PUBLIC, STATIC[p]); return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)], p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : p.startsWith('/vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {}); }
       if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
+      const om = /^\/api\/oauth\/([a-z]+)\/(start|callback)$/.exec(p);
+      if (om && (M === 'GET' || (M === 'POST' && om[2] === 'callback'))) return oauthRoute(req, res, om[1], om[2]);
       let j = {};
       if (M !== 'GET' && M !== 'HEAD') {
         const raw = await readBody(req);
@@ -114,7 +154,7 @@ function createApp(opts = {}) {
       const user = currentUser(req);
 
       // ---- public auth endpoints ----
-      if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration });
+      if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders() });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
         const rip = req.socket.remoteAddress || '?'; if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
@@ -128,7 +168,7 @@ function createApp(opts = {}) {
         const ip = req.socket.remoteAddress || '?', uk = 'u:' + String(j.username || '').toLowerCase();
         if (ipLimiter.blocked(ip) || userLimiter.blocked(uk)) return send(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
         const found = store.findUser(j.username || '');
-        const ok = found ? await auth.verifyPassword(j.password || '', found.salt, found.hash) : (await auth.hashPassword('x'), false); // equalize timing
+        const ok = found && found.hash ? await auth.verifyPassword(j.password || '', found.salt, found.hash) : (await auth.hashPassword('x'), false); // equalize timing
         if (!ok) { ipLimiter.fail(ip); userLimiter.fail(uk); return send(res, 401, { error: 'Invalid username or password' }); }
         userLimiter.reset(uk);
         return send(res, 200, { user: publicUser(found) }, 'application/json', { 'Set-Cookie': startSession(found.id) });

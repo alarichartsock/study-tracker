@@ -465,3 +465,5 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 .tour.still .tour-hole,.tour.still .tour-card,.tour.still .tour-dots i{transition:none}
 @media (prefers-reduced-motion:reduce){.tour-hole,.tour-card,.tour-dots i{transition:none}}
 .tour.init .tour-card,.tour.init .tour-hole{transition:none}
+
+.oauth{display:flex;flex-direction:column;gap:8px}.oauth .or{margin:2px 0}.oauth-btn{text-decoration:none;text-align:center}

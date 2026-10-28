@@ -58,7 +58,10 @@ async function keepAwake(on) { try { if (on && !wakeLock && 'wakeLock' in naviga
 if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 // ---------- auth ----------
+let oauthErr = '';
+{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error')) { if (q.get('welcome') === '1') localStorage.onboard = '1'; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 async function boot() {
+  if (oauthErr) landingDone = true;
   const me = await api('/api/me');
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
@@ -74,7 +77,9 @@ async function showAuth(me) {
   $('authMsg').textContent = authMode === 'setup' ? 'Create the admin account to get started' : reg ? 'Create an account' : 'Sign in to continue';
   $('aSubmit').textContent = reg ? 'Create account' : 'Sign in'; $('aPass').autocomplete = reg ? 'new-password' : 'current-password';
   $('aToggle').classList.toggle('hid', authMode === 'setup' || (!reg && !me.registrationOpen));
-  $('aToggle').textContent = reg ? 'Have an account? Sign in' : 'New here? Create an account'; $('aErr').textContent = '';
+  $('aToggle').textContent = reg ? 'Have an account? Sign in' : 'New here? Create an account'; $('aErr').textContent = oauthErr; oauthErr = '';
+  const ob = $('oauthBtns'), list = (me.oauth || []).filter(() => authMode !== 'setup'); ob.classList.toggle('hid', !list.length);
+  ob.querySelectorAll('a').forEach(a => a.remove()); for (const o of list) { const a = document.createElement('a'); a.className = 'btn ghost oauth-btn'; a.href = '/api/oauth/' + o.id + '/start'; a.dataset.oauth = o.id; a.textContent = 'Continue with ' + o.label; ob.appendChild(a); }
 }
 document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
 $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth(); };

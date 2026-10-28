@@ -22,3 +22,6 @@ ui-shots/
 *.db
 *.db-wal
 *.db-shm
+
+oauth.config.json
+*.p8
