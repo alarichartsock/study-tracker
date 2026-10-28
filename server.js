@@ -26,7 +26,10 @@ function createApp(opts = {}) {
   const ipLimiter = new auth.RateLimiter(opts.ipMaxAttempts || 20, 15 * 60e3);
   const userLimiter = new auth.RateLimiter(opts.userMaxAttempts || 5, 15 * 60e3);
   const reportLimiter = new auth.RateLimiter(opts.reportMax || 5, 60 * 60e3);
+  const regLimiter = new auth.RateLimiter(opts.regMax || 10, 60 * 60e3); // sign-up attempts per IP per hour
   store.db.reports ||= []; store.db.nextReportId ||= 1;
+  // one-time: open public self sign-up (admins can still close it in Settings)
+  if (!(store.db.config ||= {}).publicRegistration) { store.db.config.openRegistration = true; store.db.config.publicRegistration = { at: new Date().toISOString() }; store.save(); }
   if (!(store.db.config ||= {}).readyRoomGrant) { // idempotent: runs once per data file; new users after this must take the tour
     let n = 0; for (const ud of Object.values(store.db.userData || {})) { const fl = ud.flags ||= {}; if (!fl.onboarded) { fl.onboarded = 1; n++; }
       if (Array.isArray(ud.achNotified) && !ud.achNotified.includes('onboard')) ud.achNotified.push('onboard'); } // silent: already "notified"
@@ -114,6 +117,7 @@ function createApp(opts = {}) {
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
+        const rip = req.socket.remoteAddress || '?'; if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
         if (!auth.validUsername(j.username)) return send(res, 400, { error: 'Username: 3-32 chars, letters/numbers/._-' });
         if (!auth.validPassword(j.password)) return send(res, 400, { error: 'Password must be at least 8 characters' });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });

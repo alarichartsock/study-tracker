@@ -35,7 +35,8 @@ test('auth flow, admin, registration lock, isolation, logout', async t => {
   assert.match(r.headers.get('set-cookie'), /HttpOnly/); assert.match(r.headers.get('set-cookie'), /SameSite=Lax/);
   // password is not stored in plaintext
   const raw = rawStore(app.dataFile); assert.ok(raw.length > 0); assert.ok(!raw.includes('secret-pass-1')); assert.ok(!raw.includes(r.headers.get('set-cookie').split(';')[0].slice(4)));
-  // registration closed by default after first user
+  // registration stays open after the first user; an admin can close it
+  assert.equal((await a('/api/admin/config', 'POST', { openRegistration: false })).body.openRegistration, false);
   assert.equal((await b('/api/register', 'POST', { username: 'bob', password: '12345678' })).status, 403);
   assert.equal((await b('/api/admin/config', 'POST', { openRegistration: true })).status, 401);
   assert.equal((await a('/api/admin/config', 'POST', { openRegistration: true })).body.openRegistration, true);
@@ -129,4 +130,18 @@ test('static UI and JSON content-type guard', async t => {
   assert.equal((await fetch(app.base + '/../server.js')).status, 404);
   const f = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{"username":"x"}' });
   assert.equal(f.status, 415);
+});
+
+test('sign-up is rate limited per IP and new users only get Ready Room after the tour', async () => {
+  const app = await start({ regMax: 3 }); const a = app.client();
+  assert.equal((await a('/api/register', 'POST', { username: 'owner', password: 'pass-12345' })).status, 200);
+  const c = app.client(); const r = await c('/api/register', 'POST', { username: 'NewUser', password: 'pass-12345' });
+  assert.equal(r.status, 200, 'public sign-up open after the first user'); assert.equal(r.body.onboarding, true);
+  assert.equal((await app.client()('/api/register', 'POST', { username: 'newuser', password: 'pass-12345' })).status, 409, 'case-insensitive duplicate');
+  assert.equal((await app.client()('/api/register', 'POST', { username: 'third', password: 'pass-12345' })).status, 429);
+  const rr = async () => (await c('/api/achievements')).body.global.find(x => x.id === 'onboard').earned;
+  assert.equal(await rr(), false, 'no Ready Room before the tour');
+  assert.equal((await c('/api/flags', 'POST', { key: 'onboarded' })).status, 200);
+  assert.equal(await rr(), true, 'Ready Room after finishing the tour');
+  await app.close();
 });
