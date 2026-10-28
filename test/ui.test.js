@@ -55,14 +55,17 @@ test('data room table: header cell count matches data row cell count', () => {
   assert.match(rows[0], /<th scope="col" class="dr-h">Activity<\/th>/); assert.equal((html.match(/<col[ >]/g) || []).length, head);
 });
 
-test('Google Ads loads only after consent; privacy page and conversion wiring', () => {
+test('Google consent mode (advanced): tag on every page, denied by default before config', () => {
   const c = pub('consent.js'), h = pub('index.html'), p = pub('privacy.html'), js = pub('app.js');
-  assert.ok(!/<script[^>]*google/i.test(h) && !/<script[^>]*google/i.test(p), 'no Google tag in static HTML');
-  assert.match(c, /AW-18541546430/); assert.match(c, /ad_storage: 'denied'/);
-  const load = c.indexOf('function load()'), call = c.match(/if \(v === 'granted'\) load\(\)/); assert.ok(load > 0 && call, 'tag injected only on Accept');
-  assert.match(c, /if \(c === 'granted'\) load\(\); else if \(c !== 'denied'\) banner\(\)/);
+  assert.match(c, /AW-18541546430/);
+  const def = c.indexOf("gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied', wait_for_update: 500 })"), conf = c.indexOf("gtag('config', ADS_ID)"), ga = c.indexOf("gtag('config', c.gaId)");
+  assert.ok(def > 0 && conf > def && ga > def, 'default consent is set before any config');
+  assert.equal((c.match(/googletagmanager\.com\/gtag\/js/g) || []).length, 1, 'single shared loader');
+  assert.match(c, /if \(get\(\) === 'granted'\) gtag\('consent', 'update', granted\(\)\)/, 'stored choice re-applied');
+  assert.match(c, /gtag\('consent', 'update', v === 'granted' \? granted\(\) : DENIED\)/);
+  assert.match(c, /navigator\.globalPrivacyControl === true/);
   assert.match(c, /if \(c && c.signupLabel\)/, 'conversion skipped when label is empty');
-  assert.match(h, /<script src="\/consent.js"><\/script>/); assert.match(p, /<script src="\/consent.js"><\/script>/);
-  assert.match(h, /data-cookie-settings/); assert.match(p, /data-cookie-settings/); assert.match(p, /Google Ads/);
+  for (const f of ['index.html', 'privacy.html', 'terms.html', 'terms-v1.0.html']) assert.match(pub(f), /<script src="\/consent.js"><\/script>/, f);
+  assert.match(h, /data-cookie-settings/); assert.match(p, /data-cookie-settings/); assert.match(p, /cookieless measurement pings/);
   assert.match(js, /SHConsent\?\.signup\(\)/);
 });
