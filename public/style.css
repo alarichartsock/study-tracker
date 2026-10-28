@@ -489,3 +489,4 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 .plan.best,.plan-btn.best{border:2px solid var(--acc)}.plan .pill,.plan-btn .pill{position:absolute;top:-11px;right:14px;background:var(--acc);color:#fff;font-size:12px;padding:2px 10px;border-radius:999px}
 .pw-plans{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0}.plan-btn{position:relative;display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:16px 14px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;font:inherit;text-align:left}.plan-btn:hover{border-color:var(--acc)}.plan-btn .price{font-size:24px;font-weight:800}
 .paywall h2{margin:4px 0 0}@media (max-width:360px){.pw-plans{grid-template-columns:1fr}}
+.mock-card .h3{font-size:15px;font-weight:700;margin:0 0 10px}

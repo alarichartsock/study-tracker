@@ -216,3 +216,25 @@ test('favicons: every page points at the wave logo; /favicon.ico and touch icon 
   const at = Buffer.from(await (await fetch(app.base + '/apple-touch-icon.png')).arrayBuffer()); assert.equal(at.readUInt32BE(16), 180);
   const f32 = Buffer.from(await (await fetch(app.base + '/favicon-32.png')).arrayBuffer()); assert.equal(f32.readUInt32BE(16), 32);
 });
+
+test('SEO: per-page titles/canonicals, robots, sitemap, og image, JSON-LD, compression and caching', async t => {
+  const app = await start(); t.after(app.close); const g = (p, h = {}) => fetch(app.base + p, { headers: h });
+  const pages = { '/': 'https://studyhertz.com/', '/pricing': 'https://studyhertz.com/pricing', '/terms': 'https://studyhertz.com/terms', '/privacy': 'https://studyhertz.com/privacy' }, titles = new Set(), descs = new Set();
+  for (const [p, canon] of Object.entries(pages)) { const html = await (await g(p)).text();
+    assert.ok(html.includes('<link rel="canonical" href="' + canon + '">'), p + ' canonical'); titles.add(/<title>([^<]+)/.exec(html)[1]); descs.add(/<meta name="description" content="([^"]+)/.exec(html)[1]);
+    assert.match(html, /og:image" content="https:\/\/studyhertz\.com\/og-image\.png"/); assert.match(html, /twitter:card" content="summary_large_image"/); assert.doesNotMatch(html, /name="robots" content="noindex"/, p + ' indexable'); }
+  assert.equal(titles.size, 4); assert.equal(descs.size, 4);
+  const ld = JSON.parse(/<script type="application\/ld\+json">([^<]+)<\/script>/.exec(await (await g('/')).text())[1])['@graph'];
+  const appLd = ld.find(x => x['@type'] === 'SoftwareApplication'); assert.deepEqual(appLd.offers.map(o => o.price), ['0', '4.99', '39.00']); assert.ok(ld.find(x => x['@type'] === 'Organization'));
+  const robots = await (await g('/robots.txt')).text(); assert.match(robots, /Disallow: \/api\//); assert.match(robots, /Sitemap: https:\/\/studyhertz\.com\/sitemap\.xml/);
+  const sm = await (await g('/sitemap.xml')).text(); for (const u of Object.values(pages)) assert.ok(sm.includes('<loc>' + u + '</loc>'), u);
+  const og = await g('/og-image.png'); assert.equal(og.headers.get('content-type'), 'image/png'); const ob = Buffer.from(await og.arrayBuffer()); assert.equal(ob.readUInt32BE(16), 1200); assert.equal(ob.readUInt32BE(20), 630);
+  const r = await g('/app.js', { 'Accept-Encoding': 'gzip, br' }); assert.equal(r.headers.get('content-encoding'), 'br'); assert.equal(r.headers.get('cache-control'), 'no-cache'); const et = r.headers.get('etag'); assert.ok(et);
+  assert.equal((await g('/app.js', { 'If-None-Match': et })).status, 304);
+  assert.equal((await g('/style.css', { 'Accept-Encoding': 'gzip' })).headers.get('content-encoding'), 'gzip');
+  assert.equal((await g('/vendor/three/three.module.min.js')).headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal((await g('/sw.js')).headers.get('service-worker-allowed'), '/');
+  assert.equal((await g('/api/me')).headers.get('x-robots-tag'), 'noindex');
+  assert.match(await (await g('/terms/v1.0')).text(), /name="robots" content="noindex"/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), /name="robots" content="noindex"/);
+});

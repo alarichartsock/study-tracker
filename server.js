@@ -1,6 +1,6 @@
 'use strict';
 // StudyHertz - zero-dependency Node server
-const http = require('http'), fs = require('fs'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
 const reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
@@ -23,9 +23,19 @@ const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
+// ---- SEO: per-page head for /pricing (same SPA shell), robots.txt, sitemap.xml
+const SITE = 'https://studyhertz.com';
+const PRICING_DESC = 'StudyHertz pricing: every account starts with a 30-day free trial, no card required. Then US$4.99 per month or US$39 per year. Cancel anytime.';
+const pricingHead = html => html.replace(/<title>[^<]*<\/title>/, '<title>Pricing: 30-Day Free Trial, then $4.99/month | StudyHertz</title>')
+  .replace(/(<meta name="description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<link rel="canonical" href=")[^"]*/, '$1' + SITE + '/pricing')
+  .replace(/(<meta property="og:url" content=")[^"]*/, '$1' + SITE + '/pricing').replace(/(<meta property="og:title" content=")[^"]*/, '$1StudyHertz Pricing')
+  .replace(/(<meta property="og:description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<meta name="twitter:title" content=")[^"]*/, '$1StudyHertz Pricing').replace(/(<meta name="twitter:description" content=")[^"]*/, '$1' + PRICING_DESC);
+const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
+const SITEMAP = (lastmod) => '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+  [['/', '1.0', 'weekly'], ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
@@ -215,10 +225,31 @@ function createApp(opts = {}) {
     return { title: str(j.title ?? old.title, 200) || 'Task', due: due || '', priority: ['low', 'normal', 'high'].includes(j.priority) ? j.priority : old.priority || 'normal',
       subject: str(j.subject ?? old.subject, 60), done, doneAt: done ? old.doneAt || new Date().toISOString() : null }; };
 
+  // Static assets: ETag + 304, gzip/brotli for text, cache policy by type (HTML/JS/CSS revalidate; images 1 day; vendor immutable).
+  const SCACHE = new Map();
+  function asset(p) {
+    const f = path.join(PUBLIC, STATIC[p]), m = fs.statSync(f).mtimeMs, hit = SCACHE.get(p); if (hit && hit.m === m) return hit;
+    let buf = fs.readFileSync(f); if (p === '/pricing') buf = Buffer.from(pricingHead(buf.toString('utf8')));
+    const type = MIME[path.extname(f)] || 'application/octet-stream', text = /text|javascript|json|svg|xml|manifest/.test(type) && buf.length > 860;
+    const a = { m, buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 22) + '"',
+      br: text ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 10 } }) : null, gz: text ? zlib.gzipSync(buf, { level: 9 }) : null };
+    SCACHE.set(p, a); return a;
+  }
+  function serveStatic(req, res, p) {
+    const a = asset(p), ext = path.extname(STATIC[p]);
+    const cc = p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : ['.png', '.svg'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
+    const hd = { 'Content-Type': a.type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'Cache-Control': cc, ETag: a.etag, Vary: 'Accept-Encoding', ...(p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {}) };
+    if (req.headers['if-none-match'] === a.etag) { res.writeHead(304, hd); return res.end(); }
+    const ae = String(req.headers['accept-encoding'] || ''), body = a.br && /\bbr\b/.test(ae) ? (hd['Content-Encoding'] = 'br', a.br) : a.gz && /\bgzip\b/.test(ae) ? (hd['Content-Encoding'] = 'gzip', a.gz) : a.buf;
+    hd['Content-Length'] = body.length; res.writeHead(200, hd); res.end(req.method === 'HEAD' ? undefined : body);
+  }
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x'), p = u.pathname, M = req.method;
     try {
-      if (M === 'GET' && STATIC[p]) { const f = path.join(PUBLIC, STATIC[p]); return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)], p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : p.startsWith('/vendor/') ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : {}); }
+      if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
+      if (M === 'GET' && p === '/robots.txt') return send(res, 200, ROBOTS, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
+      if (M === 'GET' && p === '/sitemap.xml') return send(res, 200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
+      if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
       if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
       if (p === '/api/stripe/webhook' && M === 'POST') return stripeWebhook(req, res); // raw body: verified before parsing
       const om = /^\/api\/oauth\/([a-z]+)\/(start|callback)$/.exec(p);

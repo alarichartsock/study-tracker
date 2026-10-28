@@ -70,6 +70,7 @@ async function boot() {
   if (!me.user && oauthPending) { oauthPending = false; const pe = await api('/api/oauth/pending').catch(() => ({})); if (pe.pending) { oauthProvider = pe.provider; landingDone = true; authMode = 'oauth'; showAuth(me); return; } }
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   if (me.termsRequired) return termsGate(me.termsRequired);
+  if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   BILL = me.billing || { enabled: false }; billBar();
   await load(); go(view);
