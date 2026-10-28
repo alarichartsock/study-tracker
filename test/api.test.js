@@ -173,7 +173,7 @@ test('sign-up clickwrap, neutral under-13 block, append-only consent log, re-acc
   const ok = await c('/api/register', 'POST', { username: 'adult', password: 'pass-12345', agree: true, birthYear: 1990 }, { 'User-Agent': 'ua-test' });
   assert.equal(ok.status, 200); assert.equal((await c('/api/me')).body.termsRequired, undefined);
   const st = new Store(app.dataFile), rows = st.sql.consents(ok.body.user.id);
-  assert.equal(rows.length, 1); assert.equal(rows[0].method, 'password'); assert.equal(rows[0].terms_version, '1.0'); assert.equal(rows[0].privacy_version, '1.0');
+  assert.equal(rows.length, 1); assert.equal(rows[0].method, 'password'); assert.equal(rows[0].terms_version, '1.1'); assert.equal(rows[0].privacy_version, '1.1');
   assert.match(rows[0].ts, /Z$/); assert.ok(rows[0].ip); assert.equal(rows[0].checkbox_text, 'I agree to the Terms of Service and acknowledge the Privacy Policy.');
   assert.ok(!JSON.stringify(st.db.users).includes('1990'), 'birth year not stored');
   assert.throws(() => st.sql.db.prepare('UPDATE consents SET method = ?').run('x'), /append-only/);
@@ -182,12 +182,20 @@ test('sign-up clickwrap, neutral under-13 block, append-only consent log, re-acc
   const u = st.db.users.find(x => x.id === ok.body.user.id); delete u.termsVersion; st.save(); st.close();
   const app2 = await start({ dataFile: app.dataFile }); t.after(() => app2.close()); const c2 = app2.client();
   assert.equal((await c2('/api/login', 'POST', { username: 'adult', password: 'pass-12345' })).status, 200);
-  const me = (await c2('/api/me')).body; assert.equal(me.termsRequired.terms, '1.0'); assert.ok(me.termsRequired.summary);
+  const me = (await c2('/api/me')).body; assert.equal(me.termsRequired.terms, '1.1'); assert.ok(me.termsRequired.summary);
   assert.equal((await c2('/api/state')).status, 403);
   assert.equal((await c2('/api/terms/accept', 'POST', {})).status, 400);
   assert.equal((await c2('/api/terms/accept', 'POST', { agree: true })).status, 200);
   assert.equal((await c2('/api/state')).status, 200); assert.equal((await c2('/api/me')).body.termsRequired, undefined);
   const st2 = new Store(app.dataFile); assert.deepEqual(st2.sql.consents(ok.body.user.id).map(r => r.method), ['password', 'reaccept']); st2.close();
-  for (const p of ['/terms', '/terms/v1.0', '/privacy']) { const r = await fetch(app.base + p); assert.equal(r.status, 200); const h = await r.text(); assert.ok(!/\[(DATE|CONTACT EMAIL|SECURITY EMAIL)\]/.test(h), p + ' placeholders filled'); }
+  for (const p of ['/terms', '/terms/v1.0', '/terms/v1.1', '/privacy']) { const r = await fetch(app.base + p); assert.equal(r.status, 200); const h = await r.text(); assert.ok(!/\[(DATE|CONTACT EMAIL|SECURITY EMAIL)\]/.test(h), p + ' placeholders filled'); }
   assert.match(await (await fetch(app.base + '/privacy')).text(), /Render[\s\S]*Cloudflare[\s\S]*Google Ads/);
+});
+
+test('terms v1.1 adds the subscription section; v1.0 stays archived', async t => {
+  const app = await start(); t.after(app.close);
+  const cur = await (await fetch(app.base + '/terms')).text(), old = await (await fetch(app.base + '/terms/v1.0')).text();
+  assert.match(cur, /Version 1\.1/); assert.match(cur, /id="subscriptions"/); assert.match(cur, /renews automatically/); assert.match(cur, /US\$4\.99 per month/); assert.match(cur, /US\$39 per year/);
+  assert.match(old, /Version 1\.0/); assert.doesNotMatch(old, /id="subscriptions"/);
+  assert.match(await (await fetch(app.base + '/privacy')).text(), /Stripe/);
 });

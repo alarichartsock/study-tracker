@@ -12,16 +12,16 @@ const billing = require('./lib/billing');
 // Google Ads sign-up conversion label (empty = no conversion event). Env var or oauth.config.json-style ads.config.json.
 const ADS_SIGNUP_LABEL = String(process.env.CONVERSION_LABEL_SIGNUP || (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'ads.config.json'), 'utf8')).CONVERSION_LABEL_SIGNUP || ''; } catch { return ''; } })()).replace(/[^A-Za-z0-9_-]/g, '');
 // Terms/Privacy versions. Bump terms to require every user to re-accept on next visit.
-const LEGAL = { terms: '1.0', privacy: '1.0', effective: '2026-10-27',
+const LEGAL = { terms: '1.1', privacy: '1.1', effective: '2026-10-27',
   checkbox: 'I agree to the Terms of Service and acknowledge the Privacy Policy.',
-  summary: 'StudyHertz now has Terms of Service (v1.0) and an expanded Privacy Policy (v1.0). They cover your account and data, acceptable use, the GPL license, Google Ads cookies (loaded only with your consent), how long we keep data, your rights, and how to contact us.' };
+  summary: 'We updated our Terms of Service (v1.1) and Privacy Policy (v1.1) for paid plans: new accounts get a 30-day free trial, then StudyHertz costs US$4.99/month or US$39/year. The new section covers automatic renewal, how to cancel, refunds, and what happens if you don\'t subscribe (your account becomes read-only; your data is never deleted). Stripe now processes payments. Accounts created before October 28, 2026 keep free access.' };
 // Neutral birth-year gate: only years that guarantee age 13+ pass (COPPA). The birth year itself is not stored.
 const ageOk = by => { const y = Number(by), now = new Date().getUTCFullYear(); return Number.isInteger(y) && y >= 1900 && y <= now && now - y >= 14; };
 const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '': 'text/plain; charset=utf-8' };
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
