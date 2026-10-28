@@ -207,3 +207,12 @@ test('GA4 measurement ID is exposed only when configured', async t => {
   assert.match(cj, /analytics_storage: 'granted'/); assert.equal((cj.match(/googletagmanager\.com\/gtag\/js/g) || []).length, 1, 'single shared loader');
   assert.match(await (await fetch(b.base + '/privacy')).text(), /Google Analytics/);
 });
+
+test('favicons: every page points at the wave logo; /favicon.ico and touch icon are served', async t => {
+  const app = await start(); t.after(app.close);
+  for (const p of ['/', '/terms', '/privacy', '/terms/v1.0']) { const h = await (await fetch(app.base + p)).text();
+    for (const l of ['href="/favicon.svg?v=3"', 'href="/favicon-32.png?v=3"', 'href="/favicon.ico?v=3"', 'sizes="180x180" href="/apple-touch-icon.png?v=3"']) assert.ok(h.includes(l), p + ' ' + l); }
+  const ico = await fetch(app.base + '/favicon.ico'); assert.equal(ico.status, 200); assert.equal(ico.headers.get('content-type'), 'image/x-icon'); const ib = Buffer.from(await ico.arrayBuffer()); assert.equal(ib.readUInt16LE(2), 1); assert.equal(ib.readUInt16LE(4), 3);
+  const at = Buffer.from(await (await fetch(app.base + '/apple-touch-icon.png')).arrayBuffer()); assert.equal(at.readUInt32BE(16), 180);
+  const f32 = Buffer.from(await (await fetch(app.base + '/favicon-32.png')).arrayBuffer()); assert.equal(f32.readUInt32BE(16), 32);
+});
