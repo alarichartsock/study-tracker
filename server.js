@@ -11,6 +11,8 @@ const billing = require('./lib/billing');
 
 // Google Ads sign-up conversion label (empty = no conversion event). Env var or oauth.config.json-style ads.config.json.
 const ADS_SIGNUP_LABEL = String(process.env.CONVERSION_LABEL_SIGNUP || (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'ads.config.json'), 'utf8')).CONVERSION_LABEL_SIGNUP || ''; } catch { return ''; } })()).replace(/[^A-Za-z0-9_-]/g, '');
+// Google Analytics 4 measurement ID (empty = GA off). Loaded client-side only after cookie consent.
+const GA_ID = /^G-[A-Z0-9]{4,20}$/.test(String(process.env.GA_MEASUREMENT_ID || '').trim()) ? String(process.env.GA_MEASUREMENT_ID).trim() : '';
 // Terms/Privacy versions. Bump terms to require every user to re-accept on next visit.
 const LEGAL = { terms: '1.1', privacy: '1.1', effective: '2026-10-27',
   checkbox: 'I agree to the Terms of Service and acknowledge the Privacy Policy.',
@@ -230,7 +232,7 @@ function createApp(opts = {}) {
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
-      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.PLANS } : null });
+      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.PLANS } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });

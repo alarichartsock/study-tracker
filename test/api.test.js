@@ -199,3 +199,11 @@ test('terms v1.1 adds the subscription section; v1.0 stays archived', async t =>
   assert.match(old, /Version 1\.0/); assert.doesNotMatch(old, /id="subscriptions"/);
   assert.match(await (await fetch(app.base + '/privacy')).text(), /Stripe/);
 });
+
+test('GA4 measurement ID is exposed only when configured', async t => {
+  const a = await start({ gaId: 'G-TEST1234' }); t.after(a.close); assert.equal((await a.client()('/api/public-config')).body.gaId, 'G-TEST1234');
+  const b = await start(); t.after(b.close); assert.equal((await b.client()('/api/public-config')).body.gaId, '');
+  const cj = fs.readFileSync(path.join(__dirname, '..', 'public', 'consent.js'), 'utf8');
+  assert.match(cj, /analytics_storage: 'granted'/); assert.equal((cj.match(/googletagmanager\.com\/gtag\/js/g) || []).length, 1, 'single shared loader');
+  assert.match(await (await fetch(b.base + '/privacy')).text(), /Google Analytics/);
+});

@@ -1,4 +1,5 @@
-// Cookie consent + Google Ads (AW-18541546430). Nothing is requested from Google unless the user clicks Accept.
+// Cookie consent + Google Ads (AW-18541546430) + Google Analytics 4 (GA_MEASUREMENT_ID, optional). One shared gtag loader.
+// Nothing is requested from Google unless the user clicks Accept.
 // Choice is stored in localStorage.adsConsent ('granted' | 'denied'). Change it any time via "Cookie settings".
 (function () {
   'use strict';
@@ -7,17 +8,19 @@
   function set(v) { try { localStorage.setItem(KEY, v); } catch (e) { /* ignore */ } }
   window.dataLayer = window.dataLayer || [];
   function gtag() { window.dataLayer.push(arguments); }
+  var cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   function load() {
     if (loaded) return; loaded = true; window.gtag = gtag;
     gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
-    gtag('consent', 'update', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted' });
+    gtag('consent', 'update', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted', analytics_storage: 'granted' });
     var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; document.head.appendChild(s);
     gtag('js', new Date()); gtag('config', ADS_ID);
+    cfg().then(function (c) { if (c && c.gaId) gtag('config', c.gaId); }); // GA4 rides on the same loader; skipped when unset
   }
   function banner() {
     if (document.getElementById('consent')) return;
     var b = document.createElement('div'); b.id = 'consent'; b.className = 'consent glass'; b.setAttribute('role', 'dialog'); b.setAttribute('aria-label', 'Cookie consent');
-    b.innerHTML = '<p>We use Google Ads cookies to measure our ads. They load only if you accept. <a href="/privacy">Privacy</a></p>' +
+    b.innerHTML = '<p>We use Google Analytics and Google Ads cookies to understand how StudyHertz is used and to measure our ads. They load only if you accept. <a href="/privacy">Privacy</a></p>' +
       '<div class="consent-btns"><button type="button" class="btn ghost" data-consent="denied">Decline</button><button type="button" class="btn primary" data-consent="granted">Accept</button></div>';
     b.addEventListener('click', function (e) { var v = e.target && e.target.getAttribute && e.target.getAttribute('data-consent'); if (!v) return; choose(v); });
     document.body.appendChild(b);
@@ -25,7 +28,7 @@
   function choose(v) {
     var prev = get(); set(v); var b = document.getElementById('consent'); if (b) b.remove();
     if (v === 'granted') load();
-    else if (loaded || prev === 'granted') { gtag('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' }); location.reload(); }
+    else if (loaded || prev === 'granted') { gtag('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' }); location.reload(); }
   }
   window.SHConsent = {
     state: get,
@@ -38,9 +41,9 @@
     },
     signup: function () {
       if (get() !== 'granted') return;
-      fetch('/api/public-config').then(function (r) { return r.json(); }).then(function (c) {
+      cfg().then(function (c) {
         if (c && c.signupLabel) { load(); gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); }
-      }).catch(function () {});
+      });
     }
   };
   // Global Privacy Control is honored as an opt-out of ad sharing: no banner, no Google requests
