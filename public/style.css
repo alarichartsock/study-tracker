@@ -202,7 +202,14 @@ main.enter{animation:enter .5s var(--ease)}
 .feat{margin:0}.feat b{display:block;font-size:17px;margin:10px 0 6px}.feat p{margin:0;color:var(--muted);font-size:14px}
 .f-ic{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc)}
 .f-ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.l-foot{text-align:center;color:var(--muted);font-size:13px;padding:56px 0 12px}
+.l-foot{max-width:1100px;margin:56px auto 0;padding:0 20px calc(18px + env(safe-area-inset-bottom));color:var(--muted);font-size:14px}
+.lf-top{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,2fr);gap:32px;padding:32px 0 22px;border-top:1px solid var(--line)}
+.lf-mark{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:18px;color:var(--text);text-decoration:none}.lf-brand p{margin:8px 0 0;line-height:1.5}
+.lf-oss a,.lf-cols a{color:var(--text);text-decoration:none}.lf-oss a{font-weight:600}
+.lf-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.lf-cols h2{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lf-cols a{display:block;padding:4px 0;opacity:.85;overflow-wrap:anywhere}.lf-cols a:hover,.lf-oss a:hover,.lf-cols a:focus-visible{opacity:1;text-decoration:underline;color:var(--acc)}
+.lf-copy{margin:0;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+@media (max-width:720px){.lf-top{grid-template-columns:1fr;gap:22px}.lf-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.lf-cols>div:last-child{grid-column:1/-1}}
 @media(max-width:960px){.hero{grid-template-columns:1fr;padding:44px 0 36px;gap:32px}.mock{transform:none}.fgrid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:520px){.fgrid{grid-template-columns:1fr}.l-top .btn.ghost{display:none}.l-top .brand span{display:inline}.hero-cta .btn{flex:1}.mock-sub{grid-template-columns:80px 1fr}}
 /* phones: bottom floating capsule tab bar */

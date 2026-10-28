@@ -11,7 +11,7 @@ test('landing page has hero, auth buttons, features and footer', () => {
   assert.match(h, /data-auth="login"/);
   assert.match(h, /data-auth="register"/);
   assert.ok((h.match(/class="feat card"/g) || []).length >= 7);
-  assert.match(h, /&copy; 2026 Alaric Hartsock\. Free software under the <a [^>]*>GNU GPL v3 or later<\/a>\./); assert.ok(!/All rights reserved/.test(h));
+  assert.match(h, /<p class="lf-copy">&copy; 2026 Alaric Hartsock<\/p>/); assert.match(h, /Open source under <a [^>]*rel="license">GPL-3\.0<\/a>/); for (const l of ['href="/terms"', 'href="/privacy"', 'data-cookie-settings', 'github.com/alarichartsock/study-tracker', 'mailto:support@studyhertz.com']) assert.ok(h.includes(l), l); assert.ok(!/All rights reserved/.test(h));
 });
 test('glass styles include accessibility fallbacks', () => {
   const c = pub('style.css');
