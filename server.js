@@ -8,10 +8,12 @@ const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
 const oauthLib = require('./lib/oauth');
 
+// Google Ads sign-up conversion label (empty = no conversion event). Env var or oauth.config.json-style ads.config.json.
+const ADS_SIGNUP_LABEL = String(process.env.CONVERSION_LABEL_SIGNUP || (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'ads.config.json'), 'utf8')).CONVERSION_LABEL_SIGNUP || ''; } catch { return ''; } })()).replace(/[^A-Za-z0-9_-]/g, '');
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'icon-192.png', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '': 'text/plain; charset=utf-8' };
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -154,6 +156,7 @@ function createApp(opts = {}) {
       const user = currentUser(req);
 
       // ---- public auth endpoints ----
+      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders() });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });

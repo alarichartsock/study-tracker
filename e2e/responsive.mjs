@@ -103,10 +103,10 @@ async function runWidth(browser, bname, w) {
     const phone = w <= 520, opts = { viewport: { width: w, height: phone ? 844 : 900 }, deviceScaleFactor: DPR || (phone ? 2 : 1), hasTouch: phone, ...(bname === 'firefox' ? {} : { isMobile: phone }), serviceWorkers: 'block' };
     const tag0 = bname + '@' + w;
     // landing (signed out)
-    { const ctx = await browser.newContext(opts), page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
+    { const ctx = await browser.newContext(opts); await ctx.addInitScript(() => { try { localStorage.adsConsent ||= 'denied'; } catch {} }); const page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
       await page.goto(BASE + '/'); await page.waitForTimeout(700); note(tag0 + ' landing', [...errs, ...await page.evaluate(pageChecks, phone)]);
       await shotFn(page)({ path: path.join(OUT, `${tag0}-landing.png`) }); await ctx.close(); }
-    const ctx = await browser.newContext(opts); await ctx.addCookies([{ name: 'sid', value: sid, url: BASE }]);
+    const ctx = await browser.newContext(opts); await ctx.addInitScript(() => { try { localStorage.adsConsent ||= 'denied'; } catch {} }); await ctx.addCookies([{ name: 'sid', value: sid, url: BASE }]);
     const page = await ctx.newPage(), errs = []; page.on('pageerror', e => errs.push('pageerror ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('console ' + m.text()); });
     await page.goto(BASE + '/'); await page.waitForTimeout(800); await page.evaluate(() => document.querySelector('dialog[open]')?.close());
     const check = async (tag, shot = true) => { await page.waitForTimeout(250); note(tag0 + ' ' + tag, [...errs.splice(0), ...await page.evaluate(pageChecks, phone)]);

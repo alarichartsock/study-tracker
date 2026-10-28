@@ -145,3 +145,10 @@ test('sign-up is rate limited per IP and new users only get Ready Room after the
   assert.equal(await rr(), true, 'Ready Room after finishing the tour');
   await app.close();
 });
+
+test('public config exposes an empty sign-up conversion label by default; privacy page is served', async () => {
+  const app = await start(); const c = app.client();
+  const r = await c('/api/public-config'); assert.equal(r.status, 200); assert.equal(typeof r.body.signupLabel, 'string');
+  const pp = await fetch(app.base + '/privacy'); assert.equal(pp.status, 200); assert.match(await pp.text(), /Google Ads/);
+  await app.close();
+});

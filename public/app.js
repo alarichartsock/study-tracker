@@ -59,7 +59,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 
 // ---------- auth ----------
 let oauthErr = '';
-{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error')) { if (q.get('welcome') === '1') localStorage.onboard = '1'; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
+{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error')) { if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); } oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 async function boot() {
   if (oauthErr) landingDone = true;
   const me = await api('/api/me');
@@ -86,7 +86,7 @@ $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth()
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
-  try { const r = await api(authMode === 'login' ? '/api/login' : '/api/register', 'POST', { username: $('aUser').value.trim(), password: $('aPass').value }); $('aPass').value = ''; if (r.onboarding) localStorage.onboard = '1'; boot(); }
+  try { const r = await api(authMode === 'login' ? '/api/login' : '/api/register', 'POST', { username: $('aUser').value.trim(), password: $('aPass').value }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); } boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };

@@ -54,3 +54,15 @@ test('data room table: header cell count matches data row cell count', () => {
   assert.equal(rows.length, 4); const head = cells(rows[0]); assert.equal(head, 4); for (const r of rows) assert.equal(cells(r), head, r);
   assert.match(rows[0], /<th scope="col" class="dr-h">Activity<\/th>/); assert.equal((html.match(/<col[ >]/g) || []).length, head);
 });
+
+test('Google Ads loads only after consent; privacy page and conversion wiring', () => {
+  const c = pub('consent.js'), h = pub('index.html'), p = pub('privacy.html'), js = pub('app.js');
+  assert.ok(!/<script[^>]*google/i.test(h) && !/<script[^>]*google/i.test(p), 'no Google tag in static HTML');
+  assert.match(c, /AW-18541546430/); assert.match(c, /ad_storage: 'denied'/);
+  const load = c.indexOf('function load()'), call = c.match(/if \(v === 'granted'\) load\(\)/); assert.ok(load > 0 && call, 'tag injected only on Accept');
+  assert.match(c, /if \(c === 'granted'\) load\(\); else if \(c !== 'denied'\) banner\(\)/);
+  assert.match(c, /if \(c && c.signupLabel\)/, 'conversion skipped when label is empty');
+  assert.match(h, /<script src="\/consent.js"><\/script>/); assert.match(p, /<script src="\/consent.js"><\/script>/);
+  assert.match(h, /data-cookie-settings/); assert.match(p, /data-cookie-settings/); assert.match(p, /Google Ads/);
+  assert.match(js, /SHConsent\?\.signup\(\)/);
+});
