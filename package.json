@@ -10,5 +10,5 @@
     "test": "node --test",
     "test:ui": "node e2e/responsive.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=24" }
 }

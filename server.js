@@ -22,9 +22,15 @@ const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function createApp(opts = {}) {
-  const store = new Store(opts.dataFile || path.join(__dirname, 'data.json'));
+  // DATA_DIR (e.g. a mounted disk) holds data.db and approved reports; defaults to the repo folder for local installs.
+  const dataDir = opts.dataDir || process.env.DATA_DIR || null; if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
+  const store = new Store(opts.dataFile || path.join(dataDir || __dirname, 'data.json'));
   const fetchImpl = opts.fetch || globalThis.fetch;
-  const reportsDir = opts.reportsDir || path.join(__dirname, '..', 'mcat-tracker-reports', 'approved');
+  const reportsDir = opts.reportsDir || (dataDir ? path.join(dataDir, 'reports', 'approved') : path.join(__dirname, '..', 'mcat-tracker-reports', 'approved'));
+  // behind a reverse proxy (Render, Cloudflare) the socket address is the proxy's; TRUST_PROXY=1 uses the forwarded client IP
+  const trustProxy = opts.trustProxy ?? process.env.TRUST_PROXY === '1';
+  const clientIp = req => (trustProxy && (String(req.headers['cf-connecting-ip'] || '').trim() || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim())) || req.socket.remoteAddress || '?';
+  const secureCookies = opts.secureCookies ?? process.env.NODE_ENV === 'production';
   const minSessionSec = opts.minSessionSec ?? 30;
   const ipLimiter = new auth.RateLimiter(opts.ipMaxAttempts || 20, 15 * 60e3);
   const userLimiter = new auth.RateLimiter(opts.userMaxAttempts || 5, 15 * 60e3);
@@ -53,7 +59,7 @@ function createApp(opts = {}) {
     store.save(); return { u, created };
   }
   async function oauthRoute(req, res, p, step) {
-    const ip = req.socket.remoteAddress || '?', back = (q, cookies = []) => { res.writeHead(302, { Location: '/' + q, 'Set-Cookie': [...cookies, 'oa=; Path=/api/oauth; HttpOnly; Max-Age=0'], 'Cache-Control': 'no-store' }); res.end(); };
+    const ip = clientIp(req), back = (q, cookies = []) => { res.writeHead(302, { Location: '/' + q, 'Set-Cookie': [...cookies, 'oa=; Path=/api/oauth; HttpOnly; Max-Age=0'], 'Cache-Control': 'no-store' }); res.end(); };
     if (oauthLimiter.blocked(ip)) return back('?oauth_error=' + encodeURIComponent('Too many attempts. Try again in 15 minutes.'));
     oauthLimiter.fail(ip);
     if (!oauth.enabled().includes(p)) return back('?oauth_error=' + encodeURIComponent('That sign-in option is not available'));
@@ -93,7 +99,7 @@ function createApp(opts = {}) {
     res.end(type === 'application/json' ? JSON.stringify(body) : body);
   };
   const readBody = (req, max = 20e6) => new Promise((resolve, reject) => { let b = ''; req.on('data', c => { b += c; if (b.length > max) { reject(new Error('body too large')); req.destroy(); } }); req.on('end', () => resolve(b)); });
-  const cookie = (token, maxAge) => `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+  const cookie = (token, maxAge) => `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secureCookies ? '; Secure' : ''}`;
 
   function currentUser(req) {
     const t = auth.parseCookies(req.headers.cookie).sid; if (!t) return null;
@@ -156,11 +162,12 @@ function createApp(opts = {}) {
       const user = currentUser(req);
 
       // ---- public auth endpoints ----
+      if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders() });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
-        const rip = req.socket.remoteAddress || '?'; if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
+        const rip = clientIp(req); if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
         if (!auth.validUsername(j.username)) return send(res, 400, { error: 'Username: 3-32 chars, letters/numbers/._-' });
         if (!auth.validPassword(j.password)) return send(res, 400, { error: 'Password must be at least 8 characters' });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
@@ -168,7 +175,7 @@ function createApp(opts = {}) {
         return send(res, 200, { user: publicUser(nu), onboarding: true }, 'application/json', { 'Set-Cookie': startSession(nu.id) });
       }
       if (p === '/api/login' && M === 'POST') {
-        const ip = req.socket.remoteAddress || '?', uk = 'u:' + String(j.username || '').toLowerCase();
+        const ip = clientIp(req), uk = 'u:' + String(j.username || '').toLowerCase();
         if (ipLimiter.blocked(ip) || userLimiter.blocked(uk)) return send(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
         const found = store.findUser(j.username || '');
         const ok = found && found.hash ? await auth.verifyPassword(j.password || '', found.salt, found.hash) : (await auth.hashPassword('x'), false); // equalize timing
@@ -359,5 +366,5 @@ function createApp(opts = {}) {
 module.exports = { createApp };
 if (require.main === module) {
   const port = +process.env.PORT || 3000, app = createApp();
-  app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'MCAT tracker on :' + port));
+  app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'StudyHertz on :' + port));
 }

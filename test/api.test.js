@@ -152,3 +152,13 @@ test('public config exposes an empty sign-up conversion label by default; privac
   const pp = await fetch(app.base + '/privacy'); assert.equal(pp.status, 200); assert.match(await pp.text(), /Google Ads/);
   await app.close();
 });
+
+test('DATA_DIR holds the database; health endpoint; forwarded client IP only when trusted', async () => {
+  const os = require('os'), dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dd-')), 'disk'), { createApp } = require('../server');
+  const s = createApp({ dataDir: dir, trustProxy: true, secureCookies: true, regMax: 1, quiet: true }); await new Promise(r => s.listen(0, '127.0.0.1', r)); const B = 'http://127.0.0.1:' + s.address().port;
+  assert.deepEqual(await (await fetch(B + '/api/health')).json(), { ok: true, users: false });
+  const reg = (ip, u) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip + ', 10.0.0.1' }, body: JSON.stringify({ username: u, password: 'pass-12345' }) });
+  const r1 = await reg('1.1.1.1', 'one'); assert.equal(r1.status, 200); assert.match(r1.headers.get('set-cookie'), /; Secure/);
+  assert.equal((await reg('1.1.1.1', 'two')).status, 429); assert.equal((await reg('2.2.2.2', 'three')).status, 200, 'separate limit per forwarded client');
+  assert.ok(fs.existsSync(path.join(dir, 'data.db'))); s.close();
+});
