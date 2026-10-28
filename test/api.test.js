@@ -125,7 +125,7 @@ test('legacy v1 data.json is migrated to the first (admin) user with a backup', 
 
 test('static UI and JSON content-type guard', async t => {
   const app = await start(); t.after(app.close);
-  const r = await fetch(app.base + '/'); assert.equal(r.status, 200); assert.match(await r.text(), /Study Tracker/);
+  const r = await fetch(app.base + '/'); assert.equal(r.status, 200); assert.match(await r.text(), /StudyHertz/);
   assert.equal((await fetch(app.base + '/app.js')).status, 200); assert.equal((await fetch(app.base + '/style.css')).status, 200);
   assert.equal((await fetch(app.base + '/../server.js')).status, 404);
   const f = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{"username":"x"}' });

@@ -1,6 +1,7 @@
 {
-  "name": "MCAT Study Tracker",
-  "short_name": "MCAT",
+  "name": "StudyHertz",
+  "short_name": "StudyHertz",
+  "description": "Copyleft MCAT study tracking: free to use, free to share, built in the open.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,6 +1,8 @@
-# MCAT Tracker
+# StudyHertz
 
-A personal, self-hosted study-time tracker for MCAT prep, modeled on Athenify.
+**Copyleft MCAT study tracking: free to use, free to share, built in the open.** https://studyhertz.com
+
+StudyHertz is a study-time tracker for MCAT prep, modeled on Athenify.
 Zero runtime dependencies: plain Node.js, vanilla JS/CSS, data in a local JSON file.
 
 ## Features

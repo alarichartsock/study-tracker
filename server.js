@@ -1,5 +1,5 @@
 'use strict';
-// MCAT Study Tracker - zero-dependency Node server
+// StudyHertz - zero-dependency Node server
 const http = require('http'), fs = require('fs'), path = require('path');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
 const reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');

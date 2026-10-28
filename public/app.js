@@ -21,7 +21,7 @@ const daysUntil = k => Math.round((k2d(k) - k2d(dk(new Date()))) / DAY);
 const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
 
-const BRAND = 'Study Tracker';
+const BRAND = 'StudyHertz';
 const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', mcat: 'MCAT practice exams', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports' };
 document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND)); document.title = BRAND;
 let landingDone = false;
@@ -610,7 +610,7 @@ function markFlag(k) { const seen = JSON.parse(localStorage.flagsSent || '[]'); 
 // Welcome tour: a spotlight walk through the main features, then an optional goal / MCAT-date setup.
 // Finishing or skipping grants "Ready Room" (flag onboarded). Replay from Settings.
 const TOUR = [
-  { t: 'Welcome to Study Tracker', b: 'A one-minute tour of what is here. Use Next and Back, or skip any time. You can replay it from Settings.' },
+  { t: 'Welcome to StudyHertz', b: 'A one-minute tour of what is here. Use Next and Back, or skip any time. You can replay it from Settings.' },
   { sel: '#nav', t: 'Getting around', b: 'Every section lives here. On phones it is the bar at the bottom; swipe it sideways for more.' },
   { v: 'timer', sel: '.mode-tabs', t: 'Timer modes', b: 'Stopwatch for open-ended study, Pomodoro for focus/break cycles, or Countdown for a fixed block. Fullscreen hides everything else.' },
   { v: 'timer', sel: '.chips', t: 'Subjects and colors', b: 'Pick what you are studying before you start. Each subject has its own color, which tints the accent and the background while you work.' },
