@@ -96,7 +96,7 @@ function termsGate(t) {
 // ---------- billing: trial banner, paywall, checkout ----------
 const PRICE = { monthly: '$4.99/month', yearly: '$39/year' };
 function billBar() {
-  let el = $('billBar'); if (!el) { el = document.createElement('div'); el.id = 'billBar'; el.className = 'billbar'; $('app').querySelector('header.top').after(el); }
+  let el = $('billBar'); if (!el) { el = document.createElement('div'); el.id = 'billBar'; el.className = 'billbar'; el.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); Promise.resolve(ACT[t.dataset.act](t, e)).catch(err => toast(err.message)); } }); $('app').querySelector('header.top').after(el); }
   const b = BILL, sub = b.subscription || {}; let html = '';
   if (b.enabled && sub.paymentFailed && b.subscribed) html = `<span>Your last payment failed. Update your card to keep your subscription.</span><button class="btn small" data-act="billPortal">Update payment</button>`;
   else if (b.enabled && b.readOnly) html = `<span><b>Read-only:</b> your free trial has ended. Your data is safe.</span><button class="btn primary small" data-act="paywall">Subscribe</button>`;
