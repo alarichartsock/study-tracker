@@ -1,0 +1,31 @@
+# Render Blueprint for StudyHertz (https://studyhertz.com)
+# Deploy: https://dashboard.render.com/blueprint/new?repo=https://github.com/alarichartsock/study-tracker
+# Starter compute (0.5 CPU / 512 MB) + 1 GB persistent disk for SQLite. The database starts empty.
+services:
+  - type: web
+    name: studyhertz
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: npm install --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    disk:
+      name: studyhertz-data
+      mountPath: /var/data
+      sizeGB: 1
+    domains:
+      - studyhertz.com # Render adds www.studyhertz.com and redirects it to the apex
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: OAUTH_BASE_URL
+        value: https://studyhertz.com
+      - key: TRUST_PROXY
+        value: "1"
