@@ -21,6 +21,7 @@ const LEGAL = { terms: '1.1', privacy: '1.1', effective: '2026-10-27',
 const ageOk = by => { const y = Number(by), now = new Date().getUTCFullYear(); return Number.isInteger(y) && y >= 1900 && y <= now && now - y >= 14; };
 const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
+const DAY = 864e5;
 const STATIC = { '/': 'index.html', '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
@@ -87,10 +88,40 @@ function createApp(opts = {}) {
   if (billing.liveKey(bcfg) && !bcfg.allowLive && !opts.quiet) console.warn('Stripe LIVE key detected: billing stays OFF (test mode only).');
   const stripe = billing.client(bcfg, opts.stripeFetch || globalThis.fetch);
   const bstat = u => billing.status(u, store.sql.subscription(u.id), bcfg);
+  // ---- referrals: friend gets +30 trial days at sign-up; referrer gets +30 days when the friend logs a first study session.
+  const REF_DAYS = 30, REF_CAP = Number(opts.referralCap || process.env.REFERRAL_CAP || 12), REF_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const refNorm = c => { const s = String(c || '').trim().toUpperCase(); return /^[A-Z0-9]{6,12}$/.test(s) ? s : ''; };
+  const refUser = c => { const s = refNorm(c); return s ? store.db.users.find(x => x.refCode === s) : null; };
+  function refCodeOf(u) { if (!u.refCode) { let c; do { c = ''; for (const b of crypto.randomBytes(8)) c += REF_ABC[b % 32]; } while (store.db.users.some(x => x.refCode === c)); u.refCode = c; store.save(); } return u.refCode; }
+  const emailsOf = u => new Set([u.email, ...(u.identities || []).map(i => i.email)].filter(Boolean).map(e => String(e).toLowerCase()));
+  // Called once, right after a NEW account is created. Returns true when the referral was accepted.
+  function applyReferral(nu, code) {
+    const ref = refUser(code); if (!ref || ref.id === nu.id || nu.referral) return false;
+    const a = emailsOf(nu), b = emailsOf(ref); for (const e of a) if (b.has(e)) return false; // same email = self-referral
+    if ((nu.identities || []).some(i => (ref.identities || []).some(k => k.provider === i.provider && k.sub === i.sub))) return false; // same OAuth identity
+    nu.referral = { by: ref.id, code: ref.refCode, at: new Date().toISOString(), status: 'pending' };
+    nu.billing ||= {}; nu.billing.trialBonusDays = (Number(nu.billing.trialBonusDays) || 0) + REF_DAYS; store.save(); return true;
+  }
+  // Called after the referred user logs a study session; rewards the referrer once.
+  function rewardReferral(u) {
+    const r = u.referral; if (!r || r.status !== 'pending') return;
+    const ref = store.userById(r.by); if (!ref) { r.status = 'void'; return; }
+    const credits = ref.referralCredits ||= [];
+    if (credits.some(c => c.from === u.id)) { r.status = 'rewarded'; return; }
+    if (credits.length >= REF_CAP) { r.status = 'capped'; r.cappedAt = new Date().toISOString(); return; }
+    const st = bstat(ref), now = Date.now(), c = { from: u.id, days: REF_DAYS, at: new Date(now).toISOString(), unseen: true };
+    if (st.subscribed) c.kind = 'stripe_pending'; // recorded only; applied to the Stripe subscription by an admin step (see docs/referrals.md)
+    else if (st.exempt) c.kind = 'exempt'; // admin / comped / early users: nothing to extend
+    else { const b = ref.billing ||= {}, prev = Number(b.trialBonusDays) || 0;
+      if (st.enabled) { const base = (Date.parse(b.trialStart || ref.created) || now) + bcfg.trialDays * DAY, newEnd = Math.max(Date.parse(st.trialEnds) || now, now) + REF_DAYS * DAY;
+        b.trialBonusDays = Math.round((newEnd - base) / DAY); } else b.trialBonusDays = prev + REF_DAYS;
+      c.kind = 'trial'; c.addedDays = b.trialBonusDays - prev; }
+    credits.push(c); r.status = 'rewarded'; r.rewardedAt = c.at;
+  }
   const checkoutLimiter = new auth.RateLimiter(opts.checkoutMax || 20, 60 * 60e3);
   const baseUrl = req => String(opts.baseUrl || process.env.PUBLIC_BASE_URL || process.env.OAUTH_BASE_URL || ('http://' + (req.headers.host || 'localhost'))).replace(/\/$/, '');
   // paths an expired trial may still POST to (read-only otherwise; data is never deleted)
-  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard']);
+  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen']);
   async function ensureCustomer(user) {
     const prev = store.sql.subscription(user.id); if (prev && prev.customer_id) return prev.customer_id;
     const c = await stripe('POST', '/customers', { name: user.username, ...(user.email ? { email: user.email } : {}), metadata: { uid: String(user.id) } }, 'sh-cust-' + user.id + '-' + user.created);
@@ -265,6 +296,7 @@ function createApp(opts = {}) {
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.PLANS } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
+      if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
         const rip = clientIp(req); if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
@@ -274,8 +306,8 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) return send(res, 403, { error: AGE_BLOCK });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
         const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) });
-        recordConsent(nu, 'password', req);
-        return send(res, 200, { user: publicUser(nu), onboarding: true }, 'application/json', { 'Set-Cookie': startSession(nu.id) });
+        recordConsent(nu, 'password', req); const referred = j.ref ? applyReferral(nu, j.ref) : false;
+        return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}) }, 'application/json', { 'Set-Cookie': startSession(nu.id) });
       }
       if (p === '/api/oauth/pending' && M === 'GET') { const t = auth.parseCookies(req.headers.cookie).ps, pe = t && pendingSignups.get(t);
         return send(res, 200, pe ? { pending: true, provider: oauthLib.PROVIDERS[pe.id.provider].label } : { pending: false }); }
@@ -286,8 +318,8 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) { pendingSignups.delete(t); return send(res, 403, { error: AGE_BLOCK }, 'application/json', { 'Set-Cookie': 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0' }); }
         const ip = clientIp(req); if (regLimiter.blocked(ip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(ip);
         let r; try { r = oauthAccount(pe.id, { create: true }); } catch (e) { return send(res, 403, { error: e.message }); }
-        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req);
-        return send(res, 200, { user: publicUser(r.u), onboarding: true }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0'] });
+        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); const referred = r.created && j.ref ? applyReferral(r.u, j.ref) : false;
+        return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0'] });
       }
       if (p === '/api/login' && M === 'POST') {
         const ip = clientIp(req), uk = 'u:' + String(j.username || '').toLowerCase();
@@ -337,6 +369,10 @@ function createApp(opts = {}) {
         for (const [k, v] of Object.entries(store.db.tokens)) if (v.uid === user.id) delete store.db.tokens[k];
         save(); return send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': startSession(user.id) });
       }
+      if (p === '/api/referral' && M === 'GET') { const code = refCodeOf(user), cr = user.referralCredits || [];
+        return send(res, 200, { code, link: baseUrl(req) + '/?ref=' + code, days: REF_DAYS, cap: REF_CAP, credits: cr.length, daysEarned: cr.reduce((a, c) => a + (c.kind === 'trial' ? c.addedDays || 0 : c.days), 0),
+          pendingStripe: cr.filter(c => c.kind === 'stripe_pending').length, invited: store.db.users.filter(x => x.referral && x.referral.by === user.id).length, unseen: cr.filter(c => c.unseen).length }); }
+      if (p === '/api/referral/seen' && M === 'POST') { for (const c of user.referralCredits || []) delete c.unseen; save(); return send(res, 200, { ok: true }); }
       if (p === '/api/state') return send(res, 200, maskedState(ud));
       if (p === '/api/stats') return send(res, 200, { ...stats.computeStats(ud.sessions, { goals: ud.settings.goals, dayStartHour: h }), goals: analytics.goalProgress(ud),
         suggestion: analytics.suggestDuration(ud.sessions, u.searchParams.get('subject') || undefined) });
@@ -398,13 +434,13 @@ function createApp(opts = {}) {
           session = { id: ud.nextId++, subject: a.subject, activity: a.activity || '', note: a.note, start: new Date(+end - secs * 1000).toISOString(), end: end.toISOString(), breakSec: 0, mode: a.mode || 'stopwatch',
             focus: j.focus ? Math.round(numIn(j.focus, 1, 5)) : null, progress: j.progress ? Math.round(numIn(j.progress, 1, 5)) : null };
           ud.sessions.push(session); ensureSubject(ud, a.subject); ensureActivity(ud, a.activity); }
-        ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true, session });
+        if (session) rewardReferral(user); ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true, session });
       }
       if (p === '/api/timer/discard' && M === 'POST') { ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true }); }
 
       // ---- sessions ----
       if (p === '/api/sessions' && M === 'GET') return send(res, 200, ud.sessions);
-      if (p === '/api/sessions' && M === 'POST') { const s = { id: ud.nextId++, mode: 'manual', ...cleanSession(j) }; ud.sessions.push(s); ensureSubject(ud, s.subject); ensureActivity(ud, s.activity); save(); return send(res, 200, s); }
+      if (p === '/api/sessions' && M === 'POST') { const s = { id: ud.nextId++, mode: 'manual', ...cleanSession(j) }; ud.sessions.push(s); ensureSubject(ud, s.subject); ensureActivity(ud, s.activity); rewardReferral(user); save(); return send(res, 200, s); }
       if (p === '/api/sessions/bulk' && M === 'POST') {
         const ids = new Set((Array.isArray(j.ids) ? j.ids : []).map(Number)), hit = ud.sessions.filter(s => ids.has(s.id));
         if (j.action === 'delete') { ud.sessions = ud.sessions.filter(s => !ids.has(s.id)); save(); return send(res, 200, { deleted: hit.length, removed: hit }); }

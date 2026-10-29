@@ -80,12 +80,12 @@ async function app(extra = {}) {
       : await fetch(B + `/api/oauth/${p}/callback?` + new URLSearchParams(q), { redirect: 'manual', headers: { Cookie: cookie } });
     let to = r.headers.get('location'), sc = r.headers.get('set-cookie') || '';
     if (to === '/?complete_signup=1') {
-      const ps = sc.match(/ps=([^;]+)/)[1], c = await fetch(B + '/api/oauth/complete', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'ps=' + ps }, body: JSON.stringify({ agree: true, birthYear: complete.birthYear ?? 1990, ...(complete.agree === false ? { agree: false } : {}) }) });
+      const ps = sc.match(/ps=([^;]+)/)[1], c = await fetch(B + '/api/oauth/complete', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'ps=' + ps }, body: JSON.stringify({ agree: true, birthYear: complete.birthYear ?? 1990, ...(complete.agree === false ? { agree: false } : {}), ...(complete.ref ? { ref: complete.ref } : {}) }) });
       const cj = await c.json(); st.lastComplete = { status: c.status, body: cj };
       if (c.ok) { to = '/?welcome=1'; sc = c.headers.get('set-cookie') || ''; } else { to = '/?oauth_error=' + encodeURIComponent(cj.error); sc = ''; }
     }
     const sid = sc.match(/sid=([^;]+)/); const me = sid ? await (await fetch(B + '/api/me', { headers: { Cookie: 'sid=' + sid[1] } })).json() : null;
-    return { loc: to, me };
+    return { loc: to, me, sid: sid && sid[1] };
   };
   const register = (u, pw) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: pw, agree: true, birthYear: 1990 }) });
   return { B, st, signIn, register, close: () => server.close() };
@@ -150,4 +150,14 @@ test('social sign-up needs the clickwrap and age gate before any account exists;
   a.st.claims = { sub: 'nb-1', email: 'nb@example.com', email_verified: true };
   await a.signIn('google', { complete: { agree: false } }); assert.equal(a.st.lastComplete.status, 400);
   const ok = await a.signIn('google'); assert.equal(ok.loc, '/?welcome=1'); assert.ok(ok.me.user); assert.equal(ok.me.termsRequired, undefined);
+});
+
+test('referrals over social sign-up: same email is a self-referral, a different person gets the 60-day trial', async t => {
+  const a = await app(); t.after(a.close); await a.register('owner', 'pass-12345');
+  a.st.claims = { sub: 'g-1', email: 'ada@example.com', email_verified: true }; const ada = await a.signIn('google');
+  const code = (await (await fetch(a.B + '/api/referral', { headers: { Cookie: 'sid=' + ada.sid } })).json()).code; assert.match(code, /^[A-Z2-9]{8}$/);
+  a.st.claims = { sub: 'g-9', email: 'ada@example.com', email_verified: false };
+  const self = await a.signIn('google', { complete: { ref: code } }); assert.equal(self.loc, '/?welcome=1'); assert.notEqual(self.me.user.id, ada.me.user.id); assert.equal(a.st.lastComplete.body.referral, undefined, 'same email rejected');
+  a.st.claims = { sub: 'g-10', email: 'friend@example.com', email_verified: true };
+  await a.signIn('google', { complete: { ref: code } }); assert.equal(a.st.lastComplete.body.referral, true);
 });

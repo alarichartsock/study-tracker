@@ -65,6 +65,8 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 
 // ---------- auth ----------
 let oauthErr = '', oauthPending = false, oauthProvider = '';
+{ const rc = new URLSearchParams(location.search).get('ref'); if (rc && /^[A-Za-z0-9]{6,12}$/.test(rc)) localStorage.shRef = rc.toUpperCase(); } // referral code from /?ref=CODE (URL left intact for UTM attribution)
+const refCode = () => localStorage.shRef || '';
 let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'oauth'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('begin_trial', { method: m }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
@@ -85,6 +87,7 @@ async function boot() {
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
+  setTimeout(refRewards, 1500);
 }
 // clickwrap: account creation stays disabled until the box is checked and a birth year is entered
 function syncAgree() { $('aSubmit').disabled = false; if (authMode !== 'login' && $('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())) $('aErr').textContent = ''; }
@@ -138,6 +141,12 @@ function billingCard() {
   else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
   return `<div class="card"><h3>Subscription</h3>${body}</div>`;
 }
+function refOffer() { const c = refCode(); if (!c || refOffer.done) return; refOffer.done = true;
+  api('/api/referral/check?code=' + encodeURIComponent(c)).then(r => { if (!r.valid) { localStorage.removeItem('shRef'); return; }
+    document.querySelectorAll('[data-auth=register]').forEach(b => { b.textContent = b.textContent.replace(/30-day/, r.trialDays + '-day'); });
+    const n = document.querySelector('.hero-note'); if (n) n.textContent = 'A friend invited you, so your free trial is ' + r.trialDays + ' days. No card required.';
+    const m = $('authMsg'); if (m && authMode === 'register') m.textContent = 'Create an account: ' + r.trialDays + '-day free trial from your friend'; }).catch(() => {}); }
+refOffer();
 async function showAuth(me) {
   me = me || await api('/api/me');
   $('app').classList.add('hid');
@@ -166,7 +175,7 @@ $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
   if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
-    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? legal : { ...cred, ...legal }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'oauth') : 'password'; track('sign_up', { method: m }); track('begin_trial', { method: m }); } else if (authMode === 'login') track('login', { method: 'password' }); sessionStorage.shOauth = ''; boot(); }
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode() } : { ...cred, ...legal, ref: refCode() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'oauth') : 'password'; track('sign_up', { method: m }); track('begin_trial', { method: m }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'password' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
@@ -607,9 +616,18 @@ ACT.csvImport = async () => { const f = $('csvFile').files[0]; if (!f) return to
 ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); track('data_import', { format: 'json', rows: r.added }); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
 
 // ================= SETTINGS =================
+function referralCard(rf) {
+  return `<div class="card ref-card"><h3>Give a friend a free month, get one yourself</h3><p class="muted small">Friends who sign up with your link get a ${rf.days + 30}-day free trial instead of 30. When they log their first study session, you get ${rf.days} free days.</p>
+    <div class="row ref-row"><input id="refLink" readonly value="${esc(rf.link)}" aria-label="Your referral link"><button class="btn primary" data-act="refCopy">Copy link</button></div>
+    <p class="muted small">Your code: <b>${esc(rf.code)}</b> &middot; Friends joined: ${rf.invited} &middot; Free months earned: ${rf.credits} of ${rf.cap}${rf.pendingStripe ? ' &middot; ' + rf.pendingStripe + ' waiting to be applied to your subscription' : ''}</p></div>`;
+}
+ACT.refCopy = async () => { const i = $('refLink'); try { await navigator.clipboard.writeText(i.value); } catch { i.select(); document.execCommand('copy'); } toast('Referral link copied'); track('referral_link_copied', { method: 'button' }); };
+async function refRewards() { const r = await api('/api/referral').catch(() => null); if (!r || !r.unseen) return;
+  track('referral_reward', { value: r.unseen * r.days, credits: r.unseen }); toast(r.unseen === 1 ? 'A friend you invited logged their first session. You earned ' + r.days + ' free days.' : r.unseen + ' friends you invited started studying. You earned free days.');
+  await api('/api/referral/seen', 'POST').catch(() => {}); const me = await api('/api/me').catch(() => null); if (me && me.billing) { BILL = me.billing; billBar(); } }
 VIEWS.set = async () => {
-  const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme;
-  return `<div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
+  const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme, rf = await api('/api/referral').catch(() => null);
+  return `${rf ? referralCard(rf) : ''}<div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
     <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
