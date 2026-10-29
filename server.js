@@ -488,7 +488,7 @@ function createApp(opts = {}) {
           x.billing ||= {}; x.billing.comp = !!j.comp; store.save(); return send(res, 200, { ok: true, comp: x.billing.comp }); } }
         if (p === '/api/admin/stats' && M === 'GET') { // aggregate counts only, no personal data
           const now = Date.now(), DAYMS = 864e5, dk = t => new Date(t).toISOString().slice(0, 10), us = store.db.users, ago = t => (now - (Date.parse(t) || 0)) / DAYMS;
-          const days = 60, series = []; for (let i = days - 1; i >= 0; i--) series.push([dk(now - i * DAYMS), 0]);
+          const days = 90, series = []; for (let i = days - 1; i >= 0; i--) series.push([dk(now - i * DAYMS), 0]);
           const idx = new Map(series.map((x, i) => [x[0], i])); for (const x of us) { const i = idx.get(x.created ? dk(Date.parse(x.created) || 0) : ''); if (i !== undefined) series[i][1]++; }
           const today = dk(now), subs = { trialing: 0, monthly: 0, yearly: 0, otherPaid: 0, comped: 0, legacy: 0, admin: 0, expired: 0, billingOff: 0 };
           const act = { d1: 0, d7: 0, d30: 0 }; let sessions = 0, studySec = 0, studied = 0;
@@ -502,7 +502,7 @@ function createApp(opts = {}) {
           const signedIn = new Set(Object.values(store.db.tokens || {}).filter(t => t.exp > now).map(t => t.uid)).size;
           return send(res, 200, { generated: new Date(now).toISOString(), total: us.length, newToday: us.filter(x => x.created && dk(Date.parse(x.created) || 0) === today).length,
             new7: us.filter(x => ago(x.created) <= 7).length, new30: us.filter(x => ago(x.created) <= 30).length, activeStudy: act, signedIn, studied, sessions, studyHours: Math.round(studySec / 360) / 10,
-            subscriptions: subs, registrationOpen: !!store.db.config.openRegistration, signups: series });
+            baseline: us.filter(x => !x.created || (Date.parse(x.created) || 0) < Date.parse(series[0][0])).length, subscriptions: subs, registrationOpen: !!store.db.config.openRegistration, signups: series });
         }
         if (p === '/api/admin/reports' && M === 'GET') { const st = u.searchParams.get('status'); return send(res, 200, store.db.reports.filter(r => !st || r.status === st)); }
         m = /^\/api\/admin\/reports\/(\d+)$/.exec(p);

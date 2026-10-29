@@ -620,14 +620,33 @@ VIEWS.set = async () => {
   ${ME.admin ? await adminHTML() : ''}`;
 };
 VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>';
-  const s = await api('/api/admin/stats'), sb = s.subscriptions, mx = Math.max(1, ...s.signups.map(x => x[1])), n = s.signups.length, w = 700 / n;
-  const bars = s.signups.map(([d, v], i) => `<rect x="${(i * w + 1).toFixed(1)}" y="${(150 - v / mx * 140).toFixed(1)}" width="${Math.max(1, w - 2).toFixed(1)}" height="${(v / mx * 140).toFixed(1)}" rx="2"${tip(d + ': ' + v + ' signup' + (v === 1 ? '' : 's'))} fill="var(--acc)"></rect>`).join('');
-  const row = (l, v) => `<div class="subj-row"><span>${l}</span><b>${v}</b></div>`;
+  const s = await api('/api/admin/stats'), sb = s.subscriptions, rng = [30, 60, 90].includes(UI.usrRange) ? UI.usrRange : 30;
+  let tot = s.baseline || 0; const all = s.signups.map(([d, v]) => [d, v, tot += v]), ser = all.slice(-rng), n = ser.length;
+  const start = n ? ser[0][2] - ser[0][1] : 0, end = n ? ser[n - 1][2] : 0, added = end - start, growth = start ? Math.round(added / start * 1000) / 10 + '%' : (added ? 'new' : '0%');
+  const mxB = Math.max(1, ...ser.map(x => x[1])), mxT = Math.max(1, end), W = 700, H = 180, w = W / n, fd = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const bars = ser.map(([d, v, t], i) => '<rect x="' + (i * w + w * 0.15).toFixed(1) + '" y="' + (H - 4 - (v ? Math.max(2, v / mxB * (H * 0.55)) : 0)).toFixed(1) + '" width="' + (w * 0.7).toFixed(1) + '" height="' + (v ? Math.max(2, v / mxB * (H * 0.55)) : 0).toFixed(1) + '" fill="var(--acc)" opacity=".75"/>').join('');
+  const hits = ser.map(([d, v, t], i) => '<rect x="' + (i * w).toFixed(1) + '" y="0" width="' + w.toFixed(1) + '" height="' + H + '" fill="transparent" rx="2"' + tip(fd(d) + ' \u00b7 ' + v + ' new \u00b7 ' + t + ' total users') + '/>').join('');
+  const line = '<polyline vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="2" points="' + ser.map(([, , t], i) => ((i + 0.5) * w).toFixed(1) + ',' + (H - 4 - t / mxT * (H - 14)).toFixed(1)).join(' ') + '"/>';
+  const ticks = [0, Math.round((n - 1) / 3), Math.round((n - 1) * 2 / 3), n - 1].map(i => '<span style="position:absolute;left:' + ((i + 0.5) / n * 100) + '%;transform:translateX(-' + (i === 0 ? 0 : i === n - 1 ? 100 : 50) + '%)">' + esc(fd(ser[i][0])) + '</span>').join('');
+  const row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b>' + v + '</b></div>';
+  // plan mix: excludes the admin account; early free-for-life users are shown separately from comped
+  const segs = [['Trial', sb.trialing, 'var(--acc)'], ['Subscribed \u00b7 monthly', sb.monthly, 'var(--ok)'], ['Subscribed \u00b7 yearly', sb.yearly, '#2f9e6e'], ['Subscribed \u00b7 other', sb.otherPaid, '#7bc8a4'], ['Comped', sb.comped, '#b07cf0'], ['Early users (free for life)', sb.legacy, '#e0a43a'], ['Trial ended', sb.expired, '#999'], ['Billing off', sb.billingOff, '#666']].filter(x => x[1] > 0);
+  const base = segs.reduce((a, x) => a + x[1], 0), raw = segs.map(x => base ? x[1] / base * 100 : 0), pc = raw.map(Math.floor);
+  raw.map((v, i) => [v - pc[i], i]).sort((a, b) => b[0] - a[0]).slice(0, base ? 100 - pc.reduce((a, b) => a + b, 0) : 0).forEach(([, i]) => pc[i]++);
+  const subT = sb.monthly + sb.yearly + sb.otherPaid, P = v => base ? Math.round(v / base * 1000) / 10 + '%' : '0%';
+  const mix = base ? '<div style="display:flex;height:18px;border-radius:9px;overflow:hidden;margin:6px 0 12px">' + segs.map((x, i) => '<i style="flex:' + x[1] + ';background:' + x[2] + '"' + tip(x[0] + ' \u00b7 ' + x[1] + ' (' + pc[i] + '%)') + '></i>').join('') + '</div>'
+    + segs.map((x, i) => '<div class="subj-row"><span><span class="dot" style="background:' + x[2] + '"></span> ' + esc(x[0]) + '</span><b>' + pc[i] + '% <small class="muted">' + x[1] + '</small></b></div>').join('')
+    + '<p class="muted small">Groups: Trial ' + P(sb.trialing) + ' \u00b7 Subscribed ' + P(subT) + ' (' + sb.monthly + ' monthly, ' + sb.yearly + ' yearly) \u00b7 Comped incl. early users ' + P(sb.comped + sb.legacy) + '. Of ' + base + ' users; excludes admin.</p>' : '<p class="muted small">No non-admin users yet.</p>';
   return statCards([[s.total, 'Total users'], [s.newToday, 'New today'], [s.new7, 'New, 7 days'], [s.new30, 'New, 30 days']])
     + statCards([[s.activeStudy.d1, 'Studied, 24 h'], [s.activeStudy.d7, 'Studied, 7 days'], [s.activeStudy.d30, 'Studied, 30 days'], [s.signedIn, 'Signed in now']])
-    + `<div class="card"><h3>Signups, last ${n} days</h3><svg viewBox="0 0 700 150" preserveAspectRatio="none" style="width:100%;height:150px">${bars}</svg><div class="row muted small"><span>${esc(s.signups[0][0])}</span><span class="sp"></span><span>peak ${mx}/day</span><span class="sp"></span><span>${esc(s.signups[n - 1][0])}</span></div></div>
-    <div class="grid2"><div class="card"><h3>Subscriptions</h3>${row('Trialing', sb.trialing)}${row('Active monthly', sb.monthly)}${row('Active yearly', sb.yearly)}${sb.otherPaid ? row('Active, other plan', sb.otherPaid) : ''}${row('Comped', sb.comped)}${row('Early users (free for life)', sb.legacy)}${row('Trial ended, not subscribed', sb.expired)}${sb.billingOff ? row('Billing off', sb.billingOff) : ''}${row('Admin', sb.admin)}</div>
-    <div class="card"><h3>Engagement</h3>${row('Users who logged a session', s.studied)}${row('Sessions logged', s.sessions)}${row('Hours studied', s.studyHours)}${row('Registration', s.registrationOpen ? 'open' : 'closed')}<p class="muted small">Counts only. Updated ${esc(new Date(s.generated).toLocaleString())}.</p></div></div>`; };
+    + '<div class="card"><div class="row" style="margin:0 0 8px"><h3 style="margin:0">Users per day</h3><span class="sp"></span>' + [30, 60, 90].map(r => '<button class="btn small' + (r === rng ? ' primary' : '') + '" data-act="usrRange" data-r="' + r + '">' + r + 'd</button>').join(' ') + '</div>'
+    + '<div class="row muted small" style="margin:0 0 4px;gap:12px"><span><span class="dot" style="background:var(--acc)"></span> New signups (peak ' + mxB + '/day)</span><span><span class="dot" style="background:var(--ok)"></span> Total users (max ' + mxT + ')</span></div>'
+    + '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:180px;display:block;border-bottom:1px solid var(--line, rgba(128,128,128,.3))">' + bars + line + hits + '</svg>'
+    + '<div class="muted small" style="position:relative;height:18px;margin-top:4px">' + ticks + '</div>'
+    + '<p class="small" style="margin-top:8px"><b>+' + added + '</b> new users in the last ' + rng + ' days \u00b7 ' + start + ' \u2192 ' + end + ' total \u00b7 growth <b>' + growth + '</b></p></div>'
+    + '<div class="grid2"><div class="card"><h3>Plan mix</h3>' + mix + '</div>'
+    + '<div class="card"><h3>Engagement</h3>' + row('Users who logged a session', s.studied) + row('Sessions logged', s.sessions) + row('Hours studied', s.studyHours) + row('Registration', s.registrationOpen ? 'open' : 'closed') + '<p class="muted small">Counts only. Updated ' + esc(new Date(s.generated).toLocaleString()) + '.</p></div></div>'; };
+ACT.usrRange = b => { UI.usrRange = +b.dataset.r; render(); };
 async function adminHTML() {
   const [cfg, users, reps] = await Promise.all([api('/api/admin/config'), api('/api/admin/users'), api('/api/admin/reports')]), f = UI.repFilter || 'pending';
   const list = reps.filter(r => f === 'all' || r.status === f).reverse();
