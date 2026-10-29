@@ -23,9 +23,9 @@ const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const STATIC = { '/': 'index.html', '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png', '/shot-dashboard.webp': 'shot-dashboard.webp', '/shot-stats.webp': 'shot-stats.webp' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
-  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
+  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
 // ---- SEO: per-page head for /pricing (same SPA shell), robots.txt, sitemap.xml
 const SITE = 'https://studyhertz.com';
 const PRICING_DESC = 'StudyHertz pricing: every account starts with a 30-day free trial, no card required. Then US$4.99 per month or US$39 per year. Cancel anytime.';
@@ -237,7 +237,7 @@ function createApp(opts = {}) {
   }
   function serveStatic(req, res, p) {
     const a = asset(p), ext = path.extname(STATIC[p]);
-    const cc = p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : ['.png', '.svg'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
+    const cc = p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : ['.png', '.svg', '.webp'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
     const hd = { 'Content-Type': a.type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'Cache-Control': cc, ETag: a.etag, Vary: 'Accept-Encoding', ...(p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {}) };
     if (req.headers['if-none-match'] === a.etag) { res.writeHead(304, hd); return res.end(); }
     const ae = String(req.headers['accept-encoding'] || ''), body = a.br && /\bbr\b/.test(ae) ? (hd['Content-Encoding'] = 'br', a.br) : a.gz && /\bgzip\b/.test(ae) ? (hd['Content-Encoding'] = 'gzip', a.gz) : a.buf;

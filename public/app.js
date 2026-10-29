@@ -87,7 +87,7 @@ async function boot() {
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
 }
 // clickwrap: account creation stays disabled until the box is checked and a birth year is entered
-function syncAgree() { const reg = authMode !== 'login'; $('aSubmit').disabled = reg && !($('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())); }
+function syncAgree() { $('aSubmit').disabled = false; if (authMode !== 'login' && $('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())) $('aErr').textContent = ''; }
 $('aAgree').onchange = syncAgree; $('aBirth').oninput = syncAgree;
 // blocking re-acceptance when the Terms version changes
 function termsGate(t) {
@@ -145,14 +145,18 @@ async function showAuth(me) {
   if (me.needsSetup) authMode = 'setup';
   const reg = authMode !== 'login';
   $('authMsg').textContent = authMode === 'setup' ? 'Create the admin account to get started' : reg ? 'Create an account' : 'Sign in to continue';
-  $('aSubmit').textContent = reg ? 'Create account' : 'Sign in'; $('aPass').autocomplete = reg ? 'new-password' : 'current-password';
+  $('aSubmit').textContent = reg ? 'Create account' : 'Sign in'; $('aPass').autocomplete = reg ? 'new-password' : 'current-password'; $('aPass').placeholder = reg ? 'Password (8+ characters)' : 'Password'; $('aUser').placeholder = reg ? 'Choose a username' : 'Username';
   $('aToggle').classList.toggle('hid', authMode === 'setup' || (!reg && !me.registrationOpen));
   $('aToggle').textContent = reg ? 'Have an account? Sign in' : 'New here? Create an account'; $('aErr').textContent = oauthErr; oauthErr = '';
   const ob = $('oauthBtns'), list = (me.oauth || []).filter(() => authMode !== 'setup'); ob.classList.toggle('hid', !list.length);
-  ob.querySelectorAll('a').forEach(a => a.remove()); for (const o of list) { const a = document.createElement('a'); a.className = 'btn ghost oauth-btn'; a.href = '/api/oauth/' + o.id + '/start'; a.dataset.oauth = o.id; a.textContent = 'Continue with ' + o.label; ob.appendChild(a); }
+  // sign-up: provider buttons go first and are prominent; sign-in keeps them below the form
+  const top = $('oauthTop'), upFront = reg && authMode !== 'setup' && authMode !== 'oauth' && list.length; top.classList.toggle('hid', !upFront); ob.classList.toggle('hid', !list.length || !!upFront);
+  ob.querySelectorAll('a').forEach(a => a.remove()); top.textContent = '';
+  for (const o of list) { const a = document.createElement('a'); a.className = 'btn oauth-btn ' + (upFront ? 'primary' : 'ghost') + ' oa-' + o.id; a.href = '/api/oauth/' + o.id + '/start'; a.dataset.oauth = o.id; a.textContent = 'Continue with ' + o.label; (upFront ? top : ob).appendChild(a); }
+  if (upFront) { const p = document.createElement('p'); p.className = 'muted small or'; p.textContent = 'or create a username'; top.appendChild(p); }
   const oa = authMode === 'oauth'; document.querySelectorAll('#authForm .reg-only').forEach(e => e.classList.toggle('hid', !reg));
   $('aUser').classList.toggle('hid', oa); $('aPass').classList.toggle('hid', oa); $('aUser').required = $('aPass').required = !oa;
-  if (oa) { ob.classList.add('hid'); $('aToggle').classList.add('hid'); $('aBack').classList.add('hid'); $('authMsg').textContent = 'Finish creating your account' + (oauthProvider ? ' with ' + oauthProvider : ''); }
+  if (oa) { ob.classList.add('hid'); $('oauthTop').classList.add('hid'); $('aToggle').classList.add('hid'); $('aBack').classList.add('hid'); $('authMsg').textContent = 'Finish creating your account' + (oauthProvider ? ' with ' + oauthProvider : ''); }
   $('aAgree').checked = false; syncAgree();
 }
 document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
@@ -160,6 +164,7 @@ $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth()
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
+  if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
     const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? legal : { ...cred, ...legal }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'oauth') : 'password'; track('sign_up', { method: m }); track('begin_trial', { method: m }); } else if (authMode === 'login') track('login', { method: 'password' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }

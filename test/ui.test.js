@@ -71,3 +71,10 @@ test('Google consent mode (advanced): tag on every page, denied by default befor
   assert.match(h, /data-cookie-settings/); assert.match(p, /data-cookie-settings/); assert.match(p, /cookieless measurement pings/);
   assert.match(js, /SHConsent\?\.signup\(\)/);
 });
+
+test('MCAT landing hero: trial CTA above the fold and lazy real screenshots that are served', () => {
+  const h = pub('index.html'), srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(h, /<h1>Track every MCAT study hour<\/h1>/); assert.match(h, /id="heroCta">Start free 30-day trial</);
+  for (const f of ['shot-dashboard.webp', 'shot-stats.webp']) { assert.match(h, new RegExp('src="/' + f + '"[^>]*loading="lazy"')); assert.ok(srv.includes("'/" + f + "': '" + f + "'"), f); assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', f)), f); }
+  assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
+});
