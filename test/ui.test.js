@@ -72,9 +72,9 @@ test('Google consent mode (advanced): tag on every page, denied by default befor
   assert.match(js, /SHConsent\?\.signup\(\)/);
 });
 
-test('MCAT landing hero: trial CTA above the fold and lazy real screenshots that are served', () => {
+test('MCAT landing hero: trial CTA above the fold and inert HTML previews with sample data', () => {
   const h = pub('index.html'), srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(h, /<h1>Track every MCAT study hour<\/h1>/); assert.match(h, /id="heroCta">Start free 30-day trial</);
-  for (const f of ['shot-dashboard.webp', 'shot-stats.webp']) { assert.match(h, new RegExp('src="/' + f + '"[^>]*loading="lazy"')); assert.ok(srv.includes("'/" + f + "': '" + f + "'"), f); assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', f)), f); }
-  assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
+  assert.equal((h.match(/class="pv" role="img" aria-label="Preview/g) || []).length, 2); assert.match(h, /not real user data/);
+  assert.ok(!/shot-[a-z]+\.webp/.test(h + srv), 'no webp screenshots left'); assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
 });
