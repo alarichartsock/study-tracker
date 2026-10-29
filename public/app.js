@@ -1,4 +1,9 @@
 'use strict';
+window.SH_LANDING = window.SH_LANDING || location.href; // original URL (UTM/gclid) before replaceState strips the query
+// GA4 events: queued until consent.js loads; consent.js drops PII and never throws
+const track = (n, p) => { try { if (window.SHConsent && SHConsent.track) SHConsent.track(n, p); else (window.SHQ = window.SHQ || []).push([n, p]); } catch { /* never break the app */ } };
+const STD_SUBJ = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'], subjParam = s => STD_SUBJ.includes(s) ? s : 'custom';
+const PLAN_VALUE = { monthly: 4.99, yearly: 39 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const tip = (t, focus = true) => ' data-tip="' + esc(t) + '" aria-label="' + esc(t) + '"' + (focus ? ' tabindex="0"' : '');
@@ -61,7 +66,8 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 // ---------- auth ----------
 let oauthErr = '', oauthPending = false, oauthProvider = '';
 let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
-{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); } oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
+{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'oauth'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('begin_trial', { method: m }); } }
+{ const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 fetch('/api/public-config').then(r => r.json()).then(c => { if (!c || !c.billing) return; $('pricing')?.classList.remove('hid'); $('pricingLink')?.classList.remove('hid');
   if (location.pathname === '/pricing') setTimeout(() => $('pricing')?.scrollIntoView({ block: 'start' }), 50); }).catch(() => {});
 async function boot() {
@@ -71,6 +77,7 @@ async function boot() {
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
+  if (sessionStorage.shOauthLogin) { track('login', { method: sessionStorage.shOauthLogin }); sessionStorage.shOauthLogin = sessionStorage.shOauth = ''; }
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
@@ -105,7 +112,7 @@ function billBar() {
   el.innerHTML = html; el.classList.toggle('hid', !html);
 }
 function showPaywall(blocked) {
-  if (!BILL.enabled) return; sessionStorage.paywallSeen = '1';
+  if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked });
   let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
   const over = BILL.readOnly;
   g.innerHTML = `<div class="glass sheet auth-card paywall" role="dialog" aria-modal="true" aria-labelledby="pwH"><div class="brand big"><img src="/favicon.svg" alt=""> <span>StudyHertz</span></div>
@@ -119,7 +126,8 @@ function showPaywall(blocked) {
 }
 async function billingDone() {
   for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed) break; await new Promise(r => setTimeout(r, 2000)); }
-  if (BILL.conversion) { try { window.SHConsent?.purchase(BILL.conversion); } catch { /* ignore */ } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
+  if (BILL.conversion) { try { window.SHConsent?.purchase(BILL.conversion); } catch { /* ignore */ }
+    { const pl = (BILL.subscription && BILL.subscription.plan) || null; if (pl && !localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')]) { localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')] = '1'; track('subscribe', { plan: pl, value: PLAN_VALUE[pl], currency: 'USD' }); } } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
   billBar(); toast(BILL.subscribed ? 'Thanks! Your subscription is active.' : 'Payment received. Your subscription will activate in a moment.'); if (view === 'set') render();
 }
 function billingCard() {
@@ -153,7 +161,7 @@ $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
-    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? legal : { ...cred, ...legal }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); } boot(); }
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? legal : { ...cred, ...legal }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'oauth') : 'password'; track('sign_up', { method: m }); track('begin_trial', { method: m }); } else if (authMode === 'login') track('login', { method: 'password' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
@@ -162,11 +170,15 @@ function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.a
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
-function go(v) { if (v === 'users' && !(ME && ME.admin)) v = 'timer'; view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
+function go(v) { if (v === 'users' && !(ME && ME.admin)) v = 'timer';
+  if (v !== view || !go.sent) { go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
+  view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
 async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
+document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href^="/api/export"], a[data-oauth]'); if (!a) return;
+  if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
 async function render() { if (!S) return; if (view !== 'admin' && view !== 'mcat') markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
@@ -233,7 +245,7 @@ ACT.start = async () => {
   const f = tFields(), mode = UI.mode, body = { ...f, mode }; localStorage.activity = f.activity;
   if (mode === 'countdown') body.targetSec = UI.target * 60;
   if (mode === 'pomodoro') { body.targetSec = S.settings.pomodoro.focusMin * 60; UI.pomo = { cycle: (UI.pomo?.cycle || 0) % S.settings.pomodoro.cycles + 1, phase: 'focus' }; savePomo(); }
-  await api('/api/timer/start', 'POST', body); keepAwake(true); await refresh();
+  await api('/api/timer/start', 'POST', body); track('study_session_start', { mode, subject: subjParam(sel) }); keepAwake(true); await refresh();
 };
 ACT.pause = async () => { await api('/api/timer/pause', 'POST'); await refresh(); };
 ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); await refresh(); };
@@ -246,6 +258,7 @@ ACT.stop = async () => { const f = tFields(), a = S.active; if (!a) return;
   async (v, fm) => {
     if (v === 'discard') { if (!confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await finish(); await refresh(); return toast('Session discarded'); }
     const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
+    if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: 'timer' });
     await finish(); await refresh(); checkAchievements(); if (r.session) toast(`Saved ${fmtH(dur(r.session))} of ${r.session.subject}`); });
 };
 async function afterSave(s) { await refresh(); checkAchievements(); if (!s) return toast('Too short to save (<30s)'); toast(`Saved ${fmtH(dur(s))} of ${s.subject}`, 'Rate it', () => rateSession(s)); }
@@ -256,6 +269,7 @@ function rateSession(s) {
 }
 async function finishTarget() {
   const a = S.active, f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: a.subject });
+  if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: a.mode || 'timer' });
   if (a.mode === 'pomodoro') {
     const pc = S.settings.pomodoro, long = (UI.pomo?.cycle || 1) >= pc.cycles, len = (long ? pc.longMin : pc.shortMin) * 60;
     UI.pomo = { cycle: long ? 0 : UI.pomo?.cycle || 1, phase: 'break', long, len, until: Date.now() + len * 1000 }; savePomo();
@@ -385,7 +399,7 @@ function editSession(s, preset = {}) {
     if (v === 'del') { const r = await api('/api/sessions/' + s.id, 'DELETE'); await refresh(); return undoToast('Session deleted', [r.removed]); }
     const a = new Date(f.date.value + 'T' + f.start.value), b = new Date(f.date.value + 'T' + f.end.value); if (b <= a) b.setDate(b.getDate() + 1);
     const body = { subject: f.subject.value, activity: f.activity.value, note: f.note.value, start: a.toISOString(), end: b.toISOString(), breakSec: (+f.brk.value || 0) * 60, focus: +f.focus.value || null, progress: +f.progress.value || null };
-    if (!s) localStorage.activity = body.activity; await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); toast('Saved'); refresh(); checkAchievements();
+    if (!s) localStorage.activity = body.activity; await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); if (!s) track('study_session_log', { duration_min: Math.round(dur(body) / 60), subject: subjParam(body.subject), source: 'manual' }); toast('Saved'); refresh(); checkAchievements();
   });
 }
 dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), st = new Date(+e - b.dataset.m * 60e3); f.date.value = dk(st); f.start.value = st.toTimeString().slice(0, 5); f.end.value = e.toTimeString().slice(0, 5); };
@@ -418,7 +432,7 @@ ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventLi
     <div class="cal-todos mt"><h4>To-dos due this day</h4>${S.tasks.filter(t => t.due === k).sort((a, b) => a.done - b.done || a.id - b.id).map(t => `<label class="todo-it${t.done ? ' done' : ''}"><input type="checkbox" class="chk" data-dact="calTk" data-id="${t.id}" ${t.done ? 'checked' : ''}><span class="todo-t">${esc(t.title)}</span>${t.subject ? `<span class="dot" style="background:${color(t.subject)}"></span>` : ''}</label>`).join('') || '<p class="muted small">None yet.</p>'}
       <div class="cal-add"><input name="tdText" placeholder="Add a to-do for this day..." maxlength="200" aria-label="New to-do"><select name="tdSubj" aria-label="Subject">${opt(S.subjects, '', 'Subject')}</select><button class="btn primary" value="addTodo">+ Add to-do</button></div></div>
     <div class="row"><button class="btn" value="addPast">+ Add session</button><span class="sp"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save plan</button></div>`,
-  async (v, f) => { if (v === 'addTodo') { const t = f.tdText.value.trim(); if (t) { await api('/api/tasks', 'POST', { title: t, due: k, subject: f.tdSubj.value }); toast('To-do added'); } await refresh(); return ACT.calDay(b); }
+  async (v, f) => { if (v === 'addTodo') { const t = f.tdText.value.trim(); if (t) { await api('/api/tasks', 'POST', { title: t, due: k, subject: f.tdSubj.value }); track('todo_created', { source: 'calendar' }); toast('To-do added'); } await refresh(); return ACT.calDay(b); }
     if (v === 'addPast') { const d = k2d(k); d.setHours(9); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
     await api('/api/plan', 'POST', { date: k, minutes: f.plan.value === '' ? null : Math.round(+f.plan.value * 60) }); refresh(); }); };
 
@@ -481,12 +495,12 @@ VIEWS.plan = () => {
     <div class="list mt">${tasks.map(t => `<div class="item"><input type="checkbox" class="chk" data-chg="taskDone" data-id="${t.id}" ${t.done ? 'checked' : ''}><div class="grow"><div style="${t.done ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(t.title)}</div><div class="n">${t.due ? (t.due < ST.todayKey && !t.done ? '<span class="pill high">overdue</span> ' : '') + fmtDate(k2d(t.due), { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date'}${t.subject ? ' · ' + esc(t.subject) : ''} ${t.priority !== 'normal' ? `<span class="pill ${t.priority}">${t.priority}</span>` : ''}</div></div><button class="icon" data-act="taskDel" data-id="${t.id}" title="Delete">✕</button></div>`).join('') || '<p class="muted small">Nothing here.</p>'}</div></div>`;
 };
 ACT.taskView = b => { UI.taskView = b.dataset.v; render(); };
-ACT.taskAdd = async () => { const t = $('nTask').value.trim(); if (!t) return; await api('/api/tasks', 'POST', { title: t, due: $('nDue').value, priority: $('nPri').value, subject: $('nTS').value }); refresh(); };
+ACT.taskAdd = async () => { const t = $('nTask').value.trim(); if (!t) return; await api('/api/tasks', 'POST', { title: t, due: $('nDue').value, priority: $('nPri').value, subject: $('nTS').value }); track('todo_created', { source: 'plan' }); refresh(); };
 ACT.taskDel = async b => { await api('/api/tasks/' + b.dataset.id, 'DELETE'); refresh(); };
 ACT.examEdit = b => { const e = b.dataset.id ? S.exams.find(x => x.id === +b.dataset.id) : null;
   dialog(`<h3>${e ? 'Edit exam' : 'Add exam'}</h3><label>Name</label><input name="name" value="${esc(e?.name || 'MCAT')}" required><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ''}" required></div><div><label>Score (472\u2013528)</label><input type="number" name="grade" min="472" max="528" step="1" inputmode="numeric" value="${e ? e.grade ?? '' : 500}"></div></div><label>Notes</label><input name="notes" value="${esc(e?.notes || '')}">
     <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
-  async (v, f) => { if (v === 'del') await api('/api/exams/' + e.id, 'DELETE'); else await api(e ? '/api/exams/' + e.id : '/api/exams', e ? 'PUT' : 'POST', { name: f.name.value, date: f.date.value, grade: f.grade.value, notes: f.notes.value }); refresh(); }); };
+  async (v, f) => { if (v === 'del') await api('/api/exams/' + e.id, 'DELETE'); else { await api(e ? '/api/exams/' + e.id : '/api/exams', e ? 'PUT' : 'POST', { name: f.name.value, date: f.date.value, grade: f.grade.value, notes: f.notes.value }); if (!e) track('exam_created', { is_mcat: /mcat/i.test(f.name.value) }); } refresh(); }); };
 
 // ================= TROPHIES =================
 let ACH = null;
@@ -554,7 +568,7 @@ const achQ = []; let achBusy = false, achT = 0;
 function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }
 async function checkAchievements() { if (!ME) return; try { const r = await api('/api/achievements/new'); if (!r.new || !r.new.length) return;
   api('/api/achievements/seen', 'POST', { ids: r.new.map(a => a.id) }).catch(() => {});
-  for (const a of r.new) { achQ.push(a); achSystem(a); } achNext(); } catch { /* ignore */ } }
+  for (const a of r.new) { achQ.push(a); achSystem(a); track('trophy_earned', { achievement_id: String(a.id) }); } achNext(); } catch { /* ignore */ } }
 const achNotifOn = () => localStorage.achNotif !== 'off';
 async function achSystem(a) { // system notification only when the tab is in the background (the in-app card covers the foreground)
   if (!achNotifOn() || !document.hidden || !window.isSecureContext || !('Notification' in window) || Notification.permission !== 'granted') return;
@@ -584,8 +598,8 @@ VIEWS.data = () => `<div class="card"><h3>Import CSV</h3><p class="muted small">
     <label class="btn" style="margin:0">Restore JSON backup<input type="file" accept=".json,application/json" class="hid" data-chg="jsonImport"></label></div>
     <p class="muted small">Restoring merges and never deletes; sessions already present are skipped.</p></div>`;
 ACT.csvImport = async () => { const f = $('csvFile').files[0]; if (!f) return toast('Choose a CSV file'); const map = {}; ['date', 'start', 'end', 'duration', 'subject', 'note'].forEach(k => { const v = $('m_' + k).value.trim(); if (v) map[k] = v; });
-  const r = await api('/api/import', 'POST', { csv: await f.text(), map }); $('csvRes').textContent = `Imported ${r.added}, skipped ${r.skipped}.\nDetected columns: ${JSON.stringify(r.columns)}`; await load(); };
-ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
+  const r = await api('/api/import', 'POST', { csv: await f.text(), map }); track('data_import', { format: 'csv', rows: r.added }); $('csvRes').textContent = `Imported ${r.added}, skipped ${r.skipped}.\nDetected columns: ${JSON.stringify(r.columns)}`; await load(); };
+ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); track('data_import', { format: 'json', rows: r.added }); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
 
 // ================= SETTINGS =================
 VIEWS.set = async () => {
@@ -663,12 +677,13 @@ ACT.theme = b => { document.documentElement.dataset.theme = localStorage.theme =
 ACT.saveAccent = async () => { await api('/api/settings', 'POST', { accent: $('sAccent').value }); await refresh(); };
 ACT.resetAccent = async () => { await api('/api/settings', 'POST', { accent: '' }); await refresh(); };
 const hrs = id => Math.round((+$(id).value || 0) * 60);
-ACT.saveGoals = async () => { await api('/api/settings', 'POST', { goals: { dailyMin: hrs('gD'), weekendDailyMin: $('gWE').value === '' ? null : hrs('gWE'), weeklyMin: hrs('gW'), monthlyMin: hrs('gM'), termMin: hrs('gT') }, dayStartHour: +$('gDS').value || 0, term: { name: $('tN').value, start: $('tS').value, end: $('tE').value } }); toast('Goals saved'); refresh(); };
+const STD_SRC = s => /aamc/i.test(s) ? 'aamc' : /blueprint|next ?step/i.test(s) ? 'blueprint' : /uworld/i.test(s) ? 'uworld' : /kaplan/i.test(s) ? 'kaplan' : /princeton|tpr/i.test(s) ? 'princeton_review' : /altius/i.test(s) ? 'altius' : s ? 'other' : 'none';
+ACT.saveGoals = async () => { track('goal_created', { goal_type: 'time' }); await api('/api/settings', 'POST', { goals: { dailyMin: hrs('gD'), weekendDailyMin: $('gWE').value === '' ? null : hrs('gWE'), weeklyMin: hrs('gW'), monthlyMin: hrs('gM'), termMin: hrs('gT') }, dayStartHour: +$('gDS').value || 0, term: { name: $('tN').value, start: $('tS').value, end: $('tE').value } }); toast('Goals saved'); refresh(); };
 ACT.saveTimer = async () => { await api('/api/settings', 'POST', { pomodoro: { focusMin: +$('pF').value, shortMin: +$('pS').value, longMin: +$('pL').value, cycles: +$('pC').value, autoStart: $('pA').checked }, quickDurations: $('qD').value.split(/[ ,]+/).filter(Boolean).map(Number) }); toast('Timer saved'); refresh(); };
 ACT.saveMedals = async () => { const medals = {}; MEDAL_ORDER.forEach(m => (medals[m] = hrs('md_' + m))); await api('/api/settings', 'POST', { medals }); toast('Medals saved'); refresh(); };
 const subjOf = b => b.closest('[data-subj]').dataset.subj;
 ACT.subjColor = async b => { await api('/api/subjects', 'PUT', { name: subjOf(b), color: b.value }); await load(); };
-ACT.subjGoal = async b => { await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: Math.round((+b.value || 0) * 60) }); toast('Weekly subject goal saved'); await load(); };
+ACT.subjGoal = async b => { if (+b.value > 0) track('goal_created', { goal_type: 'subject_weekly' }); await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: Math.round((+b.value || 0) * 60) }); toast('Weekly subject goal saved'); await load(); };
 ACT.subjRename = async b => { const n = subjOf(b), nn = prompt('Rename subject (past sessions are renamed too):', n); if (nn && nn.trim() && nn !== n) { await api('/api/subjects', 'PUT', { name: n, rename: nn.trim() }); if (sel === n) sel = nn.trim(); refresh(); } };
 ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); refresh(); } };
 ACT.addSubj = async () => { const n = $('newSubj').value.trim(); if (n) { await api('/api/subjects', 'POST', { name: n }); refresh(); } };
@@ -694,7 +709,7 @@ ACT.bugSend = async () => { await api('/api/reports', 'POST', { title: $('bgT').
 ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistration: b.checked }); toast(b.checked ? 'Registration open' : 'Registration closed'); };
 ACT.paywall = () => showPaywall();
 ACT.paywallClose = () => { $('paywall')?.remove(); };
-ACT.subscribe = async b => { b.disabled = true; try { const r = await api('/api/billing/checkout', 'POST', { plan: b.dataset.plan }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
+ACT.subscribe = async b => { b.disabled = true; track('begin_checkout', { plan: b.dataset.plan, value: PLAN_VALUE[b.dataset.plan], currency: 'USD' }); try { const r = await api('/api/billing/checkout', 'POST', { plan: b.dataset.plan }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
 ACT.billPortal = async b => { b.disabled = true; try { location.href = (await api('/api/billing/portal', 'POST', {})).url; } catch (e) { b.disabled = false; toast(e.message); } };
 ACT.comp = async b => { await api('/api/admin/users/' + b.dataset.id + '/comp', 'POST', { comp: b.checked }); toast(b.checked ? 'User comped' : 'Comp removed'); };
 ACT.repFilter = b => { UI.repFilter = b.dataset.f; render(); };
@@ -760,7 +775,8 @@ function tourPlace() { if (!tourS) return; const { el, tgt } = tourS, h = el.que
   c.style.left = Math.round(x) + 'px'; c.style.top = Math.round(y) + 'px'; }
 async function tourEnd(saveSetup) { const S0 = tourS; if (!S0) return; tourS = null;
   if (saveSetup) { const wk = $('tourWk')?.value, d = $('tourMcat')?.value;
-    try { if (wk !== '' && wk != null && +wk >= 0) await api('/api/settings', 'POST', { goals: { weeklyMin: Math.round(+wk * 60) } });
+    track('tour_complete', { set_weekly_goal: wk !== '' && wk != null, set_mcat_date: !!d });
+    try { if (wk !== '' && wk != null && +wk >= 0) { await api('/api/settings', 'POST', { goals: { weeklyMin: Math.round(+wk * 60) } }); track('goal_created', { goal_type: 'weekly_onboarding' }); }
       if (d) { const mc = (S.exams || []).find(e => /mcat/i.test(e.name) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : 'MCAT', date: d }); } } catch (e) { toast(e.message); } }
   S0.el.classList.add('out'); setTimeout(() => S0.el.remove(), reduceMotion() ? 0 : 200);
   document.removeEventListener('keydown', tourKey); removeEventListener('resize', tourPlace); removeEventListener('scroll', tourPlace, true); removeEventListener('scrollend', tourPlace, true);
@@ -857,14 +873,14 @@ VIEWS.mcat = () => {
 ACT.pxGoal = () => { const g = S.settings.mcatGoal ?? '';
   dialog(`<h3>Goal score</h3><label>Target MCAT total (472\u2013528)</label><input type="number" name="goal" min="472" max="528" step="1" value="${g}" placeholder="e.g. 515">
     <div class="row"><span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
-  async (v, f) => { await api('/api/practice-goal', 'POST', { goal: f.goal.value }); refresh(); }); };
+  async (v, f) => { await api('/api/practice-goal', 'POST', { goal: f.goal.value }); track('goal_created', { goal_type: 'mcat_score' }); refresh(); }); };
 ACT.pxEdit = b => { const e = b.dataset.id ? (S.practice || []).find(x => x.id === +b.dataset.id) : null;
   const sec = MCAT.SECTIONS.map(([k, l]) => `<div><label>${l}</label><input type="number" name="${k}" min="118" max="132" step="1" inputmode="numeric" value="${e?.[k] ?? ''}" required></div>`).join('');
   dialog(`<h3>${e ? 'Edit practice exam' : 'Add practice exam'}</h3><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ST.todayKey}" required></div><div><label>Source</label><input name="source" list="pxSrc" maxlength="80" value="${esc(e?.source || '')}" placeholder="AAMC FL1, Blueprint 2..." required></div></div>
     <datalist id="pxSrc">${['AAMC Sample', 'AAMC FL1', 'AAMC FL2', 'AAMC FL3', 'AAMC FL4', 'AAMC FL5', 'AAMC FL6', 'Blueprint', 'Kaplan', 'Princeton Review', 'Altius', 'Jack Westin'].map(s => `<option value="${s}">`).join('')}</datalist>
     <div class="px-form">${sec}</div><p class="muted small" id="pxTot">Total: ${e ? e.total + ' (' + MCAT.fmtPct(MCAT.pctTotal(e.total)) + 'th percentile)' : '\u2013'}</p><label>Notes</label><input name="notes" maxlength="1000" value="${esc(e?.notes || '')}">
     <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
-  async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; MCAT.SECTIONS.forEach(([k]) => { body[k] = f[k].value; }); await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); } refresh(); });
+  async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; MCAT.SECTIONS.forEach(([k]) => { body[k] = f[k].value; }); await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); if (!e) track('mcat_exam_logged', { source: STD_SRC(body.source) }); } refresh(); });
   const f = $('dlgForm'); f.oninput = () => { const vs = MCAT.SECTIONS.map(([k]) => +f[k].value), ok = vs.every(v => Number.isInteger(v) && v >= 118 && v <= 132), t = vs.reduce((a, b) => a + b, 0); $('pxTot').textContent = 'Total: ' + (ok ? t + ' (' + MCAT.fmtPct(MCAT.pctTotal(t)) + 'th percentile)' : '\u2013'); }; };
 
 function pxHomeCard() { const P = MCAT.summary(S.practice || []), goal = S.settings.mcatGoal ?? null;
@@ -894,6 +910,6 @@ function todoFit() { const L = $('todoList'), M = $('todoMore'); if (!L || !M) r
   const n = hid + later; M.hidden = !n; M.innerHTML = n ? `+${n} more \u00b7 <a href="#" class="link" data-act="todoAll">see all</a>` : ''; }
 addEventListener('resize', () => { if (view === 'dash') todoFit(); });
 ACT.todoAll = () => { UI.taskView = 'scheduled'; go('plan'); };
-ACT.todoAdd = async () => { const t = $('tdT').value.trim(); if (!t) return $('tdT').focus(); await api('/api/tasks', 'POST', { title: t, due: $('tdD').value, subject: $('tdS').value }); toast('To-do added'); await refresh(); $('tdT')?.focus(); };
+ACT.todoAdd = async () => { const t = $('tdT').value.trim(); if (!t) return $('tdT').focus(); await api('/api/tasks', 'POST', { title: t, due: $('tdD').value, subject: $('tdS').value }); track('todo_created', { source: 'dashboard' }); toast('To-do added'); await refresh(); $('tdT')?.focus(); };
 ACT.todoKey = (b, e) => { b.onkeydown ||= ev => { if (ev.key === 'Enter') { ev.preventDefault(); ACT.todoAdd(); } }; };
 ACT.todoChk = async b => { const row = b.closest('.todo-it'); if (b.checked && row) { row.classList.add('done'); await new Promise(r => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420)); } return ACT.taskDone(b); };

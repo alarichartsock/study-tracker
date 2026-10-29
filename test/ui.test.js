@@ -58,7 +58,9 @@ test('data room table: header cell count matches data row cell count', () => {
 test('Google consent mode (advanced): tag on every page, denied by default before config', () => {
   const c = pub('consent.js'), h = pub('index.html'), p = pub('privacy.html'), js = pub('app.js');
   assert.match(c, /AW-18541546430/);
-  const def = c.indexOf("gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied', wait_for_update: 500 })"), conf = c.indexOf("gtag('config', ADS_ID)"), ga = c.indexOf("gtag('config', c.gaId)");
+  const def = c.indexOf("gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied', wait_for_update: 500 })"), conf = c.indexOf("gtag('config', ADS_ID)"), ga = c.indexOf("gtag('config', c.gaId, { send_page_view: false })");
+  assert.match(c, /indexOf\('@'\) < 0/, 'PII guard drops values containing @'); assert.match(js, /window\.SH_LANDING = /, 'landing URL captured before replaceState');
+  assert.ok(js.indexOf('window.SH_LANDING') < js.indexOf('history.replaceState'), 'landing captured first');
   assert.ok(def > 0 && conf > def && ga > def, 'default consent is set before any config');
   assert.equal((c.match(/googletagmanager\.com\/gtag\/js/g) || []).length, 1, 'single shared loader');
   assert.match(c, /if \(get\(\) === 'granted'\) gtag\('consent', 'update', granted\(\)\)/, 'stored choice re-applied');

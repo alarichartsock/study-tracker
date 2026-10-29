@@ -20,10 +20,26 @@
   // 2) re-apply a stored choice
   if (get() === 'granted') gtag('consent', 'update', granted());
   // 3) one shared loader, then config for Ads and (if configured) GA4
+  // attribution: UTM + gclid from the original landing URL (app.js records it before replaceState strips the query)
+  var LANDING = window.SH_LANDING || location.href, AKEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid'], attr = {};
+  function sget(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
+  function sput(st, k, v) { try { st.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
+  try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, 100); any = true; } });
+    if (any) { sput(sessionStorage, 'shAttr', got); if (!sget(localStorage, 'shFirstTouch')) sput(localStorage, 'shFirstTouch', { ...got, ts: new Date().toISOString().slice(0, 10) }); }
+    attr = sget(sessionStorage, 'shAttr') || {}; } catch (e) { attr = {}; }
+  if (attr.utm_source || attr.utm_medium || attr.utm_campaign) gtag('set', { campaign_source: attr.utm_source, campaign_medium: attr.utm_medium, campaign_name: attr.utm_campaign, campaign_term: attr.utm_term, campaign_content: attr.utm_content });
+  var first = sget(localStorage, 'shFirstTouch') || {};
+  // drop anything that could be personal: non-primitive values, strings with '@', overly long text
+  function clean(p) { var o = {}; if (!p || typeof p !== 'object') return o; Object.keys(p).forEach(function (k) { var v = p[k];
+    if (typeof v === 'number' && isFinite(v)) o[k] = v; else if (typeof v === 'boolean') o[k] = v; else if (typeof v === 'string' && v.indexOf('@') < 0 && v.length <= 120) o[k] = v; }); return o; }
   var cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; (document.head || document.documentElement).appendChild(s);
   gtag('js', new Date()); gtag('config', ADS_ID);
-  cfg().then(function (c) { if (c && c.gaId) gtag('config', c.gaId); });
+  // GA4: page_views are sent manually (landing below, SPA routes from app.js), so the config sends none
+  cfg().then(function (c) { if (c && c.gaId) { gtag('config', c.gaId, { send_page_view: false }); gtag('event', 'page_view', { send_to: c.gaId, page_location: LANDING, page_path: location.pathname, page_title: document.title }); } });
+  function track(name, params) { try { if (typeof name !== 'string' || !/^[a-z_]{1,40}$/.test(name)) return;
+      var p = clean(params); var CMAP = { utm_source: 'campaign_source', utm_medium: 'campaign_medium', utm_campaign: 'campaign_name', utm_term: 'campaign_term', utm_content: 'campaign_content' }; Object.keys(CMAP).forEach(function (k) { if (attr[k]) p[CMAP[k]] = attr[k]; }); if (first.utm_source) p.first_source = first.utm_source; if (first.utm_campaign) p.first_campaign = first.utm_campaign;
+      p = clean(p); cfg().then(function (c) { try { if (c && c.gaId && typeof window.gtag === 'function') { p.send_to = c.gaId; window.gtag('event', name, p); } } catch (e) { /* ignore */ } }); } catch (e) { /* never throw */ } }
 
   function banner() {
     if (document.getElementById('consent')) return;
@@ -41,6 +57,7 @@
     state: get,
     open: function () { var b = document.getElementById('consent'); if (b) b.remove(); banner(); },
     choose: choose,
+    track: track,
     // conversions: consent mode decides whether they carry cookies or go out as cookieless pings
     purchase: function (p) {
       if (!p || !p.label) return;
@@ -50,6 +67,7 @@
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }
   };
+  try { (window.SHQ || []).splice(0).forEach(function (e) { track(e[0], e[1]); }); } catch (e) { /* ignore */ }
   function init() { var c = get(); if (c !== 'granted' && c !== 'denied') banner(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   document.addEventListener('click', function (e) { var t = e.target && e.target.closest && e.target.closest('[data-cookie-settings]'); if (t) { e.preventDefault(); window.SHConsent.open(); } });
