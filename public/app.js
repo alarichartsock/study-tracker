@@ -22,7 +22,7 @@ const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
 
 const BRAND = 'StudyHertz';
-const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', mcat: 'MCAT practice exams', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports' };
+const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', mcat: 'MCAT practice exams', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports', users: 'Users' };
 document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND)); document.title = BRAND;
 let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
@@ -72,6 +72,7 @@ async function boot() {
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
+  { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
   await load(); go(view);
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
@@ -161,7 +162,7 @@ function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.a
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
-function go(v) { view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
+function go(v) { if (v === 'users' && !(ME && ME.admin)) v = 'timer'; view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
 async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
@@ -618,6 +619,15 @@ VIEWS.set = async () => {
   ${billingCard()}
   ${ME.admin ? await adminHTML() : ''}`;
 };
+VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>';
+  const s = await api('/api/admin/stats'), sb = s.subscriptions, mx = Math.max(1, ...s.signups.map(x => x[1])), n = s.signups.length, w = 700 / n;
+  const bars = s.signups.map(([d, v], i) => `<rect x="${(i * w + 1).toFixed(1)}" y="${(150 - v / mx * 140).toFixed(1)}" width="${Math.max(1, w - 2).toFixed(1)}" height="${(v / mx * 140).toFixed(1)}" rx="2"${tip(d + ': ' + v + ' signup' + (v === 1 ? '' : 's'))} fill="var(--acc)"></rect>`).join('');
+  const row = (l, v) => `<div class="subj-row"><span>${l}</span><b>${v}</b></div>`;
+  return statCards([[s.total, 'Total users'], [s.newToday, 'New today'], [s.new7, 'New, 7 days'], [s.new30, 'New, 30 days']])
+    + statCards([[s.activeStudy.d1, 'Studied, 24 h'], [s.activeStudy.d7, 'Studied, 7 days'], [s.activeStudy.d30, 'Studied, 30 days'], [s.signedIn, 'Signed in now']])
+    + `<div class="card"><h3>Signups, last ${n} days</h3><svg viewBox="0 0 700 150" preserveAspectRatio="none" style="width:100%;height:150px">${bars}</svg><div class="row muted small"><span>${esc(s.signups[0][0])}</span><span class="sp"></span><span>peak ${mx}/day</span><span class="sp"></span><span>${esc(s.signups[n - 1][0])}</span></div></div>
+    <div class="grid2"><div class="card"><h3>Subscriptions</h3>${row('Trialing', sb.trialing)}${row('Active monthly', sb.monthly)}${row('Active yearly', sb.yearly)}${sb.otherPaid ? row('Active, other plan', sb.otherPaid) : ''}${row('Comped', sb.comped)}${row('Early users (free for life)', sb.legacy)}${row('Trial ended, not subscribed', sb.expired)}${sb.billingOff ? row('Billing off', sb.billingOff) : ''}${row('Admin', sb.admin)}</div>
+    <div class="card"><h3>Engagement</h3>${row('Users who logged a session', s.studied)}${row('Sessions logged', s.sessions)}${row('Hours studied', s.studyHours)}${row('Registration', s.registrationOpen ? 'open' : 'closed')}<p class="muted small">Counts only. Updated ${esc(new Date(s.generated).toLocaleString())}.</p></div></div>`; };
 async function adminHTML() {
   const [cfg, users, reps] = await Promise.all([api('/api/admin/config'), api('/api/admin/users'), api('/api/admin/reports')]), f = UI.repFilter || 'pending';
   const list = reps.filter(r => f === 'all' || r.status === f).reverse();
