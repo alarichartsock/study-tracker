@@ -173,6 +173,11 @@ async function showAuth(me) {
   if (oa) { ob.classList.add('hid'); $('oauthTop').classList.add('hid'); $('aToggle').classList.add('hid'); $('aBack').classList.add('hid'); $('authMsg').textContent = 'Finish creating your account' + (oauthProvider ? ' with ' + oauthProvider : ''); }
   $('aAgree').checked = false; syncAgree();
 }
+// landing: feature tour tabs (all panels are in the HTML; JS only switches) and CTA click events
+{ const tabs = [...document.querySelectorAll('.ltabs [data-tab]')], pick = (b, focus) => { tabs.forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); x.tabIndex = on ? 0 : -1; $('tp-' + x.dataset.tab)?.classList.toggle('on', on); }); if (focus) b.focus(); };
+  tabs.forEach((b, i) => { b.tabIndex = i ? -1 : 0; b.onclick = () => { pick(b); track('landing_tab', { tab: b.dataset.tab }); };
+    b.onkeydown = e => { const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (d) { e.preventDefault(); pick(tabs[(i + d + tabs.length) % tabs.length], true); } }; }); }
+document.querySelectorAll('[data-cta]').forEach(b => b.addEventListener('click', () => track('cta_click', { location: b.dataset.cta })));
 document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
 $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth(); };
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };

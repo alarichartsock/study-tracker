@@ -515,3 +515,36 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 .card.danger-zone{border:1px solid color-mix(in srgb,var(--danger) 55%,transparent)}.card.danger-zone h3{color:var(--danger)}
 
 html.authed #landing{display:none}
+
+/* landing v2: nav, tour tabs, how it works, MCAT sections, FAQ */
+.landing section[id]{scroll-margin-top:84px}
+.l-nav{display:flex;gap:4px;margin-left:18px}.l-nav a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;padding:8px 10px;border-radius:10px;white-space:nowrap}.l-nav a:hover,.l-nav a:focus-visible{color:var(--text);background:color-mix(in srgb,var(--text) 7%,transparent)}
+.hero-chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:16px 0 0}.hero-chips li{font-size:13px;color:var(--muted);padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 60%,transparent)}
+.hero-chips li::before{content:'\2713';color:var(--ok);font-weight:700;margin-right:6px}
+.landing .eyebrow{text-align:center;text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:700;color:var(--acc);margin:0 0 8px}
+.hero .eyebrow{text-align:left}
+.ltour,.how,.mcat-secs,.faq{padding:40px 0}.ltour h2,.how h2,.mcat-secs h2,.faq h2{font-size:clamp(26px,3.5vw,36px);letter-spacing:-.025em;text-align:center;margin:0 0 22px}
+.ltabs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:0 auto 18px;padding:5px;border-radius:999px;width:max-content;max-width:100%;background:color-mix(in srgb,var(--card) 70%,transparent);border:1px solid var(--line)}
+.ltabs button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;font-size:14px;padding:8px 14px;border-radius:999px;cursor:pointer}
+.ltabs button.on{background:var(--acc);color:#fff}.ltabs button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.tabpanels{max-width:760px;margin:0 auto}.js .tabpanel:not(.on){display:none}.tabpanel+.tabpanel{margin-top:16px}.js .tabpanel+.tabpanel{margin-top:0}
+.sec-cta{text-align:center;margin-top:22px}
+.pv-timer{text-align:center}.pv-modes{display:inline-flex;gap:4px;padding:3px;border-radius:999px;border:1px solid var(--line);font-size:12px}.pv-modes span{padding:4px 10px;border-radius:999px;color:var(--muted)}.pv-modes .on{background:var(--acc);color:#fff}
+.pv-clock{font-size:clamp(44px,8vw,64px);font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:10px 0 2px}.pv-pill{display:inline-block;margin-top:10px;padding:7px 22px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:14px}
+.pv-heat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.pv-heat i,.pv-legend i{display:block;aspect-ratio:1;border-radius:5px}.pv-legend{display:flex;align-items:center;gap:5px;justify-content:flex-end;margin-top:10px}.pv-legend i{width:12px}
+.pv-heat .h0,.pv-legend .h0{background:var(--h0)}.pv-heat .h1,.pv-legend .h1{background:var(--h1)}.pv-heat .h2,.pv-legend .h2{background:var(--h2)}.pv-heat .h3,.pv-legend .h3{background:var(--h3)}.pv-heat .h4,.pv-legend .h4{background:var(--h4)}
+.pv-trophies{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.pv-tro{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:12px 6px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:13px}.pv-tro small{color:var(--muted)}
+.medal-c{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff8,transparent 45%),#8a91a1;box-shadow:inset 0 -3px 6px #0004}.pv-tro.gold .medal-c{background-color:#e6b422}.pv-tro.silver .medal-c{background-color:#b8c0cc}.pv-tro.bronze .medal-c{background-color:#c27c3e}.pv-tro:not(.gold):not(.silver):not(.bronze){opacity:.6}
+.pv-line{width:100%;height:80px}.pv-path{fill:none;stroke:var(--acc);stroke-width:2.5;vector-effect:non-scaling-stroke}
+.pv-secs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}.pv-secs b{display:block;font-size:22px}.pv-secs span{font-size:12px;color:var(--muted)}
+.lsteps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;counter-reset:s}.lsteps li{margin:0}.lsteps b{display:block;font-size:17px;margin:12px 0 6px}.lsteps p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+.step-n{display:grid;place-content:center;width:36px;height:36px;border-radius:50%;background:color-mix(in srgb,var(--acc) 18%,transparent);color:var(--acc);font-weight:800}
+.sec-lead{text-align:center;max-width:620px;margin:-8px auto 22px}
+.sgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.sec-card{margin:0;border-top:3px solid var(--c)}.sec-card b{display:block;font-size:18px;margin:8px 0 2px}.sec-card small{display:block;font-size:12.5px;line-height:1.35}.sec-card p{margin:10px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
+.sec-dot{display:block;width:12px;height:12px;border-radius:50%;background:var(--c)}
+.faq-list{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:10px}.faq details{margin:0;padding:0}.faq summary{cursor:pointer;list-style:none;padding:16px 44px 16px 18px;font-weight:700;position:relative}.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:'+';position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:20px;color:var(--muted);transition:transform .2s}.faq details[open] summary::after{transform:translateY(-50%) rotate(45deg)}.faq details p{margin:0;padding:0 18px 16px;color:var(--muted);line-height:1.55}
+.final-cta{margin-top:24px}
+@media(max-width:960px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.l-nav{display:none}}
+@media(max-width:640px){.lsteps,.sgrid{grid-template-columns:1fr}.ltabs{width:auto;border-radius:18px}.ltabs button{padding:7px 11px;font-size:13px}.pv-trophies{grid-template-columns:repeat(2,minmax(0,1fr))}.sec-cta .btn{width:100%}}
+.l-top a.btn{color:var(--text);text-decoration:none}

@@ -72,9 +72,21 @@ test('Google consent mode (advanced): tag on every page, denied by default befor
   assert.match(js, /SHConsent\?\.signup\(\)/);
 });
 
+test('landing v2: tour tabs, how it works, MCAT sections, FAQ, repeated tracked CTAs, all server-rendered', () => {
+  const h = pub('index.html');
+  for (const id of ['tour', 'how', 'mcat', 'pricing', 'faq']) assert.match(h, new RegExp('<section[^>]* id="' + id + '"'), id);
+  assert.equal((h.match(/role="tab"/g) || []).length, 6); assert.equal((h.match(/role="tabpanel"/g) || []).length, 6);
+  assert.ok((h.match(/data-auth="register" data-cta=/g) || []).length >= 7, 'CTAs repeated');
+  assert.ok((h.match(/Start free 30-day trial/g) || []).length >= 7);
+  assert.equal((h.match(/<details class="card"><summary>/g) || []).length, 7); assert.match(h, /"@type": "FAQPage"/);
+  for (const s of ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc']) assert.match(h, new RegExp(s));
+  assert.doesNotMatch(h, /testimonial|\d[\d,]*\+ (students|users)/i, 'no invented social proof');
+  assert.match(pub('app.js'), /track\('cta_click', \{ location: b\.dataset\.cta \}\)/);
+});
+
 test('MCAT landing hero: trial CTA above the fold and inert HTML previews with sample data', () => {
   const h = pub('index.html'), srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(h, /<h1>Track every MCAT study hour<\/h1>/); assert.match(h, /id="heroCta">Start free 30-day trial</);
-  assert.equal((h.match(/class="pv" role="img" aria-label="Preview/g) || []).length, 2); assert.match(h, /not real user data/);
+  assert.match(h, /<h1>Track every MCAT study hour<\/h1>/); assert.match(h, /id="heroCta" data-cta="hero">Start free 30-day trial</);
+  assert.equal((h.match(/class="pv" role="img" aria-label="Preview/g) || []).length, 6); assert.match(h, /not real user data/);
   assert.ok(!/shot-[a-z]+\.webp/.test(h + srv), 'no webp screenshots left'); assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
 });
