@@ -36,7 +36,9 @@ const pricingHead = html => html.replace(/<title>[^<]*<\/title>/, '<title>Pricin
   .replace(/(<meta name="description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<link rel="canonical" href=")[^"]*/, '$1' + SITE + '/pricing')
   .replace(/(<meta property="og:url" content=")[^"]*/, '$1' + SITE + '/pricing').replace(/(<meta property="og:title" content=")[^"]*/, '$1StudyHertz Pricing')
   .replace(/(<meta property="og:description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<meta name="twitter:title" content=")[^"]*/, '$1StudyHertz Pricing').replace(/(<meta name="twitter:description" content=")[^"]*/, '$1' + PRICING_DESC);
-const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
+// Real 404 page for unknown non-API paths (status 404, noindex)
+const NOT_FOUND_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | StudyHertz</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:560px;margin:15vh auto;padding:20px;text-align:center"><h1>Page not found</h1><p class="muted">That page does not exist.</p><p><a class="btn primary" href="/">Go to StudyHertz</a></p></main></body></html>\n';
+const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nAllow: /api/public-config\nAllow: /api/me\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
 const SITEMAP = (lastmod) => '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
   [['/', '1.0', 'weekly'], ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -306,10 +308,11 @@ function createApp(opts = {}) {
     const u = new URL(req.url, 'http://x'), p = u.pathname, M = req.method;
     try {
       if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
-      if (M === 'GET' && p === '/robots.txt') return send(res, 200, ROBOTS, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
-      if (M === 'GET' && p === '/sitemap.xml') return send(res, 200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
+      const plain = (code, body, type, cc) => { const b = Buffer.from(body); res.writeHead(code, { 'Content-Type': type, 'Content-Length': b.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cc }); res.end(M === 'HEAD' ? undefined : b); };
+      if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, ROBOTS, 'text/plain; charset=utf-8', 'public, max-age=3600');
+      if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', 'public, max-age=3600');
       if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
-      if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
+      if (!p.startsWith('/api/')) return plain(404, NOT_FOUND_HTML, 'text/html; charset=utf-8', 'no-cache');
       if (p === '/api/stripe/webhook' && M === 'POST') return stripeWebhook(req, res); // raw body: verified before parsing
       const om = /^\/api\/oauth\/([a-z]+)\/(start|callback)$/.exec(p);
       if (om && (M === 'GET' || (M === 'POST' && om[2] === 'callback'))) return oauthRoute(req, res, om[1], om[2]);

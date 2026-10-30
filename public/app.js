@@ -70,17 +70,19 @@ const refCode = () => localStorage.shRef || '';
 let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'oauth'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('begin_trial', { method: m }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
-fetch('/api/public-config').then(r => r.json()).then(c => { if (!c || !c.billing) return; $('pricing')?.classList.remove('hid'); $('pricingLink')?.classList.remove('hid');
+fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
   if (location.pathname === '/pricing') setTimeout(() => $('pricing')?.scrollIntoView({ block: 'start' }), 50); }).catch(() => {});
+// signed-out defaults when /api/me is unreachable (crawlers, outages): show the landing page, never an error page
+const ME_FALLBACK = { user: null, needsSetup: false, registrationOpen: true, oauth: [] };
 async function boot() {
   if (oauthErr) landingDone = true;
-  const me = await api('/api/me');
+  const me = await api('/api/me').catch(() => ME_FALLBACK);
   if (!me.user && oauthPending) { oauthPending = false; const pe = await api('/api/oauth/pending').catch(() => ({})); if (pe.pending) { oauthProvider = pe.provider; landingDone = true; authMode = 'oauth'; showAuth(me); return; } }
   if (!me.user) { authMode = me.needsSetup ? 'setup' : 'login'; showAuth(me); return; }
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   if (sessionStorage.shOauthLogin) { track('login', { method: sessionStorage.shOauthLogin }); sessionStorage.shOauthLogin = sessionStorage.shOauth = ''; }
-  ME = me.user; $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
+  ME = me.user; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
   await load(); go(view);
@@ -150,7 +152,8 @@ function refOffer() { const c = refCode(); if (!c || refOffer.done) return; refO
     const m = $('authMsg'); if (m && authMode === 'register') m.textContent = 'Create an account: ' + r.trialDays + '-day free trial from your friend'; }).catch(() => {}); }
 refOffer();
 async function showAuth(me) {
-  me = me || await api('/api/me');
+  me = me || await api('/api/me').catch(() => ME_FALLBACK);
+  document.documentElement.classList.remove('authed'); try { localStorage.removeItem('shAuthed'); } catch { /* ignore */ }
   $('app').classList.add('hid');
   const showLanding = !landingDone && !me.needsSetup; $('landing').classList.toggle('hid', !showLanding); $('auth').classList.toggle('hid', showLanding); $('aBack').classList.toggle('hid', !!me.needsSetup);
   if (me.needsSetup) authMode = 'setup';
@@ -827,7 +830,8 @@ function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDef
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
 setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
 document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && view === 'timer') refresh().catch(() => {}); });
-boot().catch(e => { document.body.innerHTML = '<p style="padding:20px">Failed to load: ' + esc(e.message) + '</p>'; });
+boot().catch(e => { console.error('boot', e); if (ME) { toast('Something went wrong loading your data. Please refresh.'); return; } // never wipe the page: fall back to the signed-out landing
+  document.documentElement.classList.remove('authed'); $('app').classList.add('hid'); $('auth').classList.add('hid'); $('landing').classList.remove('hid'); });
 
 // ---------- shared chart tooltip (data-tip) ----------
 (() => { const el = document.createElement('div'); el.id = 'chartTip'; el.className = 'chart-tip'; el.setAttribute('role', 'tooltip'); document.body.appendChild(el); let cur = null;
