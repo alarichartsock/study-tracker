@@ -156,11 +156,12 @@ function createApp(opts = {}) {
   // Server-side GA4 purchase via the Measurement Protocol. Only when an API secret is configured AND the browser passed its
   // GA client id at checkout (it does that only after analytics consent was granted). Never throws; returns true when sent.
   const gaItems = c => [{ item_id: 'studyhertz_' + c.plan, item_name: 'StudyHertz ' + ({ yearly: 'Yearly', lifetime: 'Lifetime' }[c.plan] || 'Monthly'), item_category: 'subscription', price: c.value, quantity: 1 }];
-  async function gaPurchase(cid, c) {
+  const gaCampaign = u => { const a = (u && u.attribution) || {}, o = {}; if (a.utm_source) o.campaign_source = o.first_source = a.utm_source; if (a.utm_medium) o.campaign_medium = o.first_medium = a.utm_medium; if (a.utm_campaign) o.campaign_name = o.first_campaign = a.utm_campaign; if (a.utm_term) o.campaign_term = a.utm_term; if (a.utm_content) o.campaign_content = a.utm_content; if (a.gclid) o.first_click = 'gclid'; else if (a.fbclid) o.first_click = 'fbclid'; return o; };
+  async function gaPurchase(cid, c, u) {
     const secret = opts.gaApiSecret ?? GA_API_SECRET, gaId = opts.gaId ?? GA_ID;
     if (!secret || !gaId || !/^\d{1,12}\.\d{1,12}$/.test(String(cid || ''))) return false;
     try { const r = await (opts.mpFetch || globalThis.fetch)('https://www.google-analytics.com/mp/collect?measurement_id=' + encodeURIComponent(gaId) + '&api_secret=' + encodeURIComponent(secret), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: String(cid), events: [{ name: 'purchase', params: { transaction_id: c.txn, value: c.value, currency: c.currency, items: gaItems(c), engagement_time_msec: 1 } }] }), signal: AbortSignal.timeout(5000) });
+        body: JSON.stringify({ client_id: String(cid), ...(u ? { user_id: 'u' + u.id } : {}), events: [{ name: 'purchase', params: { transaction_id: c.txn, value: c.value, currency: c.currency, items: gaItems(c), ...gaCampaign(u), engagement_time_msec: 1 } }] }), signal: AbortSignal.timeout(5000) });
       return r.ok || r.status === 204; } catch { return false; }
   }
   async function handleStripeEvent(ev) {
@@ -171,7 +172,7 @@ function createApp(opts = {}) {
       const u = store.userById(uid); u.billing ||= {};
       if (!u.billing.lifetime) { u.billing.lifetime = { at: new Date().toISOString(), txn: o.id, amount: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase() };
         const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan: 'lifetime' };
-        if (await gaPurchase(meta.ga_cid, conv)) conv.mp = true; u.billing.conversion = conv; store.save(); }
+        if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; u.billing.conversion = conv; store.save(); }
       // an existing monthly/yearly subscription stops renewing at the end of its paid period (never refunded). A Stripe error
       // makes the webhook fail so Stripe retries; the lifetime grant above is idempotent.
       const sub = store.sql.subscription(uid);
@@ -184,7 +185,7 @@ function createApp(opts = {}) {
       applySub(uid, await stripe('GET', '/subscriptions/' + (typeof o.subscription === 'string' ? o.subscription : o.subscription.id)), { payment_failed: 0 });
       const u = store.userById(uid), meta = o.metadata || {}, plan = billing.PLANS[meta.plan] ? meta.plan : (store.sql.subscription(uid) || {}).plan || 'monthly';
       const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan };
-      if (await gaPurchase(meta.ga_cid, conv)) conv.mp = true; // sent server-side: the browser must not send it again
+      if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; // sent server-side: the browser must not send it again
       u.billing ||= {}; u.billing.conversion = conv; store.save();
     } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
       const uid = uidFor(o.customer, o.metadata); if (uid) applySub(uid, o);
@@ -400,6 +401,11 @@ function createApp(opts = {}) {
       // ---- billing ----
       if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
         return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.plansFor(bcfg) } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
+      // first-touch marketing attribution (UTM / gclid / fbclid), stored once, only for accounts created in the last 2 days
+      if (p === '/api/attribution' && M === 'POST') { if (!user.attribution && Date.now() - new Date(user.created || 0) < 2 * 864e5) { const a = {};
+          for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ts']) if (typeof j[k] === 'string' && j[k] && !j[k].includes('@')) a[k] = j[k].slice(0, 100);
+          if (Object.keys(a).length) { user.attribution = a; store.save(); } }
+        return send(res, 200, { ok: true }); }
       if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
       if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {
         if (!billing.enabled(bcfg)) return send(res, 404, { error: 'Billing is not enabled' });

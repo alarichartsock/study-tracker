@@ -68,8 +68,10 @@ if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWor
 let oauthErr = '', oauthPending = false, oauthProvider = '';
 { const rc = new URLSearchParams(location.search).get('ref'); if (rc && /^[A-Za-z0-9]{6,12}$/.test(rc)) localStorage.shRef = rc.toUpperCase(); } // referral code from /?ref=CODE (URL left intact for UTM attribution)
 const refCode = () => localStorage.shRef || '';
+{ const q = new URLSearchParams(location.search), aff = q.get('aff'), rc = q.get('ref'), code = aff && /^[A-Za-z0-9_-]{3,24}$/.test(aff) ? 'aff:' + aff.toUpperCase() : rc && /^[A-Za-z0-9]{6,12}$/.test(rc) ? 'ref:' + rc.toUpperCase() : '';
+  if (code) { let done = {}; try { done = JSON.parse(localStorage.shLeads || '{}'); } catch { /* ignore */ } if (!done[code]) { done[code] = 1; try { localStorage.shLeads = JSON.stringify(done); } catch { /* ignore */ } track('generate_lead', { lead_source: code.slice(0, 3) === 'aff' ? 'affiliate' : 'referral', currency: 'USD', value: 0 }); } } }
 let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
-{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'oauth'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('begin_trial', { method: m }); } }
+{ const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'google'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: 30 }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing && c.billing.plans && !c.billing.plans.lifetime) $('planLifetime')?.classList.add('hid'); if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
   if (location.pathname === '/pricing') setTimeout(() => $('pricing')?.scrollIntoView({ block: 'start' }), 50); }).catch(() => {});
@@ -86,6 +88,8 @@ async function boot() {
   ME = me.user; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
+  try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
+  try { const ft = window.SHConsent?.firstTouch(); if (ft && localStorage.shFTSent !== String(ME.id)) api('/api/attribution', 'POST', ft).then(() => { localStorage.shFTSent = String(ME.id); }).catch(() => {}); } catch { /* ignore */ }
   await load();
   { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
@@ -123,7 +127,7 @@ function billBar() {
   el.innerHTML = html; el.classList.toggle('hid', !html);
 }
 function showPaywall(blocked) {
-  if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked });
+  if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked }); window.SHConsent?.viewList('paywall', BILL.plans && !BILL.plans.lifetime ? ['monthly', 'yearly'] : undefined);
   let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
   const over = BILL.readOnly;
   g.innerHTML = `<div class="glass sheet auth-card paywall" role="dialog" aria-modal="true" aria-labelledby="pwH"><div class="brand big"><img src="/favicon.svg" alt="StudyHertz logo"> <span>StudyHertz</span></div>
@@ -184,7 +188,8 @@ async function showAuth(me) {
 { const tabs = [...document.querySelectorAll('.ltabs [data-tab]')], pick = (b, focus) => { tabs.forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); x.tabIndex = on ? 0 : -1; $('tp-' + x.dataset.tab)?.classList.toggle('on', on); }); if (focus) b.focus(); };
   tabs.forEach((b, i) => { b.tabIndex = i ? -1 : 0; b.onclick = () => { pick(b); track('landing_tab', { tab: b.dataset.tab }); };
     b.onkeydown = e => { const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (d) { e.preventDefault(); pick(tabs[(i + d + tabs.length) % tabs.length], true); } }; }); }
-document.querySelectorAll('[data-cta]').forEach(b => b.addEventListener('click', () => track('cta_click', { location: b.dataset.cta })));
+document.querySelectorAll('[data-cta]').forEach(b => b.addEventListener('click', () => { track('cta_click', { cta_id: b.dataset.ctaId || b.dataset.cta, location: b.dataset.cta }); if (b.dataset.plan) { try { sessionStorage.shPlan = b.dataset.plan; } catch { /* ignore */ } window.SHConsent?.selectItem(b.dataset.plan, 'pricing'); } }));
+{ const pr = $('pricing'); if (pr && 'IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && !pr.classList.contains('hid') && !$('landing').classList.contains('hid')) { io.disconnect(); window.SHConsent?.viewList('pricing', $('planLifetime')?.classList.contains('hid') ? ['monthly', 'yearly'] : undefined); } }, { threshold: 0.3 }); io.observe(pr); } }
 document.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => { landingDone = true; authMode = b.dataset.auth; showAuth(); setTimeout(() => $('aUser').focus(), 50); });
 $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth(); };
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
@@ -192,7 +197,7 @@ $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
   if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
-    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode() } : { ...cred, ...legal, ref: refCode() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'oauth') : 'password'; track('sign_up', { method: m }); track('begin_trial', { method: m }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'password' }); sessionStorage.shOauth = ''; boot(); }
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode() } : { ...cred, ...legal, ref: refCode() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'google') : 'email'; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: r.trialDays || 30 }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'email' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
@@ -761,7 +766,7 @@ ACT.bugSend = async () => { await api('/api/reports', 'POST', { title: $('bgT').
 ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistration: b.checked }); toast(b.checked ? 'Registration open' : 'Registration closed'); };
 ACT.paywall = () => showPaywall();
 ACT.paywallClose = () => { $('paywall')?.remove(); };
-ACT.subscribe = async b => { b.disabled = true; const plan = b.dataset.plan; try { window.SHConsent?.ecommerce('begin_checkout', { plan, value: PLAN_VALUE[plan], currency: 'USD' }); } catch { /* ignore */ }
+ACT.subscribe = async b => { b.disabled = true; const plan = b.dataset.plan; try { window.SHConsent?.selectItem(plan, $('paywall') && !$('paywall').classList.contains('hid') ? 'paywall' : 'settings'); } catch { /* ignore */ } try { window.SHConsent?.ecommerce('begin_checkout', { plan, value: PLAN_VALUE[plan], currency: 'USD' }); } catch { /* ignore */ }
   try { const gaCid = await (window.SHConsent?.clientId?.() || null); const r = await api('/api/billing/checkout', 'POST', { plan, ...(gaCid ? { gaCid } : {}) }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
 ACT.billPortal = async b => { b.disabled = true; try { location.href = (await api('/api/billing/portal', 'POST', {})).url; } catch (e) { b.disabled = false; toast(e.message); } };
 ACT.comp = async b => { await api('/api/admin/users/' + b.dataset.id + '/comp', 'POST', { comp: b.checked }); toast(b.checked ? 'User comped' : 'Comp removed'); };
