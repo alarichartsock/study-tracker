@@ -550,3 +550,13 @@ html.authed #landing{display:none}
 .l-top a.btn{color:var(--text);text-decoration:none}
 
 .pw-plans{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+
+/* landing: the fixed wallpaper fades out instead of ending in a hard line (long pages, full-page captures, mobile toolbar resize);
+   a document-length soft gradient keeps color all the way down. Signed-in app screens are unaffected. */
+body:has(#landing:not(.hid)) .wallpaper{bottom:auto;height:100lvh;-webkit-mask-image:linear-gradient(#000 45%,transparent 100%);mask-image:linear-gradient(#000 45%,transparent 100%)}
+#landing{position:relative;isolation:isolate}
+#landing::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(70vmax 45vmax at 0% 22%,color-mix(in srgb,var(--wp1) 30%,transparent),transparent 70%),
+  radial-gradient(70vmax 45vmax at 100% 45%,color-mix(in srgb,var(--wp2) 26%,transparent),transparent 70%),
+  radial-gradient(70vmax 45vmax at 10% 70%,color-mix(in srgb,var(--wp3) 22%,transparent),transparent 70%),
+  radial-gradient(70vmax 45vmax at 90% 92%,color-mix(in srgb,var(--wp1) 20%,transparent),transparent 70%)}
