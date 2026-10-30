@@ -518,7 +518,7 @@ html.authed #landing{display:none}
 
 /* landing v2: nav, tour tabs, how it works, MCAT sections, FAQ */
 .landing section[id]{scroll-margin-top:84px}
-.l-nav{display:flex;gap:4px;margin-left:18px}.l-nav a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;padding:8px 10px;border-radius:10px;white-space:nowrap}.l-nav a:hover,.l-nav a:focus-visible{color:var(--text);background:color-mix(in srgb,var(--text) 7%,transparent)}
+.l-nav{display:flex;gap:4px;margin-left:18px}.l-top .l-nav{flex:0 0 auto;width:auto;overflow:visible;order:0}.l-nav a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;padding:8px 10px;border-radius:10px;white-space:nowrap}.l-nav a:hover,.l-nav a:focus-visible{color:var(--text);background:color-mix(in srgb,var(--text) 7%,transparent)}
 .hero-chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:16px 0 0}.hero-chips li{font-size:13px;color:var(--muted);padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 60%,transparent)}
 .hero-chips li::before{content:'\2713';color:var(--ok);font-weight:700;margin-right:6px}
 .landing .eyebrow{text-align:center;text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:700;color:var(--acc);margin:0 0 8px}
@@ -591,3 +591,5 @@ body:has(#landing:not(.hid)){overflow-x:clip}
   .hero-cta{flex-wrap:wrap}.hero-cta .btn{flex:1 1 auto}
   .l-top{gap:6px}.l-top .btn.primary{font-size:13px;padding-inline:12px;max-width:46vw}
 }
+/* translated section links are longer; hide them sooner so the landing header never clips or overflows */
+@media(max-width:1199px){html:not([lang=en]) .l-nav{display:none}}
