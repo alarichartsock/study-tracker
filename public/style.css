@@ -553,7 +553,7 @@ html.authed #landing{display:none}
    a document-length soft gradient keeps color all the way down. Signed-in app screens are unaffected. */
 body:has(#landing:not(.hid)) .wallpaper{bottom:auto;height:100lvh;-webkit-mask-image:linear-gradient(#000 45%,transparent 100%);mask-image:linear-gradient(#000 45%,transparent 100%)}
 #landing{position:relative;isolation:isolate}
-#landing::before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:
+#landing::before{content:'';position:absolute;top:0;bottom:0;left:calc(50% - 50vw);width:100vw;z-index:-1;pointer-events:none;background:
   radial-gradient(70vmax 45vmax at 0% 22%,color-mix(in srgb,var(--wp1) 30%,transparent),transparent 70%),
   radial-gradient(70vmax 45vmax at 100% 45%,color-mix(in srgb,var(--wp2) 26%,transparent),transparent 70%),
   radial-gradient(70vmax 45vmax at 10% 70%,color-mix(in srgb,var(--wp3) 22%,transparent),transparent 70%),
@@ -566,3 +566,6 @@ body:has(#landing:not(.hid)) .wallpaper{bottom:auto;height:100lvh;-webkit-mask-i
 .pv-grid i{display:block;aspect-ratio:1;border-radius:4px;min-width:0}.pv-grid i.l0,.pv-legend i.l0{box-shadow:inset 0 0 0 1px var(--line)}
 .pv-legend{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;margin-top:12px}
 .pv-steps{display:flex;flex-wrap:wrap;gap:8px}.pv-steps>span{display:inline-flex;align-items:center;gap:4px}.pv-legend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+
+/* the long landing gradient spans the full viewport width, not the 1160px column */
+body:has(#landing:not(.hid)){overflow-x:clip}
