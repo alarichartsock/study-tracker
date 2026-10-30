@@ -593,3 +593,9 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 }
 /* translated section links are longer; hide them sooner so the landing header never clips or overflows */
 @media(max-width:1199px){html:not([lang=en]) .l-nav{display:none}}
+
+/* affiliate dashboard */
+.aff-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px}
+.aff-stats .stat{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--card2);min-width:0}
+.aff-stats .stat b{font-size:18px}
+.aff-adm{flex-wrap:wrap;gap:8px;align-items:center}

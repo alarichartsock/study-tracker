@@ -26,9 +26,10 @@ const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const DAY = 864e5;
 const INDEXNOW = require('./lib/indexnow');
 const i18n = require('./lib/i18n');
+const affiliates = require('./lib/affiliates');
 const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
-  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
+  '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
 // ---- SEO: per-page head for /pricing (same SPA shell), robots.txt, sitemap.xml
@@ -40,9 +41,9 @@ const pricingHead = html => html.replace(/<title>[^<]*<\/title>/, '<title>Pricin
   .replace(/(<meta property="og:description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<meta name="twitter:title" content=")[^"]*/, '$1StudyHertz Pricing').replace(/(<meta name="twitter:description" content=")[^"]*/, '$1' + PRICING_DESC);
 // Real 404 page for unknown non-API paths (status 404, noindex)
 const NOT_FOUND_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | StudyHertz</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:560px;margin:15vh auto;padding:20px;text-align:center"><h1>Page not found</h1><p class="muted">That page does not exist.</p><p><a class="btn primary" href="/">Go to StudyHertz</a></p></main></body></html>\n';
-const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nAllow: /api/public-config\nAllow: /api/me\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
+const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nAllow: /affiliates\nAllow: /api/public-config\nAllow: /api/me\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
 const SITEMAP = (lastmod) => '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  [['/', '1.0', 'weekly'], ...Object.keys(require('./lib/i18n').ROUTES).map(r => [r, '0.9', 'weekly']), ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
+  [['/', '1.0', 'weekly'], ...Object.keys(require('./lib/i18n').ROUTES).map(r => [r, '0.9', 'weekly']), ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly'], ['/affiliates', '0.4', 'monthly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
@@ -127,7 +128,11 @@ function createApp(opts = {}) {
   const checkoutLimiter = new auth.RateLimiter(opts.checkoutMax || 20, 60 * 60e3);
   const baseUrl = req => String(opts.baseUrl || process.env.PUBLIC_BASE_URL || process.env.OAUTH_BASE_URL || ('http://' + (req.headers.host || 'localhost'))).replace(/\/$/, '');
   // paths an expired trial may still POST to (read-only otherwise; data is never deleted)
-  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen']);
+  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen', '/api/attribution', '/api/affiliates/apply', '/api/affiliates/connect']);
+  // affiliate program (Connect payouts: test key only unless AFFILIATE_PAYOUTS_LIVE=1)
+  const aff = affiliates.create(store.sql.db, { env: process.env, connectKey: opts.affConnectKey, payoutsLive: opts.affPayoutsLive, fetch: opts.affFetch, now: opts.now,
+    secret: 'aff:' + (process.env.SESSION_SECRET || store.dbFile || 'sh'), secure: /^https:/.test(String(opts.baseUrl || process.env.PUBLIC_BASE_URL || 'https://studyhertz.com')), emailsOfUser: id => { const x = store.userById(id); return x ? emailsOf(x) : new Set(); } });
+  const clearAff = 'sh_aff=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax';
   async function ensureCustomer(user) {
     const prev = store.sql.subscription(user.id); if (prev && prev.customer_id) return prev.customer_id;
     const c = await stripe('POST', '/customers', { name: user.username, ...(user.email ? { email: user.email } : {}), metadata: { uid: String(user.id) } }, 'sh-cust-' + user.id + '-' + user.created);
@@ -173,6 +178,7 @@ function createApp(opts = {}) {
       if (!u.billing.lifetime) { u.billing.lifetime = { at: new Date().toISOString(), txn: o.id, amount: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase() };
         const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan: 'lifetime' };
         if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; u.billing.conversion = conv; store.save(); }
+      aff.commission({ uid, source: o.id, amount: o.amount_total || 0, paymentIntent: typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id, kind: 'lifetime', livemode: ev.livemode });
       // an existing monthly/yearly subscription stops renewing at the end of its paid period (never refunded). A Stripe error
       // makes the webhook fail so Stripe retries; the lifetime grant above is idempotent.
       const sub = store.sql.subscription(uid);
@@ -189,6 +195,15 @@ function createApp(opts = {}) {
       u.billing ||= {}; u.billing.conversion = conv; store.save();
     } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
       const uid = uidFor(o.customer, o.metadata); if (uid) applySub(uid, o);
+    } else if (ev.type === 'invoice.paid') { // affiliate commission on every paid subscription invoice (amount actually paid, after discounts)
+      const uid = uidFor(o.customer, null); if (!uid || !(o.amount_paid > 0)) return;
+      const pi = o.payment_intent || (o.payments && o.payments.data && o.payments.data[0] && o.payments.data[0].payment && o.payments.data[0].payment.payment_intent);
+      aff.commission({ uid, source: o.id, amount: o.amount_paid, paymentIntent: typeof pi === 'string' ? pi : pi && pi.id, kind: 'invoice', livemode: ev.livemode });
+    } else if (ev.type === 'charge.refunded') { // refunds reverse the affiliate commission proportionally
+      const pi = typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id;
+      const r = aff.refund({ paymentIntent: pi, amountRefunded: o.amount_refunded || 0, amountTotal: o.amount || 0 });
+      if (!r && pi) { try { const ip = await stripe('GET', '/invoice_payments?limit=1&payment[type]=payment_intent&payment[payment_intent]=' + encodeURIComponent(pi)); const inv = ip && ip.data && ip.data[0] && ip.data[0].invoice;
+          if (inv) aff.refund({ source: typeof inv === 'string' ? inv : inv.id, amountRefunded: o.amount_refunded || 0, amountTotal: o.amount || 0 }); } catch { /* no invoice link: nothing to reverse */ } }
     } else if (ev.type === 'invoice.payment_failed') {
       const uid = uidFor(o.customer, null); if (!uid) return;
       const sid = o.subscription || (o.parent && o.parent.subscription_details && o.parent.subscription_details.subscription);
@@ -348,6 +363,8 @@ function createApp(opts = {}) {
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.plansFor(bcfg) } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
+      if (p === '/api/aff/click' && M === 'POST') { const c = aff.click(String(j.code || '').toUpperCase(), clientIp(req));
+        return c ? send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': c.cookie }) : send(res, 200, { ok: false }); }
       if (p === '/api/register' && M === 'POST') {
         if (store.db.users.length && !store.db.config.openRegistration) return send(res, 403, { error: 'Registration is disabled' });
         const rip = clientIp(req); if (regLimiter.blocked(rip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(rip);
@@ -357,8 +374,8 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) return send(res, 403, { error: AGE_BLOCK });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
         const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) });
-        recordConsent(nu, 'password', req); const referred = j.ref ? applyReferral(nu, j.ref) : false;
-        return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}) }, 'application/json', { 'Set-Cookie': startSession(nu.id) });
+        recordConsent(nu, 'password', req); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
+        return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/oauth/pending' && M === 'GET') { const t = auth.parseCookies(req.headers.cookie).ps, pe = t && pendingSignups.get(t);
         return send(res, 200, pe ? { pending: true, provider: oauthLib.PROVIDERS[pe.id.provider].label } : { pending: false }); }
@@ -369,8 +386,8 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) { pendingSignups.delete(t); return send(res, 403, { error: AGE_BLOCK }, 'application/json', { 'Set-Cookie': 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0' }); }
         const ip = clientIp(req); if (regLimiter.blocked(ip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(ip);
         let r; try { r = oauthAccount(pe.id, { create: true }); } catch (e) { return send(res, 403, { error: e.message }); }
-        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); const referred = r.created && j.ref ? applyReferral(r.u, j.ref) : false;
-        return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0'] });
+        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
+        return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0', ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/login' && M === 'POST') {
         const ip = clientIp(req), uk = 'u:' + String(j.username || '').toLowerCase();
@@ -588,9 +605,18 @@ function createApp(opts = {}) {
         store.db.reports.push(rep); save(); return send(res, 200, reports.publicView(rep));
       }
       if (p === '/api/reports' && M === 'GET') return send(res, 200, store.db.reports.filter(r => r.uid === user.id).map(reports.publicView));
+      // ---- affiliate program (user side) ----
+      if (p === '/api/affiliates/apply' && M === 'POST') { try { const a = aff.apply(user, j, clientIp(req)); return send(res, 201, { affiliate: aff.publicView(a) }); } catch (e) { return send(res, e.status || 400, { error: e.message }); } }
+      if (p === '/api/affiliates/me' && M === 'GET') { let a = aff.byUser(user.id); if (a && a.connect_account && !a.payouts_enabled && u.searchParams.get('sync')) { try { a = await aff.syncAccount(a.id); } catch { /* keep */ } }
+        return send(res, 200, { affiliate: aff.publicView(a), stats: a && a.status === 'approved' ? aff.summary(a.id) : null, link: a && a.status === 'approved' ? baseUrl(req) + '/?aff=' + a.code : null, minPayout: aff.MIN_PAYOUT, holdDays: aff.HOLD_DAYS, cookieDays: aff.COOKIE_DAYS }); }
+      if (p === '/api/affiliates/connect' && M === 'POST') { const a = aff.byUser(user.id); if (!a) return send(res, 404, { error: 'not an affiliate' });
+        try { return send(res, 200, await aff.onboard(a.id, baseUrl(req))); } catch (e) { return send(res, e.status || 502, { error: e.message }); } }
       if (p.startsWith('/api/admin/')) {
         if (!user.admin) return send(res, 403, { error: 'Admin only' });
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
+        if (p === '/api/admin/affiliates' && M === 'GET') return send(res, 200, { affiliates: aff.list().map(a => ({ ...a, username: (store.userById(a.user_id) || {}).username || null })), payoutsMode: aff.connectMode() });
+        { const m = /^\/api\/admin\/affiliates\/(\d+)$/.exec(p); if (m && M === 'POST') { try { return send(res, 200, aff.decide(+m[1], j)); } catch (e) { return send(res, e.status || 400, { error: e.message }); } } }
+        if (p === '/api/admin/affiliates/payouts' && M === 'POST') { if (aff.connectMode() !== 'test') return send(res, 400, { error: 'Manual payout runs are test-mode only' }); return send(res, 200, await aff.runPayouts({ force: true })); }
         if (p === '/api/admin/config' && M === 'POST') { if (j.openRegistration !== undefined) store.db.config.openRegistration = !!j.openRegistration; save(); return send(res, 200, store.db.config); }
         if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => { const b = bstat(x); return { ...publicUser(x), created: x.created, billing: b.enabled ? { exempt: b.exempt || null, comp: !!(x.billing && x.billing.comp), subscribed: !!b.subscribed, lifetime: !!b.lifetime, trialDaysLeft: b.trialDaysLeft ?? null, readOnly: !!b.readOnly } : null }; }));
         { const dm = /^\/api\/admin\/users\/(\d+)\/delete$/.exec(p); if (dm && M === 'POST') { const x = store.userById(+dm[1]); if (!x) return send(res, 404, { error: 'not found' });
@@ -633,7 +659,7 @@ function createApp(opts = {}) {
       send(res, 404, { error: 'not found' });
     } catch (e) { send(res, 400, { error: String(e.message || e) }); }
   });
-  server.store = store;
+  server.store = store; server.aff = aff;
   return server;
 }
 
@@ -642,4 +668,6 @@ if (require.main === module) {
   const port = +process.env.PORT || 3000, app = createApp();
   app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'StudyHertz on :' + port));
   setTimeout(() => INDEXNOW.onDeploy().catch(() => {}), 15000).unref();
+  // monthly affiliate payouts: checked every 6 hours, runs once per calendar month in the first days (no-op unless Connect is enabled)
+  setInterval(() => { if (new Date().getUTCDate() <= 3 && app.aff) app.aff.runPayouts().then(r => { if (r && r.payouts) console.log('affiliate payouts', r.mode, r.month, r.payouts.length); }).catch(e => console.error('affiliate payouts', e.message)); }, 6 * 3600e3).unref();
 }

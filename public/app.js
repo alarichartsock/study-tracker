@@ -69,8 +69,9 @@ let oauthErr = '', oauthPending = false, oauthProvider = '';
 { const rc = new URLSearchParams(location.search).get('ref'); if (rc && /^[A-Za-z0-9]{6,12}$/.test(rc)) localStorage.shRef = rc.toUpperCase(); } // referral code from /?ref=CODE (URL left intact for UTM attribution)
 const refCode = () => localStorage.shRef || '';
 { const q = new URLSearchParams(location.search), aff = q.get('aff'), rc = q.get('ref'), code = aff && /^[A-Za-z0-9_-]{3,24}$/.test(aff) ? 'aff:' + aff.toUpperCase() : rc && /^[A-Za-z0-9]{6,12}$/.test(rc) ? 'ref:' + rc.toUpperCase() : '';
-  if (code) { let done = {}; try { done = JSON.parse(localStorage.shLeads || '{}'); } catch { /* ignore */ } if (!done[code]) { done[code] = 1; try { localStorage.shLeads = JSON.stringify(done); } catch { /* ignore */ } track('generate_lead', { lead_source: code.slice(0, 3) === 'aff' ? 'affiliate' : 'referral', currency: 'USD', value: 0 }); } } }
-let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
+  if (code) { let done = {}; try { done = JSON.parse(localStorage.shLeads || '{}'); } catch { /* ignore */ } if (!done[code]) { done[code] = 1; try { localStorage.shLeads = JSON.stringify(done); } catch { /* ignore */ } track('generate_lead', { lead_source: code.slice(0, 3) === 'aff' ? 'affiliate' : 'referral', currency: 'USD', value: 0 }); } }
+  if (aff && code.slice(0, 3) === 'aff') fetch('/api/aff/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ code: aff }) }).catch(() => {}); }
+const affQ = new URLSearchParams(location.search).get('affiliate'); let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'google'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: 30 }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
 fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing && c.billing.plans && !c.billing.plans.lifetime) $('planLifetime')?.classList.add('hid'); if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
@@ -91,6 +92,7 @@ async function boot() {
   try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
   try { const ft = window.SHConsent?.firstTouch(); if (ft && localStorage.shFTSent !== String(ME.id)) api('/api/attribution', 'POST', ft).then(() => { localStorage.shFTSent = String(ME.id); }).catch(() => {}); } catch { /* ignore */ }
   await load();
+  if (affQ) { view = 'set'; api('/api/affiliates/me?sync=1').then(r => { if (affQ === 'connected') toast(r.affiliate && r.affiliate.connect.ready ? 'Payouts are set up' : 'Payout setup saved. Stripe may still need a few details.'); if (view === 'set') render(); }).catch(() => {}); }
   { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
     if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
@@ -638,6 +640,39 @@ ACT.csvImport = async () => { const f = $('csvFile').files[0]; if (!f) return to
 ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); track('data_import', { format: 'json', rows: r.added }); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
 
 // ================= SETTINGS =================
+const usd = c => '$' + ((Number(c) || 0) / 100).toFixed(2);
+function affiliateCard(r) {
+  const a = r.affiliate, head = '<div class="card aff-card"><h3>Affiliate program</h3>';
+  if (!a) return head + '<p class="muted small">Have an audience of pre-meds? Earn a share of what the people you refer pay StudyHertz. Applications are reviewed by hand.</p><div class="row"><button class="btn" data-act="affApply">Apply to be an affiliate</button><a class="btn ghost" href="/affiliates" target="_blank" rel="noopener">How it works</a></div></div>';
+  if (a.status === 'pending') return head + '<p class="muted small">Your application is under review. You will see your link here once it is approved.</p></div>';
+  if (a.status === 'rejected') return head + '<p class="muted small">Your application was not approved.</p><button class="btn" data-act="affApply">Apply again</button></div>';
+  if (a.status === 'suspended') return head + '<p class="muted small">Your affiliate account is paused. Contact support@studyhertz.com.</p></div>';
+  const st = r.stats || {}, c = a.connect;
+  const tile = (v, l) => '<div class="stat"><b>' + v + '</b><span class="muted small">' + l + '</span></div>';
+  return head + '<p class="muted small">You earn ' + a.rate + '% of what each customer you refer pays for their first ' + a.months + ' months. Links work for ' + r.cookieDays + ' days and the last click wins. Commissions are held for ' + r.holdDays + ' days, then paid monthly once you have at least ' + usd(r.minPayout) + '.</p>'
+    + '<div class="row ref-row"><input id="affLink" readonly value="' + esc(r.link) + '" aria-label="Your affiliate link"><button class="btn primary" data-act="affCopy">Copy link</button></div>'
+    + '<div class="aff-stats">' + tile(st.clicks || 0, 'Clicks') + tile(st.signups || 0, 'Sign-ups') + tile(st.paying || 0, 'Paying customers') + tile(usd(st.earned), 'Earned') + tile(usd(st.pending), 'Pending') + tile(usd(st.payable), 'Ready to pay') + tile(usd(st.paid), 'Paid out') + '</div>'
+    + '<div class="row mt">' + (c.ready ? '<span class="muted small">Payouts are set up.</span>' : c.available ? '<button class="btn" data-act="affConnect">' + (c.started ? 'Finish payout setup' : 'Set up payouts') + '</button>' : '<span class="muted small">Payout setup will open soon. Your commissions keep accruing.</span>') + '</div></div>';
+}
+async function adminAffiliates() {
+  const r = await api('/api/admin/affiliates').catch(() => null); if (!r) return '';
+  const row = a => '<div class="subj-row aff-adm" data-id="' + a.id + '"><div class="grow"><b>' + esc(a.name) + '</b> <small class="muted">' + esc(a.status) + (a.code ? ' · ' + esc(a.code) : '') + ' · ' + esc(a.username || '?') + ' · ' + esc(a.email) + '</small>'
+    + '<div class="muted small">' + esc(a.website) + ' · ' + esc(a.audience).slice(0, 200) + '</div>'
+    + '<div class="muted small">clicks ' + a.stats.clicks + ' · sign-ups ' + a.stats.signups + ' · paying ' + a.stats.paying + ' · earned ' + usd(a.stats.earned) + ' · pending ' + usd(a.stats.pending) + ' · payable ' + usd(a.stats.payable) + ' · paid ' + usd(a.stats.paid) + (a.connect_account ? ' · Connect ' + esc(a.connect_mode) + (a.payouts_enabled ? ' ready' : ' incomplete') : '') + '</div></div>'
+    + '<label class="small">% <input type="number" min="0" max="90" step="0.5" value="' + a.rate + '" data-f="rate" style="width:70px"></label><label class="small">months <input type="number" min="1" max="120" value="' + a.months + '" data-f="months" style="width:70px"></label>'
+    + '<button class="btn" data-act="affAdm" data-s="">Save</button>' + (a.status !== 'approved' ? '<button class="btn primary" data-act="affAdm" data-s="approved">Approve</button>' : '<button class="btn" data-act="affAdm" data-s="suspended">Suspend</button>') + (a.status === 'pending' ? '<button class="btn" data-act="affAdm" data-s="rejected">Reject</button>' : '') + '</div>';
+  return '<div class="card"><h3>Affiliates</h3><p class="muted small">Payouts: ' + (r.payoutsMode === 'test' ? 'Stripe TEST mode' : r.payoutsMode === 'live' ? 'LIVE' : 'off (no Connect key)') + '. Live payouts need AFFILIATE_PAYOUTS_LIVE=1.</p>'
+    + '<div class="list">' + (r.affiliates.map(row).join('') || '<p class="muted small">No applications yet.</p>') + '</div>' + (r.payoutsMode === 'test' ? '<button class="btn mt" data-act="affPayTest">Run test payouts now</button>' : '') + '</div>';
+}
+ACT.affAdm = async b => { const w = b.closest('.aff-adm'), body = { rate: +w.querySelector('[data-f=rate]').value, months: +w.querySelector('[data-f=months]').value }; if (b.dataset.s) body.status = b.dataset.s;
+  await api('/api/admin/affiliates/' + w.dataset.id, 'POST', body); toast('Affiliate updated'); render(); };
+ACT.affPayTest = async () => { const r = await api('/api/admin/affiliates/payouts', 'POST', {}); toast(r.skipped || ('Test payouts: ' + r.payouts.length)); render(); };
+ACT.affCopy = async () => { const i = $('affLink'); try { await navigator.clipboard.writeText(i.value); } catch { i.select(); document.execCommand('copy'); } toast('Affiliate link copied'); };
+ACT.affApply = () => dialog(`<h3>Apply to the affiliate program</h3><label>Name</label><input name="name" required maxlength="80" autocomplete="name"><label>Email</label><input name="email" type="email" required maxlength="200" autocomplete="email">
+  <label>Website or channel</label><input name="website" required maxlength="300" placeholder="https://youtube.com/@yourchannel"><label>Audience</label><textarea name="audience" required maxlength="1000" rows="3" placeholder="Who follows you, and how many?"></textarea>
+  <p class="muted small">You cannot earn commission on your own account. Affiliate terms are added to the Terms of Service before payouts start.</p><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Apply</button></div>`,
+  async (v, f) => { await api('/api/affiliates/apply', 'POST', { name: f.name.value, email: f.email.value, website: f.website.value, audience: f.audience.value }); track('affiliate_apply'); toast('Application sent'); render(); });
+ACT.affConnect = async b => { b.disabled = true; try { const r = await api('/api/affiliates/connect', 'POST', {}); track('affiliate_connect_start', { mode: r.mode }); location.href = r.url; } catch (e) { b.disabled = false; toast(e.message); } };
 function referralCard(rf) {
   return `<div class="card ref-card"><h3>Give a friend a free month, get one yourself</h3><p class="muted small">Friends who sign up with your link get a ${rf.days + 30}-day free trial instead of 30. When they log their first study session, you get ${rf.days} free days.</p>
     <div class="row ref-row"><input id="refLink" readonly value="${esc(rf.link)}" aria-label="Your referral link"><button class="btn primary" data-act="refCopy">Copy link</button></div>
@@ -649,7 +684,8 @@ async function refRewards() { const r = await api('/api/referral').catch(() => n
   await api('/api/referral/seen', 'POST').catch(() => {}); const me = await api('/api/me').catch(() => null); if (me && me.billing) { BILL = me.billing; billBar(); } }
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme, rf = await api('/api/referral').catch(() => null);
-  return `${rf ? referralCard(rf) : ''}<div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
+  const af = await api('/api/affiliates/me').catch(() => null);
+  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
     <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
@@ -680,7 +716,8 @@ VIEWS.set = async () => {
   <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund, and lifetime access isn't refundable. This can't be undone, so export your data first if you want a copy.</p>
     <div class="row"><span class="sp"></span><button class="btn danger" data-act="delAcct">Delete account…</button></div>`}</div>`;
 };
-VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>';
+VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; return (await adminAffiliates()) + await usersView(); };
+const usersView = async () => {
   const s = await api('/api/admin/stats'), sb = s.subscriptions, rng = [30, 60, 90].includes(UI.usrRange) ? UI.usrRange : 30;
   let tot = s.baseline || 0; const all = s.signups.map(([d, v]) => [d, v, tot += v]), ser = all.slice(-rng), n = ser.length;
   const start = n ? ser[0][2] - ser[0][1] : 0, end = n ? ser[n - 1][2] : 0, added = end - start, growth = start ? Math.round(added / start * 1000) / 10 + '%' : (added ? 'new' : '0%');
