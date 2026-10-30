@@ -129,7 +129,9 @@ function showPaywall(blocked) {
 }
 async function billingDone() {
   for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed) break; await new Promise(r => setTimeout(r, 2000)); }
-  if (BILL.conversion) { try { window.SHConsent?.purchase(BILL.conversion); } catch { /* ignore */ }
+  if (BILL.conversion) { const cv = BILL.conversion; try { if (cv.label) window.SHConsent?.purchase(cv); } catch { /* ignore */ }
+    // GA4 purchase: once per checkout (localStorage guard survives reloads; skipped when the server already sent it)
+    try { const k = 'shPurchase_' + cv.txn; if (cv.txn && !cv.mp && !localStorage[k]) { localStorage[k] = '1'; window.SHConsent?.ecommerce('purchase', { txn: cv.txn, value: cv.value, currency: cv.currency, plan: cv.plan }); } } catch { /* ignore */ }
     { const pl = (BILL.subscription && BILL.subscription.plan) || null; if (pl && !localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')]) { localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')] = '1'; track('subscribe', { plan: pl, value: PLAN_VALUE[pl], currency: 'USD' }); } } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
   billBar(); toast(BILL.subscribed ? 'Thanks! Your subscription is active.' : 'Payment received. Your subscription will activate in a moment.'); if (view === 'set') render();
 }
@@ -744,7 +746,8 @@ ACT.bugSend = async () => { await api('/api/reports', 'POST', { title: $('bgT').
 ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistration: b.checked }); toast(b.checked ? 'Registration open' : 'Registration closed'); };
 ACT.paywall = () => showPaywall();
 ACT.paywallClose = () => { $('paywall')?.remove(); };
-ACT.subscribe = async b => { b.disabled = true; track('begin_checkout', { plan: b.dataset.plan, value: PLAN_VALUE[b.dataset.plan], currency: 'USD' }); try { const r = await api('/api/billing/checkout', 'POST', { plan: b.dataset.plan }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
+ACT.subscribe = async b => { b.disabled = true; const plan = b.dataset.plan; try { window.SHConsent?.ecommerce('begin_checkout', { plan, value: PLAN_VALUE[plan], currency: 'USD' }); } catch { /* ignore */ }
+  try { const gaCid = await (window.SHConsent?.clientId?.() || null); const r = await api('/api/billing/checkout', 'POST', { plan, ...(gaCid ? { gaCid } : {}) }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
 ACT.billPortal = async b => { b.disabled = true; try { location.href = (await api('/api/billing/portal', 'POST', {})).url; } catch (e) { b.disabled = false; toast(e.message); } };
 ACT.comp = async b => { await api('/api/admin/users/' + b.dataset.id + '/comp', 'POST', { comp: b.checked }); toast(b.checked ? 'User comped' : 'Comp removed'); };
 ACT.repFilter = b => { UI.repFilter = b.dataset.f; render(); };

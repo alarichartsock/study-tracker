@@ -63,6 +63,19 @@
       if (!p || !p.label) return;
       gtag('event', 'conversion', { send_to: ADS_ID + '/' + p.label, value: p.value, currency: p.currency || 'USD', transaction_id: p.txn });
     },
+    // GA4 ecommerce events (begin_checkout, purchase) with an items array (track() strips non-primitive params)
+    ecommerce: function (name, p) {
+      if (name !== 'begin_checkout' && name !== 'purchase') return; p = p || {}; var plan = p.plan === 'yearly' ? 'yearly' : 'monthly', value = Number(p.value) || 0;
+      var ev = { currency: p.currency || 'USD', value: value, items: [{ item_id: 'studyhertz_' + plan, item_name: 'StudyHertz ' + (plan === 'yearly' ? 'Yearly' : 'Monthly'), item_category: 'subscription', price: value, quantity: 1 }] };
+      if (name === 'purchase') { if (!p.txn || !/^[A-Za-z0-9_]{1,200}$/.test(p.txn)) return; ev.transaction_id = p.txn; }
+      cfg().then(function (c) { try { if (c && c.gaId) { ev.send_to = c.gaId; gtag('event', name, ev); } } catch (e) { /* ignore */ } });
+    },
+    // GA client id, only after analytics consent (used for the server-side purchase event)
+    clientId: function () {
+      return cfg().then(function (c) { if (!c || !c.gaId || get() !== 'granted') return null;
+        return new Promise(function (res) { var done = false; setTimeout(function () { if (!done) { done = true; res(null); } }, 800);
+          try { gtag('get', c.gaId, 'client_id', function (id) { if (!done) { done = true; res(id || null); } }); } catch (e) { res(null); } }); }).catch(function () { return null; });
+    },
     signup: function () {
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }

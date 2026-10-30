@@ -86,7 +86,7 @@ test('trial, read-only paywall, checkout, signed webhook, portal, comp, legacy',
   assert.equal((await bob('/api/me')).body.billing.readOnly, true);
   assert.equal((await app.hook(evc)).status, 200);
   assert.equal((await app.hook(evc)).body.duplicate, true, 'idempotent');
-  let bl = (await bob('/api/billing')).body; assert.equal(bl.subscribed, true); assert.equal(bl.subscription.plan, 'yearly'); assert.deepEqual(bl.conversion, { label: 'PurchLbl', value: 39, currency: 'USD', txn: 'cs_1' });
+  let bl = (await bob('/api/billing')).body; assert.equal(bl.subscribed, true); assert.equal(bl.subscription.plan, 'yearly'); assert.deepEqual(bl.conversion, { label: 'PurchLbl', value: 39, currency: 'USD', txn: 'cs_1', plan: 'yearly' });
   await bob('/api/billing/conversion-seen', 'POST', {}); assert.equal((await bob('/api/billing')).body.conversion, undefined);
   assert.equal((await bob('/api/sessions', 'POST', { start: '2026-10-01T10:00:00Z', end: '2026-10-01T11:00:00Z' })).status, 200);
   assert.equal((await bob('/api/billing/checkout', 'POST', { plan: 'monthly' })).status, 409);

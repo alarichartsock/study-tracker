@@ -12,6 +12,8 @@ const billing = require('./lib/billing');
 // Google Ads sign-up conversion label (empty = no conversion event). Env var or oauth.config.json-style ads.config.json.
 const ADS_SIGNUP_LABEL = String(process.env.CONVERSION_LABEL_SIGNUP || (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'ads.config.json'), 'utf8')).CONVERSION_LABEL_SIGNUP || ''; } catch { return ''; } })()).replace(/[^A-Za-z0-9_-]/g, '');
 // Google Analytics 4 measurement ID (empty = GA off). Loaded client-side only after cookie consent.
+// GA4 Measurement Protocol API secret (GA Admin > Data streams > Measurement Protocol API secrets). Empty = no server-side purchase events.
+const GA_API_SECRET = String(process.env.GA_API_SECRET || '').trim();
 const GA_ID = /^G-[A-Z0-9]{4,20}$/.test(String(process.env.GA_MEASUREMENT_ID || '').trim()) ? String(process.env.GA_MEASUREMENT_ID).trim() : '';
 // Terms/Privacy versions. Bump terms to require every user to re-accept on next visit.
 const LEGAL = { terms: '1.1', privacy: '1.1', effective: '2026-10-27',
@@ -147,13 +149,26 @@ function createApp(opts = {}) {
     return send(res, e.stripe ? 502 : 500, { error: e.stripe ? 'We could not cancel the subscription with Stripe, so nothing was deleted. Please try again in a few minutes.' : 'Deleting the account failed, so nothing was deleted. Please try again.' }); };
   const delLimiter = new auth.RateLimiter(5, 15 * 60e3);
   const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
+  // Server-side GA4 purchase via the Measurement Protocol. Only when an API secret is configured AND the browser passed its
+  // GA client id at checkout (it does that only after analytics consent was granted). Never throws; returns true when sent.
+  const gaItems = c => [{ item_id: 'studyhertz_' + c.plan, item_name: 'StudyHertz ' + (c.plan === 'yearly' ? 'Yearly' : 'Monthly'), item_category: 'subscription', price: c.value, quantity: 1 }];
+  async function gaPurchase(cid, c) {
+    const secret = opts.gaApiSecret ?? GA_API_SECRET, gaId = opts.gaId ?? GA_ID;
+    if (!secret || !gaId || !/^\d{1,12}\.\d{1,12}$/.test(String(cid || ''))) return false;
+    try { const r = await (opts.mpFetch || globalThis.fetch)('https://www.google-analytics.com/mp/collect?measurement_id=' + encodeURIComponent(gaId) + '&api_secret=' + encodeURIComponent(secret), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: String(cid), events: [{ name: 'purchase', params: { transaction_id: c.txn, value: c.value, currency: c.currency, items: gaItems(c), engagement_time_msec: 1 } }] }), signal: AbortSignal.timeout(5000) });
+      return r.ok || r.status === 204; } catch { return false; }
+  }
   async function handleStripeEvent(ev) {
     const o = (ev.data && ev.data.object) || {};
     if (ev.type === 'checkout.session.completed') {
       if (o.mode !== 'subscription' || !o.subscription) return;
       const uid = Number(o.client_reference_id) || uidFor(o.customer, o.metadata); if (!uid || !store.userById(uid)) return;
       applySub(uid, await stripe('GET', '/subscriptions/' + (typeof o.subscription === 'string' ? o.subscription : o.subscription.id)), { payment_failed: 0 });
-      const u = store.userById(uid); u.billing ||= {}; u.billing.conversion = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id }; store.save();
+      const u = store.userById(uid), meta = o.metadata || {}, plan = billing.PLANS[meta.plan] ? meta.plan : (store.sql.subscription(uid) || {}).plan || 'monthly';
+      const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan };
+      if (await gaPurchase(meta.ga_cid, conv)) conv.mp = true; // sent server-side: the browser must not send it again
+      u.billing ||= {}; u.billing.conversion = conv; store.save();
     } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
       const uid = uidFor(o.customer, o.metadata); if (uid) applySub(uid, o);
     } else if (ev.type === 'invoice.payment_failed') {
@@ -362,7 +377,7 @@ function createApp(opts = {}) {
 
       // ---- billing ----
       if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
-        return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.PLANS } : {}), ...(c && bcfg.purchaseLabel ? { conversion: { label: bcfg.purchaseLabel, ...c } } : {}) }); }
+        return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.PLANS } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
       if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
       if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {
         if (!billing.enabled(bcfg)) return send(res, 404, { error: 'Billing is not enabled' });
@@ -374,7 +389,7 @@ function createApp(opts = {}) {
           if (bstat(user).subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
           const customer = await ensureCustomer(user), base = baseUrl(req);
           const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
-            success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan }, subscription_data: { metadata: { uid: String(user.id) } },
+            success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...(/^\d{1,12}\.\d{1,12}$/.test(String(j.gaCid || '')) ? { ga_cid: String(j.gaCid) } : {}) }, subscription_data: { metadata: { uid: String(user.id) } },
             integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
           return send(res, 200, { url: cs.url });
         } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }

@@ -1,0 +1,7 @@
+# GA4 purchase tracking (G-KWFZ3TRVG8, Advanced consent mode)
+
+- **begin_checkout** fires in the browser when the user clicks Subscribe: `currency USD`, `value` 4.99 / 39, `items[{item_id: studyhertz_monthly|studyhertz_yearly, item_name: StudyHertz Monthly|Yearly, item_category: subscription, price, quantity: 1}]`.
+- **purchase** fires once per completed checkout, with `transaction_id` = the Stripe Checkout Session id (`cs_…`), the same value/currency/items.
+  - The `checkout.session.completed` webhook stores `{txn, value, currency, plan}` on the user. On return to `/?billing=success` the app reads it from `/api/billing`, sends `purchase` unless already sent, then calls `/api/billing/conversion-seen` to clear it. A `localStorage.shPurchase_<txn>` guard stops a reload from sending it twice; Stripe webhook retries are deduped by event id.
+  - The Google Ads conversion (`CONVERSION_LABEL_PURCHASE`) is still sent only if that label is configured.
+- **Server-side (Measurement Protocol):** if `GA_API_SECRET` is set in Render (GA Admin → Data streams → web stream → Measurement Protocol API secrets) **and** the user had accepted analytics cookies at checkout (the browser then passes its GA `client_id`, stored as Checkout metadata `ga_cid`), the webhook sends `purchase` to `https://www.google-analytics.com/mp/collect` and flags the conversion `mp: true`, so the browser does not send a duplicate. Without the secret, or without consent, only the browser event is sent (cookieless ping when consent is denied).
