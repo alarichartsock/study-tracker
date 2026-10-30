@@ -25,11 +25,12 @@ const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const DAY = 864e5;
 const INDEXNOW = require('./lib/indexnow');
-const STATIC = { '/': 'index.html', '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
+const i18n = require('./lib/i18n');
+const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
-  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
+  '.webmanifest': 'application/manifest+json', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
 // ---- SEO: per-page head for /pricing (same SPA shell), robots.txt, sitemap.xml
 const SITE = 'https://studyhertz.com';
 const PRICING_DESC = 'StudyHertz pricing: every account starts with a 30-day free trial, no card required. Then US$4.99 per month or US$39 per year. Cancel anytime.';
@@ -41,7 +42,7 @@ const pricingHead = html => html.replace(/<title>[^<]*<\/title>/, '<title>Pricin
 const NOT_FOUND_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | StudyHertz</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:560px;margin:15vh auto;padding:20px;text-align:center"><h1>Page not found</h1><p class="muted">That page does not exist.</p><p><a class="btn primary" href="/">Go to StudyHertz</a></p></main></body></html>\n';
 const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nAllow: /api/public-config\nAllow: /api/me\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
 const SITEMAP = (lastmod) => '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  [['/', '1.0', 'weekly'], ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
+  [['/', '1.0', 'weekly'], ...Object.keys(require('./lib/i18n').ROUTES).map(r => [r, '0.9', 'weekly']), ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
@@ -305,6 +306,7 @@ function createApp(opts = {}) {
   function asset(p) {
     const f = path.join(PUBLIC, STATIC[p]), m = fs.statSync(f).mtimeMs, hit = SCACHE.get(p); if (hit && hit.m === m) return hit;
     let buf = fs.readFileSync(f); if (p === '/pricing') buf = Buffer.from(pricingHead(buf.toString('utf8')));
+    else if (p === '/' || p === '/index.html' || i18n.ROUTES[p]) { const h = i18n.withAlternates(buf.toString('utf8'), SITE); buf = Buffer.from(i18n.ROUTES[p] ? i18n.localize(h, i18n.ROUTES[p], SITE) : h); }
     const type = MIME[path.extname(f)] || 'application/octet-stream', text = /text|javascript|json|svg|xml|manifest/.test(type) && buf.length > 860;
     const a = { m, buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 22) + '"',
       br: text ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 10 } }) : null, gz: text ? zlib.gzipSync(buf, { level: 9 }) : null };
@@ -321,6 +323,8 @@ function createApp(opts = {}) {
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x'), p = u.pathname, M = req.method;
     try {
+      if ((M === 'GET' || M === 'HEAD') && i18n.ROUTES[p + '/']) { res.writeHead(301, { Location: p + '/' + (u.search || '') }); return res.end(); }
+      if ((M === 'GET' || M === 'HEAD') && (p === '/zh' || p === '/zh/')) { res.writeHead(301, { Location: '/zh-cn/' }); return res.end(); }
       if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
       const plain = (code, body, type, cc) => { const b = Buffer.from(body); res.writeHead(code, { 'Content-Type': type, 'Content-Length': b.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cc }); res.end(M === 'HEAD' ? undefined : b); };
       if ((M === 'GET' || M === 'HEAD') && p === INDEXNOW.KEY_PATH) return plain(200, INDEXNOW.KEY, 'text/plain; charset=utf-8', 'public, max-age=86400');
@@ -563,6 +567,7 @@ function createApp(opts = {}) {
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }
         if (j.background !== undefined) { if (!j.background || typeof j.background !== 'object' || Array.isArray(j.background)) return send(res, 400, { error: 'background must be an object' });
           try { s.background = mix.cleanBackground(j.background, s.background); } catch (e) { return send(res, 400, { error: e.message }); } }
+        if (j.lang !== undefined) { if (j.lang && !i18n.LANGS.includes(j.lang)) return send(res, 400, { error: 'unsupported language' }); s.lang = j.lang || ''; }
         if (j.busyIp !== undefined) s.busyIp = String(j.busyIp).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').slice(0, 100);
         if (j.busyToken !== undefined && j.busyToken !== '********') s.busyToken = String(j.busyToken).trim().slice(0, 300);
         save(); return send(res, 200, { ok: true });

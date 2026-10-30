@@ -20,8 +20,9 @@ const niceT = mx => { const st = [300, 900, 1800, 3600, 7200, 10800, 14400, 2160
 const tickT = s => { const m = Math.round(s / 60); return !m ? '0' : m % 60 ? fmtH(s) : m / 60 + 'h'; };
 const yGrid = (ticks, top, pos) => ticks.map(t => `<span class="yg" style="bottom:${pos(t / top)}"><i>${tickT(t)}</i></span>`).join('');
 const fmtClock = s => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
-const fmtTime = d => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const fmtDate = (d, o = { month: 'short', day: 'numeric' }) => new Date(d).toLocaleDateString([], o);
+const LOC = () => (window.SHI18N && SHI18N.lang) || undefined;
+const fmtTime = d => new Date(d).toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' });
+const fmtDate = (d, o = { month: 'short', day: 'numeric' }) => new Date(d).toLocaleDateString(LOC(), o);
 const daysUntil = k => Math.round((k2d(k) - k2d(dk(new Date()))) / DAY);
 const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
@@ -85,7 +86,11 @@ async function boot() {
   ME = me.user; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
-  await load(); go(view);
+  await load();
+  { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
+    if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
+    if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
+  go(view);
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
@@ -142,7 +147,7 @@ function billingCard() {
   const b = BILL; if (!b.enabled) return ''; const sub = b.subscription || {};
   let body;
   if (b.exempt) body = `<p class="muted small">${b.exempt === 'admin' ? 'Admin account: no subscription needed.' : b.exempt === 'comp' ? 'Your account has complimentary access.' : 'Thanks for being an early user: your account has free access for life.'}</p>`;
-  else if (b.lifetime) body = `<p class="muted small">Lifetime access${b.lifetimeSince ? ' since ' + new Date(b.lifetimeSince).toLocaleDateString() : ''}. It never expires. Thank you!${sub.status && sub.cancelAtPeriodEnd && sub.currentPeriodEnd && sub.status !== 'canceled' ? ' Your old ' + (sub.plan === 'yearly' ? 'yearly' : 'monthly') + ' plan stops renewing on ' + new Date(sub.currentPeriodEnd).toLocaleDateString() + '.' : ''}</p>${sub.status ? '<div class="row"><button class="btn" data-act="billPortal">Billing history</button></div>' : ''}`;
+  else if (b.lifetime) body = `<p class="muted small">Lifetime access${b.lifetimeSince ? ' since ' + new Date(b.lifetimeSince).toLocaleDateString(LOC()) : ''}. It never expires. Thank you!${sub.status && sub.cancelAtPeriodEnd && sub.currentPeriodEnd && sub.status !== 'canceled' ? ' Your old ' + (sub.plan === 'yearly' ? 'yearly' : 'monthly') + ' plan stops renewing on ' + new Date(sub.currentPeriodEnd).toLocaleDateString(LOC()) + '.' : ''}</p>${sub.status ? '<div class="row"><button class="btn" data-act="billPortal">Billing history</button></div>' : ''}`;
   else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button>${hasLifetime() ? '<button class="btn primary" data-act="subscribe" data-plan="lifetime">Switch to Lifetime $100</button>' : ''}</div>${hasLifetime() ? '<p class="muted small">Lifetime is a one-time $100 payment. Your current plan then stops renewing at the end of its paid period (no refund).</p>' : ''}`;
   else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${hasLifetime() ? `<button class="btn primary" data-act="subscribe" data-plan="lifetime">${PRICE.lifetime}</button>` : ''}${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
   return `<div class="card"><h3>Subscription</h3>${body}</div>`;
@@ -360,7 +365,7 @@ function heatmap(byDay) {
   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach((t, i) => t && (out += `<text x="0" y="${20 + i * (c + g) + c / 2}" dominant-baseline="central" class="dow">${t}</text>`));
   for (let d = new Date(start), i = 0; d <= end; d = addD(d, 1), i++) {
     const w = Math.floor(i / 7), r = (d.getDay() + 6) % 7, v = byDay[dk(d)] || 0, lv = v <= 0 ? 0 : v < goal * 0.25 ? 1 : v < goal * 0.5 ? 2 : v < goal ? 3 : 4, m = medalOf(v), x = 30 + w * (c + g), y = 20 + r * (c + g);
-    if (r === 0 && d.getMonth() !== lastM) { lastM = d.getMonth(); out += `<text x="${x}" y="10">${d.toLocaleDateString([], { month: 'short' })}</text>`; }
+    if (r === 0 && d.getMonth() !== lastM) { lastM = d.getMonth(); out += `<text x="${x}" y="10">${d.toLocaleDateString(LOC(), { month: 'short' })}</text>`; }
     out += `<rect class="l${lv}" x="${x}" y="${y}" width="${c}" height="${c}" rx="2"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : ''), false)}></rect>${m ? `<circle cx="${x + c / 2}" cy="${y + c / 2}" r="2.5" style="fill:${MEDAL_COLORS[m]}"/>` : ''}`;
   }
   return out + '</svg>';
@@ -442,7 +447,7 @@ VIEWS.cal = () => {
     cells += `<div class="cday ${d.getMonth() !== m - 1 ? 'out' : ''} ${k === ST.todayKey ? 'today' : ''}" data-act="calDay" data-k="${k}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + (v ? fmtH(v) : 'no study') + (goal ? ' \u00b7 ' + Math.round(v / goal * 100) + '% of goal' : ''), false)}><div class="row" style="margin:0;justify-content:space-between"><b>${d.getDate()}</b>${md ? `<span class="medal m-${md}"></span>` : ''}</div>
       ${v ? `<span>${fmtH(v)}</span>` : ''}${plan != null ? `<span class="muted tx">plan ${fmtH(plan * 60)}</span>` : ''}${ex.map(e => `<span class="ex tx">📝 ${esc(e.name)}</span>`).join('')}${tk.slice(0, 2).map(t => `<span class="tk tx"><i class="tk-box"></i>${esc(t.title)}</span>`).join('')}${tk.length > 2 ? `<span class="muted tx">+${tk.length - 2} more</span>` : ''}${tk.length ? `<span class="tk-dot" aria-label="${tk.length} to-do"></span>` : ''}
       ${goal ? `<div class="bar"><i style="width:${Math.min(100, v / goal * 100)}%;background:var(--acc)"></i></div>` : ''}</div>`; }
-  return `<div class="card"><div class="row" style="margin:0 0 12px"><button class="btn" data-act="calNav" data-d="-1">‹</button><h3 class="grow center" style="margin:0">${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3><button class="btn" data-act="calNav" data-d="0">Today</button><button class="btn" data-act="calNav" data-d="1">›</button></div>
+  return `<div class="card"><div class="row" style="margin:0 0 12px"><button class="btn" data-act="calNav" data-d="-1">‹</button><h3 class="grow center" style="margin:0">${first.toLocaleDateString(LOC(), { month: 'long', year: 'numeric' })}</h3><button class="btn" data-act="calNav" data-d="0">Today</button><button class="btn" data-act="calNav" data-d="1">›</button></div>
     <div class="calgrid">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(x => `<div class="dow">${x}</div>`).join('')}${cells}</div>
     <p class="muted small mt">Studied ${fmtH(mTot)} this month${mPlan ? ` · planned ${fmtH(mPlan)}` : ''}. Tap a day to add a to-do, plan study time, review sessions or log a past session.</p></div>`;
 };
@@ -639,7 +644,7 @@ async function refRewards() { const r = await api('/api/referral').catch(() => n
   await api('/api/referral/seen', 'POST').catch(() => {}); const me = await api('/api/me').catch(() => null); if (me && me.billing) { BILL = me.billing; billBar(); } }
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme, rf = await api('/api/referral').catch(() => null);
-  return `${rf ? referralCard(rf) : ''}<div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
+  return `${rf ? referralCard(rf) : ''}<div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
     <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
