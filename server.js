@@ -133,6 +133,19 @@ function createApp(opts = {}) {
       plan: billing.planOf(sub, bcfg), price_id: (sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price && sub.items.data[0].price.id) || null, current_period_end: billing.periodEnd(sub),
       cancel_at_period_end: sub.cancel_at_period_end ? 1 : 0, payment_failed: extra.payment_failed !== undefined ? extra.payment_failed : sub.status === 'active' ? 0 : prev.payment_failed || 0, updated: new Date().toISOString() });
   }
+  // Account deletion: cancel any live Stripe subscription first (immediately, no refund). If Stripe fails, nothing is deleted.
+  async function deleteAccount(target) {
+    const sub = store.sql.subscription(target.id);
+    if (sub && sub.subscription_id && !['canceled', 'incomplete_expired'].includes(sub.status)) {
+      if (!bcfg.secretKey) throw Object.assign(new Error('billing not configured'), { stripe: true });
+      try { await stripe('DELETE', '/subscriptions/' + encodeURIComponent(sub.subscription_id)); }
+      catch (e) { if (e.status !== 404) { e.stripe = true; throw e; } } // 404: already gone at Stripe
+    }
+    store.deleteUser(target.id);
+  }
+  const deleteFailed = (res, e) => { if (!opts.quiet) console.error('account delete', e.status || '', e.message);
+    return send(res, e.stripe ? 502 : 500, { error: e.stripe ? 'We could not cancel the subscription with Stripe, so nothing was deleted. Please try again in a few minutes.' : 'Deleting the account failed, so nothing was deleted. Please try again.' }); };
+  const delLimiter = new auth.RateLimiter(5, 15 * 60e3);
   const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
   async function handleStripeEvent(ev) {
     const o = (ev.data && ev.data.object) || {};
@@ -223,7 +236,7 @@ function createApp(opts = {}) {
     store.db.tokens[auth.tokenKey(t)] = { uid, exp: now + SESSION_DAYS * 864e5 }; store.save();
     return cookie(t, SESSION_DAYS * 86400);
   }
-  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, ...(u.displayName ? { displayName: u.displayName } : {}) });
+  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, hasPassword: !!u.hash, ...(u.displayName ? { displayName: u.displayName } : {}) });
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
     return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
@@ -335,6 +348,15 @@ function createApp(opts = {}) {
         return send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': cookie('', 0) });
       }
       if (!user) return send(res, 401, { error: 'Not logged in' });
+      if (p === '/api/account/delete' && M === 'POST') { // JSON-only body + SameSite=Lax cookie, same CSRF posture as every other POST
+        if (user.admin) return send(res, 403, { error: 'The admin account cannot be deleted from Settings.' });
+        const conf = String(j.confirm || '').trim();
+        if (!(conf === 'DELETE' || (user.email && conf.toLowerCase() === String(user.email).toLowerCase()))) return send(res, 400, { error: 'Type DELETE to confirm.' });
+        if (user.hash) { const k = 'del:' + user.id; if (delLimiter.blocked(k)) return send(res, 429, { error: 'Too many attempts. Try again later.' });
+          if (!(await auth.verifyPassword(j.password || '', user.salt, user.hash))) { delLimiter.fail(k); return send(res, 403, { error: 'That password is not correct.' }); } }
+        try { await deleteAccount(user); } catch (e) { return deleteFailed(res, e); }
+        return send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': cookie('', 0) });
+      }
       if (p === '/api/terms/accept' && M === 'POST') { if (j.agree !== true) return send(res, 400, { error: 'Please check the box to continue' }); recordConsent(user, 'reaccept', req); return send(res, 200, { ok: true }); }
       if (user.termsVersion !== LEGAL.terms) return send(res, 403, { error: 'Please review and accept the updated Terms', termsRequired: true });
 
@@ -520,6 +542,11 @@ function createApp(opts = {}) {
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/config' && M === 'POST') { if (j.openRegistration !== undefined) store.db.config.openRegistration = !!j.openRegistration; save(); return send(res, 200, store.db.config); }
         if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => { const b = bstat(x); return { ...publicUser(x), created: x.created, billing: b.enabled ? { exempt: b.exempt || null, comp: !!(x.billing && x.billing.comp), subscribed: !!b.subscribed, trialDaysLeft: b.trialDaysLeft ?? null, readOnly: !!b.readOnly } : null }; }));
+        { const dm = /^\/api\/admin\/users\/(\d+)\/delete$/.exec(p); if (dm && M === 'POST') { const x = store.userById(+dm[1]); if (!x) return send(res, 404, { error: 'not found' });
+          if (x.id === user.id || x.admin) return send(res, 403, { error: 'Admin accounts cannot be deleted here.' });
+          if (String(j.confirm || '') !== x.username) return send(res, 400, { error: 'Type the username to confirm.' });
+          try { await deleteAccount(x); } catch (e) { return deleteFailed(res, e); }
+          return send(res, 200, { ok: true }); } }
         { const cm = /^\/api\/admin\/users\/(\d+)\/comp$/.exec(p); if (cm && M === 'POST') { const x = store.userById(+cm[1]); if (!x) return send(res, 404, { error: 'not found' });
           x.billing ||= {}; x.billing.comp = !!j.comp; store.save(); return send(res, 200, { ok: true, comp: x.billing.comp }); } }
         if (p === '/api/admin/stats' && M === 'GET') { // aggregate counts only, no personal data

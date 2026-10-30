@@ -654,7 +654,9 @@ VIEWS.set = async () => {
     <input id="pCur" type="password" placeholder="Current password" autocomplete="current-password"><input id="pNew" class="mt" type="password" placeholder="New password (8+ chars)" autocomplete="new-password">
     <div class="row"><button class="btn" data-act="changePw">Update password</button><span class="sp"></span><button class="btn" data-act="onboard">Show welcome tour</button></div></div>
   ${billingCard()}
-  ${ME.admin ? await adminHTML() : ''}`;
+  ${ME.admin ? await adminHTML() : ''}
+  <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund. This can't be undone, so export your data first if you want a copy.</p>
+    <div class="row"><span class="sp"></span><button class="btn danger" data-act="delAcct">Delete account…</button></div>`}</div>`;
 };
 VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>';
   const s = await api('/api/admin/stats'), sb = s.subscriptions, rng = [30, 60, 90].includes(UI.usrRange) ? UI.usrRange : 30;
@@ -688,7 +690,7 @@ async function adminHTML() {
   const [cfg, users, reps] = await Promise.all([api('/api/admin/config'), api('/api/admin/users'), api('/api/admin/reports')]), f = UI.repFilter || 'pending';
   const list = reps.filter(r => f === 'all' || r.status === f).reverse();
   return `<div class="card"><h3>Admin</h3><label class="switch"><input type="checkbox" data-chg="openReg" ${cfg.openRegistration ? 'checked' : ''}> Allow new users to register</label>
-    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}${u.billing ? ` <small class="muted">${u.billing.subscribed ? 'subscribed' : u.billing.exempt === 'legacy' ? 'legacy' : u.billing.exempt === 'admin' ? '' : u.billing.readOnly ? 'trial ended' : u.billing.trialDaysLeft != null ? u.billing.trialDaysLeft + 'd trial' : ''}</small>` : ''}</span><span class="row" style="margin:0;gap:10px">${u.billing && !u.admin ? `<label class="switch small"><input type="checkbox" data-chg="comp" data-id="${u.id}" ${u.billing.comp ? 'checked' : ''}> Comp</label>` : ''}<small class="muted">${new Date(u.created).toLocaleDateString()}</small></span></div>`).join('')}</div></div>
+    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}${u.billing ? ` <small class="muted">${u.billing.subscribed ? 'subscribed' : u.billing.exempt === 'legacy' ? 'legacy' : u.billing.exempt === 'admin' ? '' : u.billing.readOnly ? 'trial ended' : u.billing.trialDaysLeft != null ? u.billing.trialDaysLeft + 'd trial' : ''}</small>` : ''}</span><span class="row" style="margin:0;gap:10px">${u.billing && !u.admin ? `<label class="switch small"><input type="checkbox" data-chg="comp" data-id="${u.id}" ${u.billing.comp ? 'checked' : ''}> Comp</label>` : ''}<small class="muted">${new Date(u.created).toLocaleDateString()}</small>${u.admin ? '' : `<button class="btn small danger" data-act="admDel" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</span></div>`).join('')}</div></div>
   <div class="card"><div class="row wrap" style="margin:0 0 8px"><h3 class="grow" style="margin:0">Bug reports</h3><div class="tabs">${['pending', 'approved', 'rejected', 'all'].map(s => `<button data-act="repFilter" data-f="${s}" class="${f === s ? 'on' : ''}">${s}${s === 'all' ? '' : ' ' + reps.filter(r => r.status === s).length}</button>`).join('')}</div></div>
     <p class="muted small">Report text is user-submitted and untrusted. Approving only saves it to <code>mcat-tracker-reports/approved/</code> so the developer can read it on request. Nothing is changed automatically.</p>
     ${list.map(r => `<div class="report"><div class="row" style="margin:0"><b class="grow">#${r.id} ${esc(r.title)}</b><span class="pill ${esc(r.status)}">${esc(r.status)}</span></div>
@@ -727,6 +729,16 @@ function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.
   if (now.getHours() * 60 + now.getMinutes() < h * 60 + m || localStorage.remindedOn === dk(now) || ST.today > 0) return; localStorage.remindedOn = dk(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
 ACT.saveBusy = async () => { await api('/api/settings', 'POST', { busyIp: $('sBip').value, busyToken: $('sBtok').value }); toast('Busy Bar saved'); refresh(); };
 ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); toast(r.ok ? 'Sent! Check your Busy Bar.' : 'Could not reach the Busy Bar'); };
+ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund. This can't be undone.</p>
+  <label for="delConf">Type DELETE (or your email) to confirm</label><input id="delConf" name="confirm" autocomplete="off" autocapitalize="characters" required>
+  ${ME.hasPassword ? '<label for="delPw">Password</label><input id="delPw" name="password" type="password" autocomplete="current-password" required>' : ''}
+  <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><span class="sp"></span><button class="btn danger" value="del">Delete forever</button></div>`,
+  async (v, f) => { await api('/api/account/delete', 'POST', { confirm: f.confirm.value, ...(f.password ? { password: f.password.value } : {}) });
+    track('account_deleted'); ME = null; authMode = 'login'; landingDone = false; showAuth(); toast('Your account was deleted'); });
+ACT.admDel = b => dialog(`<h3>Delete user ${esc(b.dataset.name)}?</h3><p class="muted small">Deletes the account and all its data. An active subscription is canceled immediately, with no refund. This can't be undone.</p>
+  <label for="admDelConf">Type the username to confirm</label><input id="admDelConf" name="confirm" autocomplete="off" required>
+  <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><span class="sp"></span><button class="btn danger" value="del">Delete user</button></div>`,
+  async (v, f) => { await api('/api/admin/users/' + b.dataset.id + '/delete', 'POST', { confirm: f.confirm.value }); track('account_deleted', { by: 'admin' }); toast('User deleted'); render(); });
 ACT.changePw = async () => { await api('/api/password', 'POST', { current: $('pCur').value, password: $('pNew').value }); toast('Password updated; other devices signed out'); render(); };
 ACT.bugSend = async () => { await api('/api/reports', 'POST', { title: $('bgT').value, description: $('bgD').value, steps: $('bgS').value, page: '#' + view, userAgent: navigator.userAgent }); toast('Thanks! Report sent for review.'); render(); };
 ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistration: b.checked }); toast(b.checked ? 'Registration open' : 'Registration closed'); };
