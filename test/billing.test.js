@@ -128,4 +128,6 @@ test('loadConfig resolves GROK_FULL_ACCESS and STRIPE_LIVE_* names for live keys
   assert.ok(billing.enabled(billing.loadConfig({ ...base, GROK_FULL_ACCESS: 'sk_live_b', STRIPE_ALLOW_LIVE: '1' })));
   c = billing.loadConfig({ GROK_FULL_ACCESS: 'sk_live_b', STRIPE_WEBHOOK_SECRET: 'whsec_t', STRIPE_PRICE_MONTHLY: 'pm_t', STRIPE_PRICE_YEARLY: 'py_t' });
   assert.equal(c.webhookSecret, 'whsec_t'); assert.deepEqual(c.prices, { monthly: 'pm_t', yearly: 'py_t' });
+  c = billing.loadConfig({ ...base, GROK_FULL_ACCESS: 'rk_live_r' });
+  assert.equal(c.webhookSecret, 'whsec_l'); assert.deepEqual(c.prices, { monthly: 'pm_l', yearly: 'py_l' }, 'restricted live keys use live names too');
 });
