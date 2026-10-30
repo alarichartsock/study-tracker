@@ -20,9 +20,9 @@
     const exact = new Map(), pats = [];
     for (const [k, v] of Object.entries(dict || {})) {
       if (!/\{\d\}/.test(k)) { exact.set(k, v); continue; }
-      const lit = k.replace(/\{\d\}/g, ''); if ((lit.match(/\p{L}/gu) || []).length < 3) continue; // too generic to match safely
+      const lit = k.replace(/\{\d\}/g, ''), nl = (lit.match(/\p{L}/gu) || []).length; if (nl < 2) continue; const num = nl < 3; // short keys ("of {0}", "{0}th") only match numbers
       const order = []; const src = k.split(/(\{\d\})/).map(p => { const m = /^\{(\d)\}$/.exec(p); if (m) { order.push(+m[1]); return '(.+?)'; } return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('');
-      pats.push({ re: new RegExp('^' + src + '$', 'u'), order, v, n: lit.length });
+      pats.push({ re: new RegExp('^' + src + '$', 'u'), order, v, n: lit.length, num });
     }
     pats.sort((a, b) => b.n - a.n);
     // fragment keys glued after dynamic text ("42% of goal", "Name, earned")
@@ -30,7 +30,7 @@
     const t = (s, depth = 0) => {
       const k = norm(s); if (!k) return s; const e = exact.get(k); if (e !== undefined) return e;
       if (depth > 2) return null;
-      for (const p of pats) { const m = p.re.exec(k); if (!m) continue; const vals = {};
+      for (const p of pats) { const m = p.re.exec(k); if (!m || (p.num && m.slice(1).some(g => !/^[\d.,]/.test(g)))) continue; const vals = {};
         p.order.forEach((idx, i) => { const g = m[i + 1]; const sub = t(g, depth + 1); vals[idx] = sub == null ? g : sub; });
         return p.v.replace(/\{(\d)\}/g, (_, d) => vals[d] ?? ''); }
       if (k.includes(' · ')) { const parts = k.split(' · '), out = parts.map(x => t(x, depth + 1)); if (out.some(x => x != null)) return out.map((x, i) => x == null ? parts[i] : x).join(' · '); }

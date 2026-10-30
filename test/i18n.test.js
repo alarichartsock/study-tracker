@@ -60,3 +60,8 @@ test('settings accepts a supported language only', async t => {
   assert.equal((await (await fetch(app.base + '/api/state', { headers: H })).json()).settings.lang, 'ko');
   assert.equal((await fetch(app.base + '/api/settings', { method: 'POST', headers: H, body: JSON.stringify({ lang: 'xx' }) })).status, 400);
 });
+
+test('short numeric keys translate ("of 6h" in the goal ring, ordinals) without matching ordinary words', () => {
+  assert.equal(I.T.es('of 6h'), 'de 6h'); assert.match(I.T.fr('of 20h'), /^sur 20 ?h$/); assert.equal(I.T.es('79th'), '79.º');
+  assert.equal(I.T.es('Math'), null); assert.equal(I.T.es('of course'), null);
+});
