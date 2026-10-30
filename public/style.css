@@ -549,15 +549,15 @@ html.authed #landing{display:none}
 
 .pw-plans{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
 
-/* landing: the fixed wallpaper fades out instead of ending in a hard line (long pages, full-page captures, mobile toolbar resize);
-   a document-length soft gradient keeps color all the way down. Signed-in app screens are unaffected. */
-body:has(#landing:not(.hid)) .wallpaper{bottom:auto;height:100lvh;-webkit-mask-image:linear-gradient(#000 45%,transparent 100%);mask-image:linear-gradient(#000 45%,transparent 100%)}
-#landing{position:relative;isolation:isolate}
-#landing::before{content:'';position:absolute;top:0;bottom:0;left:calc(50% - 50vw);width:100vw;z-index:-1;pointer-events:none;background:
-  radial-gradient(70vmax 45vmax at 0% 22%,color-mix(in srgb,var(--wp1) 30%,transparent),transparent 70%),
-  radial-gradient(70vmax 45vmax at 100% 45%,color-mix(in srgb,var(--wp2) 26%,transparent),transparent 70%),
-  radial-gradient(70vmax 45vmax at 10% 70%,color-mix(in srgb,var(--wp3) 22%,transparent),transparent 70%),
-  radial-gradient(70vmax 45vmax at 90% 92%,color-mix(in srgb,var(--wp1) 20%,transparent),transparent 70%)}
+/* landing background: ONE continuous fixed full-viewport layer. Smooth radial gradients on body::before (no blurred blobs,
+   no filter/mask, no per-section or container backgrounds), so nothing can clip it into seams at any width. App screens are unaffected. */
+body:has(#landing:not(.hid)) .wallpaper{display:none}
+body:has(#landing:not(.hid))::before{content:'';position:fixed;inset:-10vh -10vw;z-index:-1;pointer-events:none;background:
+  radial-gradient(75vmax 60vmax at 12% 8%,color-mix(in srgb,var(--wp1) 75%,transparent),transparent 72%),
+  radial-gradient(70vmax 60vmax at 92% 38%,color-mix(in srgb,var(--wp2) 60%,transparent),transparent 72%),
+  radial-gradient(80vmax 60vmax at 40% 105%,color-mix(in srgb,var(--wp3) 45%,transparent),transparent 72%),
+  var(--bg)}
+#landing{position:relative}
 
 /* heatmap: empty days get an outline so they read as "none", distinct from the lightest step */
 .l0{stroke:var(--line);stroke-width:1}.heat-key i.l0{box-shadow:inset 0 0 0 1px var(--line)}
