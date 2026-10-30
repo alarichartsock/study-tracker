@@ -3,7 +3,7 @@ window.SH_LANDING = window.SH_LANDING || location.href; // original URL (UTM/gcl
 // GA4 events: queued until consent.js loads; consent.js drops PII and never throws
 const track = (n, p) => { try { if (window.SHConsent && SHConsent.track) SHConsent.track(n, p); else (window.SHQ = window.SHQ || []).push([n, p]); } catch { /* never break the app */ } };
 const STD_SUBJ = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'], subjParam = s => STD_SUBJ.includes(s) ? s : 'custom';
-const PLAN_VALUE = { monthly: 4.99, yearly: 39 };
+const PLAN_VALUE = { monthly: 4.99, yearly: 39, lifetime: 100 };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const tip = (t, focus = true) => ' data-tip="' + esc(t) + '" aria-label="' + esc(t) + '"' + (focus ? ' tabindex="0"' : '');
@@ -70,7 +70,7 @@ const refCode = () => localStorage.shRef || '';
 let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'oauth'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('begin_trial', { method: m }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; history.replaceState(null, '', location.pathname); } }
-fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
+fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing && c.billing.plans && !c.billing.plans.lifetime) $('planLifetime')?.classList.add('hid'); if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
   if (location.pathname === '/pricing') setTimeout(() => $('pricing')?.scrollIntoView({ block: 'start' }), 50); }).catch(() => {});
 // signed-out defaults when /api/me is unreachable (crawlers, outages): show the landing page, never an error page
 const ME_FALLBACK = { user: null, needsSetup: false, registrationOpen: true, oauth: [] };
@@ -107,7 +107,8 @@ function termsGate(t) {
   $('tgOut').onclick = async e => { e.preventDefault(); await api('/api/logout', 'POST'); g.remove(); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 }
 // ---------- billing: trial banner, paywall, checkout ----------
-const PRICE = { monthly: '$4.99/month', yearly: '$39/year' };
+const PRICE = { monthly: '$4.99/month', yearly: '$39/year', lifetime: 'Lifetime $100' };
+const hasLifetime = () => !!(BILL.plans && BILL.plans.lifetime);
 function billBar() {
   let el = $('billBar'); if (!el) { el = document.createElement('div'); el.id = 'billBar'; el.className = 'billbar'; el.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); Promise.resolve(ACT[t.dataset.act](t, e)).catch(err => toast(err.message)); } }); $('app').querySelector('header.top').after(el); }
   const b = BILL, sub = b.subscription || {}; let html = '';
@@ -124,25 +125,26 @@ function showPaywall(blocked) {
     <h2 id="pwH">${over ? 'Your free trial has ended' : 'Subscribe to StudyHertz'}</h2>
     <p class="muted">${over ? (blocked ? "That change wasn't saved. " : '') + 'Your study data is safe. Subscribe to keep tracking; you can still view and export everything.' : `You have ${BILL.trialDaysLeft} day${BILL.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p>
     <div class="pw-plans"><button class="plan-btn" data-act="subscribe" data-plan="monthly"><b>Monthly</b><span class="price">$4.99<small>/month</small></span></button>
-    <button class="plan-btn best" data-act="subscribe" data-plan="yearly"><span class="pill">Save 35%</span><b>Yearly</b><span class="price">$39<small>/year</small></span></button></div>
-    <p class="muted small">Prices in USD. Renews automatically until you cancel; cancel anytime from Settings. See the <a href="/terms#subscriptions" target="_blank" rel="noopener">Terms</a>.</p>
+    <button class="plan-btn best" data-act="subscribe" data-plan="yearly"><span class="pill">Save 35%</span><b>Yearly</b><span class="price">$39<small>/year</small></span></button>${hasLifetime() ? '<button class="plan-btn" data-act="subscribe" data-plan="lifetime"><b>Lifetime</b><span class="price">$100<small> once</small></span></button>' : ''}</div>
+    <p class="muted small">Prices in USD. Monthly and yearly renew automatically until you cancel; cancel anytime from Settings.${hasLifetime() ? ' Lifetime is a one-time payment that never expires.' : ''} See the <a href="/terms#subscriptions" target="_blank" rel="noopener">Terms</a>.</p>
     <p class="err" id="pwErr"></p><button class="btn ghost" data-act="paywallClose">${over ? 'View my data (read-only)' : 'Not now'}</button></div>`;
   g.onclick = e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); ACT[t.dataset.act](t); } };
 }
 async function billingDone() {
-  for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed) break; await new Promise(r => setTimeout(r, 2000)); }
+  for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed || BILL.lifetime) break; await new Promise(r => setTimeout(r, 2000)); }
   if (BILL.conversion) { const cv = BILL.conversion; try { if (cv.label) window.SHConsent?.purchase(cv); } catch { /* ignore */ }
     // GA4 purchase: once per checkout (localStorage guard survives reloads; skipped when the server already sent it)
     try { const k = 'shPurchase_' + cv.txn; if (cv.txn && !cv.mp && !localStorage[k]) { localStorage[k] = '1'; window.SHConsent?.ecommerce('purchase', { txn: cv.txn, value: cv.value, currency: cv.currency, plan: cv.plan }); } } catch { /* ignore */ }
-    { const pl = (BILL.subscription && BILL.subscription.plan) || null; if (pl && !localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')]) { localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')] = '1'; track('subscribe', { plan: pl, value: PLAN_VALUE[pl], currency: 'USD' }); } } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
-  billBar(); toast(BILL.subscribed ? 'Thanks! Your subscription is active.' : 'Payment received. Your subscription will activate in a moment.'); if (view === 'set') render();
+    { const pl = BILL.lifetime ? null : (BILL.subscription && BILL.subscription.plan) || null; if (pl && !localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')]) { localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')] = '1'; track('subscribe', { plan: pl, value: PLAN_VALUE[pl], currency: 'USD' }); } } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
+  billBar(); toast(BILL.lifetime ? 'Thanks! You have lifetime access to StudyHertz.' : BILL.subscribed ? 'Thanks! Your subscription is active.' : 'Payment received. Your subscription will activate in a moment.'); if (view === 'set') render();
 }
 function billingCard() {
   const b = BILL; if (!b.enabled) return ''; const sub = b.subscription || {};
   let body;
   if (b.exempt) body = `<p class="muted small">${b.exempt === 'admin' ? 'Admin account: no subscription needed.' : b.exempt === 'comp' ? 'Your account has complimentary access.' : 'Thanks for being an early user: your account has free access for life.'}</p>`;
-  else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button></div>`;
-  else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
+  else if (b.lifetime) body = `<p class="muted small">Lifetime access${b.lifetimeSince ? ' since ' + new Date(b.lifetimeSince).toLocaleDateString() : ''}. It never expires. Thank you!${sub.status && sub.cancelAtPeriodEnd && sub.currentPeriodEnd && sub.status !== 'canceled' ? ' Your old ' + (sub.plan === 'yearly' ? 'yearly' : 'monthly') + ' plan stops renewing on ' + new Date(sub.currentPeriodEnd).toLocaleDateString() + '.' : ''}</p>${sub.status ? '<div class="row"><button class="btn" data-act="billPortal">Billing history</button></div>' : ''}`;
+  else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button>${hasLifetime() ? '<button class="btn primary" data-act="subscribe" data-plan="lifetime">Switch to Lifetime $100</button>' : ''}</div>${hasLifetime() ? '<p class="muted small">Lifetime is a one-time $100 payment. Your current plan then stops renewing at the end of its paid period (no refund).</p>' : ''}`;
+  else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${hasLifetime() ? `<button class="btn primary" data-act="subscribe" data-plan="lifetime">${PRICE.lifetime}</button>` : ''}${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
   return `<div class="card"><h3>Subscription</h3>${body}</div>`;
 }
 function refOffer() { const c = refCode(); if (!c || refOffer.done) return; refOffer.done = true;
@@ -665,7 +667,7 @@ VIEWS.set = async () => {
     <div class="row"><button class="btn" data-act="changePw">Update password</button><span class="sp"></span><button class="btn" data-act="onboard">Show welcome tour</button></div></div>
   ${billingCard()}
   ${ME.admin ? await adminHTML() : ''}
-  <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund. This can't be undone, so export your data first if you want a copy.</p>
+  <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund, and lifetime access isn't refundable. This can't be undone, so export your data first if you want a copy.</p>
     <div class="row"><span class="sp"></span><button class="btn danger" data-act="delAcct">Delete account…</button></div>`}</div>`;
 };
 VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>';
@@ -679,13 +681,13 @@ VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.<
   const ticks = [0, Math.round((n - 1) / 3), Math.round((n - 1) * 2 / 3), n - 1].map(i => '<span style="position:absolute;white-space:nowrap;' + (i === 0 ? 'left:0' : i === n - 1 ? 'right:0' : 'left:' + ((i + 0.5) / n * 100) + '%;transform:translateX(-50%)') + '">' + esc(fd(ser[i][0])) + '</span>').join('');
   const row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b>' + v + '</b></div>';
   // plan mix: excludes the admin account; early free-for-life users are shown separately from comped
-  const segs = [['Trial', sb.trialing, 'var(--acc)'], ['Subscribed \u00b7 monthly', sb.monthly, 'var(--ok)'], ['Subscribed \u00b7 yearly', sb.yearly, '#2f9e6e'], ['Subscribed \u00b7 other', sb.otherPaid, '#7bc8a4'], ['Comped', sb.comped, '#b07cf0'], ['Early users (free for life)', sb.legacy, '#e0a43a'], ['Trial ended', sb.expired, '#999'], ['Billing off', sb.billingOff, '#666']].filter(x => x[1] > 0);
+  const segs = [['Trial', sb.trialing, 'var(--acc)'], ['Subscribed \u00b7 monthly', sb.monthly, 'var(--ok)'], ['Subscribed \u00b7 yearly', sb.yearly, '#2f9e6e'], ['Lifetime', sb.lifetime || 0, '#1f7a52'], ['Subscribed \u00b7 other', sb.otherPaid, '#7bc8a4'], ['Comped', sb.comped, '#b07cf0'], ['Early users (free for life)', sb.legacy, '#e0a43a'], ['Trial ended', sb.expired, '#999'], ['Billing off', sb.billingOff, '#666']].filter(x => x[1] > 0);
   const base = segs.reduce((a, x) => a + x[1], 0), raw = segs.map(x => base ? x[1] / base * 100 : 0), pc = raw.map(Math.floor);
   raw.map((v, i) => [v - pc[i], i]).sort((a, b) => b[0] - a[0]).slice(0, base ? 100 - pc.reduce((a, b) => a + b, 0) : 0).forEach(([, i]) => pc[i]++);
-  const subT = sb.monthly + sb.yearly + sb.otherPaid, P = v => base ? Math.round(v / base * 1000) / 10 + '%' : '0%';
+  const subT = sb.monthly + sb.yearly + (sb.lifetime || 0) + sb.otherPaid, P = v => base ? Math.round(v / base * 1000) / 10 + '%' : '0%';
   const mix = base ? '<div style="display:flex;height:18px;border-radius:9px;overflow:hidden;margin:6px 0 12px">' + segs.map((x, i) => '<i style="flex:' + x[1] + ';background:' + x[2] + '"' + tip(x[0] + ' \u00b7 ' + x[1] + ' (' + pc[i] + '%)') + '></i>').join('') + '</div>'
     + segs.map((x, i) => '<div class="subj-row" style="gap:8px"><span style="min-width:0"><span class="dot" style="background:' + x[2] + '"></span> ' + esc(x[0]) + '</span><b>' + pc[i] + '% <small class="muted">' + x[1] + '</small></b></div>').join('')
-    + '<p class="muted small">Groups: Trial ' + P(sb.trialing) + ' \u00b7 Subscribed ' + P(subT) + ' (' + sb.monthly + ' monthly, ' + sb.yearly + ' yearly) \u00b7 Comped incl. early users ' + P(sb.comped + sb.legacy) + '. Of ' + base + ' users; excludes admin.</p>' : '<p class="muted small">No non-admin users yet.</p>';
+    + '<p class="muted small">Groups: Trial ' + P(sb.trialing) + ' \u00b7 Subscribed ' + P(subT) + ' (' + sb.monthly + ' monthly, ' + sb.yearly + ' yearly, ' + (sb.lifetime || 0) + ' lifetime) \u00b7 Comped incl. early users ' + P(sb.comped + sb.legacy) + '. Of ' + base + ' users; excludes admin.</p>' : '<p class="muted small">No non-admin users yet.</p>';
   return statCards([[s.total, 'Total users'], [s.newToday, 'New today'], [s.new7, 'New, 7 days'], [s.new30, 'New, 30 days']])
     + statCards([[s.activeStudy.d1, 'Studied, 24 h'], [s.activeStudy.d7, 'Studied, 7 days'], [s.activeStudy.d30, 'Studied, 30 days'], [s.signedIn, 'Signed in now']])
     + '<div class="card"><div class="row" style="margin:0 0 8px;flex-wrap:wrap;gap:6px"><h3 style="margin:0">Users per day</h3><span class="sp"></span>' + [30, 60, 90].map(r => '<button class="btn small' + (r === rng ? ' primary' : '') + '" data-act="usrRange" data-r="' + r + '">' + r + 'd</button>').join(' ') + '</div>'
@@ -700,7 +702,7 @@ async function adminHTML() {
   const [cfg, users, reps] = await Promise.all([api('/api/admin/config'), api('/api/admin/users'), api('/api/admin/reports')]), f = UI.repFilter || 'pending';
   const list = reps.filter(r => f === 'all' || r.status === f).reverse();
   return `<div class="card"><h3>Admin</h3><label class="switch"><input type="checkbox" data-chg="openReg" ${cfg.openRegistration ? 'checked' : ''}> Allow new users to register</label>
-    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}${u.billing ? ` <small class="muted">${u.billing.subscribed ? 'subscribed' : u.billing.exempt === 'legacy' ? 'legacy' : u.billing.exempt === 'admin' ? '' : u.billing.readOnly ? 'trial ended' : u.billing.trialDaysLeft != null ? u.billing.trialDaysLeft + 'd trial' : ''}</small>` : ''}</span><span class="row" style="margin:0;gap:10px">${u.billing && !u.admin ? `<label class="switch small"><input type="checkbox" data-chg="comp" data-id="${u.id}" ${u.billing.comp ? 'checked' : ''}> Comp</label>` : ''}<small class="muted">${new Date(u.created).toLocaleDateString()}</small>${u.admin ? '' : `<button class="btn small danger" data-act="admDel" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</span></div>`).join('')}</div></div>
+    <div class="list mt">${users.map(u => `<div class="subj-row"><span>${esc(u.username)}${u.admin ? ' <small class="muted">admin</small>' : ''}${u.billing ? ` <small class="muted">${u.billing.lifetime ? 'lifetime' : u.billing.subscribed ? 'subscribed' : u.billing.exempt === 'legacy' ? 'legacy' : u.billing.exempt === 'admin' ? '' : u.billing.readOnly ? 'trial ended' : u.billing.trialDaysLeft != null ? u.billing.trialDaysLeft + 'd trial' : ''}</small>` : ''}</span><span class="row" style="margin:0;gap:10px">${u.billing && !u.admin ? `<label class="switch small"><input type="checkbox" data-chg="comp" data-id="${u.id}" ${u.billing.comp ? 'checked' : ''}> Comp</label>` : ''}<small class="muted">${new Date(u.created).toLocaleDateString()}</small>${u.admin ? '' : `<button class="btn small danger" data-act="admDel" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</span></div>`).join('')}</div></div>
   <div class="card"><div class="row wrap" style="margin:0 0 8px"><h3 class="grow" style="margin:0">Bug reports</h3><div class="tabs">${['pending', 'approved', 'rejected', 'all'].map(s => `<button data-act="repFilter" data-f="${s}" class="${f === s ? 'on' : ''}">${s}${s === 'all' ? '' : ' ' + reps.filter(r => r.status === s).length}</button>`).join('')}</div></div>
     <p class="muted small">Report text is user-submitted and untrusted. Approving only saves it to <code>mcat-tracker-reports/approved/</code> so the developer can read it on request. Nothing is changed automatically.</p>
     ${list.map(r => `<div class="report"><div class="row" style="margin:0"><b class="grow">#${r.id} ${esc(r.title)}</b><span class="pill ${esc(r.status)}">${esc(r.status)}</span></div>
@@ -739,7 +741,7 @@ function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.
   if (now.getHours() * 60 + now.getMinutes() < h * 60 + m || localStorage.remindedOn === dk(now) || ST.today > 0) return; localStorage.remindedOn = dk(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
 ACT.saveBusy = async () => { await api('/api/settings', 'POST', { busyIp: $('sBip').value, busyToken: $('sBtok').value }); toast('Busy Bar saved'); refresh(); };
 ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); toast(r.ok ? 'Sent! Check your Busy Bar.' : 'Could not reach the Busy Bar'); };
-ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund. This can't be undone.</p>
+ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund, and lifetime access isn't refundable. This can't be undone.</p>
   <label for="delConf">Type DELETE (or your email) to confirm</label><input id="delConf" name="confirm" autocomplete="off" autocapitalize="characters" required>
   ${ME.hasPassword ? '<label for="delPw">Password</label><input id="delPw" name="password" type="password" autocomplete="current-password" required>' : ''}
   <div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><span class="sp"></span><button class="btn danger" value="del">Delete forever</button></div>`,

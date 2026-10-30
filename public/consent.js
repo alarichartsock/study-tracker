@@ -65,8 +65,8 @@
     },
     // GA4 ecommerce events (begin_checkout, purchase) with an items array (track() strips non-primitive params)
     ecommerce: function (name, p) {
-      if (name !== 'begin_checkout' && name !== 'purchase') return; p = p || {}; var plan = p.plan === 'yearly' ? 'yearly' : 'monthly', value = Number(p.value) || 0;
-      var ev = { currency: p.currency || 'USD', value: value, items: [{ item_id: 'studyhertz_' + plan, item_name: 'StudyHertz ' + (plan === 'yearly' ? 'Yearly' : 'Monthly'), item_category: 'subscription', price: value, quantity: 1 }] };
+      if (name !== 'begin_checkout' && name !== 'purchase') return; p = p || {}; var plan = p.plan === 'yearly' || p.plan === 'lifetime' ? p.plan : 'monthly', value = Number(p.value) || 0;
+      var ev = { currency: p.currency || 'USD', value: value, items: [{ item_id: 'studyhertz_' + plan, item_name: 'StudyHertz ' + (plan === 'yearly' ? 'Yearly' : plan === 'lifetime' ? 'Lifetime' : 'Monthly'), item_category: 'subscription', price: value, quantity: 1 }] };
       if (name === 'purchase') { if (!p.txn || !/^[A-Za-z0-9_]{1,200}$/.test(p.txn)) return; ev.transaction_id = p.txn; }
       cfg().then(function (c) { try { if (c && c.gaId) { ev.send_to = c.gaId; gtag('event', name, ev); } } catch (e) { /* ignore */ } });
     },

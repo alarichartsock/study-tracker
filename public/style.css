@@ -548,3 +548,5 @@ html.authed #landing{display:none}
 @media(max-width:960px){.sgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.l-nav{display:none}}
 @media(max-width:640px){.lsteps,.sgrid{grid-template-columns:1fr}.ltabs{width:auto;border-radius:18px}.ltabs button{padding:7px 11px;font-size:13px}.pv-trophies{grid-template-columns:repeat(2,minmax(0,1fr))}.sec-cta .btn{width:100%}}
 .l-top a.btn{color:var(--text);text-decoration:none}
+
+.pw-plans{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}

@@ -153,7 +153,7 @@ function createApp(opts = {}) {
   const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
   // Server-side GA4 purchase via the Measurement Protocol. Only when an API secret is configured AND the browser passed its
   // GA client id at checkout (it does that only after analytics consent was granted). Never throws; returns true when sent.
-  const gaItems = c => [{ item_id: 'studyhertz_' + c.plan, item_name: 'StudyHertz ' + (c.plan === 'yearly' ? 'Yearly' : 'Monthly'), item_category: 'subscription', price: c.value, quantity: 1 }];
+  const gaItems = c => [{ item_id: 'studyhertz_' + c.plan, item_name: 'StudyHertz ' + ({ yearly: 'Yearly', lifetime: 'Lifetime' }[c.plan] || 'Monthly'), item_category: 'subscription', price: c.value, quantity: 1 }];
   async function gaPurchase(cid, c) {
     const secret = opts.gaApiSecret ?? GA_API_SECRET, gaId = opts.gaId ?? GA_ID;
     if (!secret || !gaId || !/^\d{1,12}\.\d{1,12}$/.test(String(cid || ''))) return false;
@@ -163,6 +163,19 @@ function createApp(opts = {}) {
   }
   async function handleStripeEvent(ev) {
     const o = (ev.data && ev.data.object) || {};
+    if (ev.type === 'checkout.session.completed' && o.mode === 'payment') { // Lifetime: one-time $100 payment
+      const meta = o.metadata || {}; if (meta.plan !== 'lifetime' || o.payment_status !== 'paid') return;
+      const uid = Number(o.client_reference_id) || uidFor(o.customer, meta); if (!uid || !store.userById(uid)) return;
+      const u = store.userById(uid); u.billing ||= {};
+      if (!u.billing.lifetime) { u.billing.lifetime = { at: new Date().toISOString(), txn: o.id, amount: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase() };
+        const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan: 'lifetime' };
+        if (await gaPurchase(meta.ga_cid, conv)) conv.mp = true; u.billing.conversion = conv; store.save(); }
+      // an existing monthly/yearly subscription stops renewing at the end of its paid period (never refunded). A Stripe error
+      // makes the webhook fail so Stripe retries; the lifetime grant above is idempotent.
+      const sub = store.sql.subscription(uid);
+      if (sub && sub.subscription_id && billing.ACTIVE.has(sub.status) && !sub.cancel_at_period_end) applySub(uid, await stripe('POST', '/subscriptions/' + encodeURIComponent(sub.subscription_id), { cancel_at_period_end: true }, 'sh-life-cancel-' + sub.subscription_id));
+      return;
+    }
     if (ev.type === 'checkout.session.completed') {
       if (o.mode !== 'subscription' || !o.subscription) return;
       const uid = Number(o.client_reference_id) || uidFor(o.customer, o.metadata); if (!uid || !store.userById(uid)) return;
@@ -325,7 +338,7 @@ function createApp(opts = {}) {
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
-      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.PLANS } : null });
+      if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.plansFor(bcfg) } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
       if (p === '/api/register' && M === 'POST') {
@@ -380,7 +393,7 @@ function createApp(opts = {}) {
 
       // ---- billing ----
       if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
-        return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.PLANS } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
+        return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.plansFor(bcfg) } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
       if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
       if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {
         if (!billing.enabled(bcfg)) return send(res, 404, { error: 'Billing is not enabled' });
@@ -388,11 +401,18 @@ function createApp(opts = {}) {
         try {
           if (p === '/api/billing/portal') { const r = store.sql.subscription(user.id); if (!r || !r.customer_id) return send(res, 400, { error: 'No subscription to manage yet' });
             return send(res, 200, { url: (await stripe('POST', '/billing_portal/sessions', { customer: r.customer_id, return_url: baseUrl(req) + '/?billing=portal' })).url }); }
-          const plan = j.plan === 'yearly' ? 'yearly' : 'monthly';
-          if (bstat(user).subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
+          const plan = ['yearly', 'lifetime'].includes(j.plan) ? j.plan : 'monthly', st0 = bstat(user), gaMeta = /^\d{1,12}\.\d{1,12}$/.test(String(j.gaCid || '')) ? { ga_cid: String(j.gaCid) } : {};
+          if (st0.lifetime) return send(res, 409, { error: 'You already have lifetime access.' });
+          if (plan === 'lifetime') { if (!bcfg.prices.lifetime) return send(res, 400, { error: 'The lifetime plan is not available.' });
+            const customer = await ensureCustomer(user), base = baseUrl(req);
+            const cs = await stripe('POST', '/checkout/sessions', { mode: 'payment', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices.lifetime, quantity: 1 }],
+              success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, payment_intent_data: { metadata: { uid: String(user.id), plan } },
+              integration_identifier: 'studyhertz-lifetime-qhxmzpta' });
+            return send(res, 200, { url: cs.url }); }
+          if (st0.subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
           const customer = await ensureCustomer(user), base = baseUrl(req);
           const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
-            success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...(/^\d{1,12}\.\d{1,12}$/.test(String(j.gaCid || '')) ? { ga_cid: String(j.gaCid) } : {}) }, subscription_data: { metadata: { uid: String(user.id) } },
+            success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, subscription_data: { metadata: { uid: String(user.id) } },
             integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
           return send(res, 200, { url: cs.url });
         } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }
@@ -559,7 +579,7 @@ function createApp(opts = {}) {
         if (!user.admin) return send(res, 403, { error: 'Admin only' });
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/config' && M === 'POST') { if (j.openRegistration !== undefined) store.db.config.openRegistration = !!j.openRegistration; save(); return send(res, 200, store.db.config); }
-        if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => { const b = bstat(x); return { ...publicUser(x), created: x.created, billing: b.enabled ? { exempt: b.exempt || null, comp: !!(x.billing && x.billing.comp), subscribed: !!b.subscribed, trialDaysLeft: b.trialDaysLeft ?? null, readOnly: !!b.readOnly } : null }; }));
+        if (p === '/api/admin/users' && M === 'GET') return send(res, 200, store.db.users.map(x => { const b = bstat(x); return { ...publicUser(x), created: x.created, billing: b.enabled ? { exempt: b.exempt || null, comp: !!(x.billing && x.billing.comp), subscribed: !!b.subscribed, lifetime: !!b.lifetime, trialDaysLeft: b.trialDaysLeft ?? null, readOnly: !!b.readOnly } : null }; }));
         { const dm = /^\/api\/admin\/users\/(\d+)\/delete$/.exec(p); if (dm && M === 'POST') { const x = store.userById(+dm[1]); if (!x) return send(res, 404, { error: 'not found' });
           if (x.id === user.id || x.admin) return send(res, 403, { error: 'Admin accounts cannot be deleted here.' });
           if (String(j.confirm || '') !== x.username) return send(res, 400, { error: 'Type the username to confirm.' });
@@ -571,10 +591,11 @@ function createApp(opts = {}) {
           const now = Date.now(), DAYMS = 864e5, dk = t => new Date(t).toISOString().slice(0, 10), us = store.db.users, ago = t => (now - (Date.parse(t) || 0)) / DAYMS;
           const days = 90, series = []; for (let i = days - 1; i >= 0; i--) series.push([dk(now - i * DAYMS), 0]);
           const idx = new Map(series.map((x, i) => [x[0], i])); for (const x of us) { const i = idx.get(x.created ? dk(Date.parse(x.created) || 0) : ''); if (i !== undefined) series[i][1]++; }
-          const today = dk(now), subs = { trialing: 0, monthly: 0, yearly: 0, otherPaid: 0, comped: 0, legacy: 0, admin: 0, expired: 0, billingOff: 0 };
+          const today = dk(now), subs = { trialing: 0, monthly: 0, yearly: 0, lifetime: 0, otherPaid: 0, comped: 0, legacy: 0, admin: 0, expired: 0, billingOff: 0 };
           const act = { d1: 0, d7: 0, d30: 0 }; let sessions = 0, studySec = 0, studied = 0;
           for (const x of us) { const b = bstat(x);
             if (!b.enabled) subs.billingOff++; else if (b.exempt === 'admin') subs.admin++; else if (b.exempt === 'comp') subs.comped++; else if (b.exempt === 'legacy') subs.legacy++;
+            else if (b.lifetime) subs.lifetime++; // paid: one-time purchase
             else if (b.subscribed) { const pl = b.subscription && b.subscription.plan; subs[pl === 'yearly' ? 'yearly' : pl === 'monthly' ? 'monthly' : 'otherPaid']++; } else if (b.trial) subs.trialing++; else subs.expired++;
             const ss = (store.db.userData[x.id] && store.db.userData[x.id].sessions) || []; let last = 0;
             for (const s of ss) { const e = Date.parse(s.end || s.start) || 0; if (e > last) last = e; studySec += Math.max(0, ((Date.parse(s.end) || 0) - (Date.parse(s.start) || 0)) / 1000 - (s.breakSec || 0)); }
