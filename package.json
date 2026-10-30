@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
+    "indexnow": "node scripts/indexnow.js",
     "test:ui": "node e2e/responsive.mjs"
   },
   "engines": { "node": ">=24" }

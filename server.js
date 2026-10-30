@@ -24,6 +24,7 @@ const ageOk = by => { const y = Number(by), now = new Date().getUTCFullYear(); r
 const AGE_BLOCK = "Sorry, we can't create an account for you right now.";
 const SESSION_DAYS = 30, PUBLIC = path.join(__dirname, 'public');
 const DAY = 864e5;
+const INDEXNOW = require('./lib/indexnow');
 const STATIC = { '/': 'index.html', '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
@@ -322,6 +323,7 @@ function createApp(opts = {}) {
     try {
       if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
       const plain = (code, body, type, cc) => { const b = Buffer.from(body); res.writeHead(code, { 'Content-Type': type, 'Content-Length': b.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cc }); res.end(M === 'HEAD' ? undefined : b); };
+      if ((M === 'GET' || M === 'HEAD') && p === INDEXNOW.KEY_PATH) return plain(200, INDEXNOW.KEY, 'text/plain; charset=utf-8', 'public, max-age=86400');
       if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, ROBOTS, 'text/plain; charset=utf-8', 'public, max-age=3600');
       if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', 'public, max-age=3600');
       if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
@@ -628,4 +630,5 @@ module.exports = { createApp };
 if (require.main === module) {
   const port = +process.env.PORT || 3000, app = createApp();
   app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'StudyHertz on :' + port));
+  setTimeout(() => INDEXNOW.onDeploy().catch(() => {}), 15000).unref();
 }

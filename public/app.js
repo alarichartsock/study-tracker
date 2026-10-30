@@ -121,7 +121,7 @@ function showPaywall(blocked) {
   if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked });
   let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
   const over = BILL.readOnly;
-  g.innerHTML = `<div class="glass sheet auth-card paywall" role="dialog" aria-modal="true" aria-labelledby="pwH"><div class="brand big"><img src="/favicon.svg" alt=""> <span>StudyHertz</span></div>
+  g.innerHTML = `<div class="glass sheet auth-card paywall" role="dialog" aria-modal="true" aria-labelledby="pwH"><div class="brand big"><img src="/favicon.svg" alt="StudyHertz logo"> <span>StudyHertz</span></div>
     <h2 id="pwH">${over ? 'Your free trial has ended' : 'Subscribe to StudyHertz'}</h2>
     <p class="muted">${over ? (blocked ? "That change wasn't saved. " : '') + 'Your study data is safe. Subscribe to keep tracking; you can still view and export everything.' : `You have ${BILL.trialDaysLeft} day${BILL.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p>
     <div class="pw-plans"><button class="plan-btn" data-act="subscribe" data-plan="monthly"><b>Monthly</b><span class="price">$4.99<small>/month</small></span></button>

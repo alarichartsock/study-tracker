@@ -17,7 +17,7 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
 </head><body>
 <div class="wallpaper" id="wallpaper" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
 <div id="landing" class="landing">
-  <header class="l-top glass"><div class="brand"><img src="/favicon.svg" alt=""> <span data-brand>StudyHertz</span></div><nav class="l-nav" aria-label="Sections"><a href="#tour">Features</a><a href="#how">How it works</a><a href="#mcat">MCAT</a><a href="#faq">FAQ</a></nav><span class="sp"></span><a href="/pricing" id="pricingLink" class="btn ghost" onclick="event.preventDefault();history.replaceState(null,'','/pricing');document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</a><button class="btn ghost" data-auth="login">Sign in</button><button class="btn primary" data-auth="register" data-cta="header">Start free trial</button></header>
+  <header class="l-top glass"><div class="brand"><img src="/favicon.svg" alt="StudyHertz logo"> <span data-brand>StudyHertz</span></div><nav class="l-nav" aria-label="Sections"><a href="#tour">Features</a><a href="#how">How it works</a><a href="#mcat">MCAT</a><a href="#faq">FAQ</a></nav><span class="sp"></span><a href="/pricing" id="pricingLink" class="btn ghost" onclick="event.preventDefault();history.replaceState(null,'','/pricing');document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</a><button class="btn ghost" data-auth="login">Sign in</button><button class="btn primary" data-auth="register" data-cta="header">Start free trial</button></header>
   <section class="hero">
     <div class="hero-copy">
       <p class="eyebrow"><span data-brand>StudyHertz</span> &middot; MCAT study tracker</p>
@@ -76,7 +76,7 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
   <section class="cta-band card final-cta"><h2>Start tracking your MCAT hours today</h2><p class="muted">30 days free. No card required. Cancel anytime.</p><button class="btn primary xl" data-auth="register" data-cta="final">Start free 30-day trial</button></section>
   <footer class="l-foot">
     <div class="lf-top">
-      <div class="lf-brand"><a href="/" class="lf-mark"><img src="/favicon.svg" alt="" width="26" height="26"> StudyHertz</a>
+      <div class="lf-brand"><a href="/" class="lf-mark"><img src="/favicon.svg" alt="StudyHertz logo" width="26" height="26"> StudyHertz</a>
         <p>MCAT study tracking, built in the open.</p>
         <p class="lf-oss">Open source under <a href="https://www.gnu.org/licenses/gpl-3.0.html" rel="license">GPL-3.0</a></p></div>
       <nav class="lf-cols" aria-label="Footer">
@@ -91,7 +91,7 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
 <div id="auth" class="auth hid">
   <form class="glass sheet auth-card" id="authForm">
     <button type="button" class="icon a-back" id="aBack" aria-label="Back">&#8249;</button>
-    <div class="brand big"><img src="/favicon.svg" alt=""> <span data-brand>StudyHertz</span></div>
+    <div class="brand big"><img src="/favicon.svg" alt="StudyHertz logo"> <span data-brand>StudyHertz</span></div>
     <p class="muted" id="authMsg">Sign in to continue</p>
     <div id="oauthTop" class="oauth hid"></div>
     <input id="aUser" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Username" required>
@@ -107,7 +107,7 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
 
 <div id="app" class="hid">
   <header class="top">
-    <div class="brand"><img src="/favicon.svg" alt=""> <span data-brand>StudyHertz</span></div>
+    <div class="brand"><img src="/favicon.svg" alt="StudyHertz logo"> <span data-brand>StudyHertz</span></div>
     <nav id="nav" class="glass tabbar">
       <button data-v="timer" class="on" title="Timer" aria-label="Timer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5l3 2M9 2h6M12 22a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg><span>Timer</span></button><button data-v="dash" title="Dashboard" aria-label="Dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z"/></svg><span>Dashboard</span></button><button data-v="sess" title="Sessions" aria-label="Sessions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Sessions</span></button><button data-v="cal" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4"/></svg><span>Calendar</span></button><button data-v="stats" title="Stats" aria-label="Stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Stats</span></button><button data-v="mcat" title="MCAT scores" aria-label="MCAT scores"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M4 16l5-6 4 3 7-8M16 5h4v4"/></svg><span>MCAT scores</span></button><button data-v="plan" title="Exams &amp; To-dos" aria-label="Exams &amp; To-dos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>Exams &amp; To-dos</span></button><button data-v="trophy" title="Trophies" aria-label="Trophies"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg><span>Trophies</span></button><button data-v="data" title="Import / Export" aria-label="Import / Export"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg><span>Import / Export</span></button><button data-v="set" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 13.7H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10.3 3V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 17 4.6l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
     </nav>
