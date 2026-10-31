@@ -607,3 +607,6 @@ body:has(#landing:not(.hid)){overflow-x:clip}
   z-index:100;margin:0;visibility:visible!important;opacity:1!important;display:flex!important}
  main{padding-bottom:calc(110px + env(safe-area-inset-bottom))!important}
 }
+
+/* admin usage table */
+.u-tbl{width:100%;border-collapse:collapse;font-size:.85rem}.u-tbl th,.u-tbl td{padding:6px 8px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line, rgba(128,128,128,.25))}.u-tbl th{font-weight:600;color:var(--muted)}.u-row:hover{background:rgba(128,128,128,.08)}.u-detail td{white-space:normal;background:rgba(128,128,128,.05)}.u-spark{display:block}.u-h{margin:18px 0 8px}

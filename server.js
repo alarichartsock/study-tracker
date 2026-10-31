@@ -2,7 +2,7 @@
 // StudyHertz - zero-dependency Node server
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
-const reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
+const usage = require('./lib/usage'), reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
@@ -370,6 +370,7 @@ function createApp(opts = {}) {
         if (raw) { if (!/application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'JSON required' }); j = JSON.parse(raw); if (!j || typeof j !== 'object') j = {}; }
       }
       const user = currentUser(req);
+      if (user) { try { if (usage.touch(user)) store.save(); } catch { /* activity tracking must never break a request */ } }
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
@@ -637,6 +638,9 @@ function createApp(opts = {}) {
           return send(res, 200, { ok: true }); } }
         { const cm = /^\/api\/admin\/users\/(\d+)\/comp$/.exec(p); if (cm && M === 'POST') { const x = store.userById(+cm[1]); if (!x) return send(res, 404, { error: 'not found' });
           x.billing ||= {}; x.billing.comp = !!j.comp; store.save(); return send(res, 200, { ok: true, comp: x.billing.comp }); } }
+        if (p === '/api/admin/usage' && M === 'GET') { // admin-only usage metrics (no emails beyond usernames already shown in the admin list)
+          const now = new Date(), rows = store.db.users.map(x => usage.perUser(x, store.db.userData[x.id], { now, bstat, achievements: analytics.achievements }));
+          return send(res, 200, { generated: now.toISOString(), summary: usage.summary(rows, now), users: rows }); }
         if (p === '/api/admin/stats' && M === 'GET') { // aggregate counts only, no personal data
           const now = Date.now(), DAYMS = 864e5, dk = t => new Date(t).toISOString().slice(0, 10), us = store.db.users, ago = t => (now - (Date.parse(t) || 0)) / DAYMS;
           const days = 90, series = []; for (let i = days - 1; i >= 0; i--) series.push([dk(now - i * DAYMS), 0]);
