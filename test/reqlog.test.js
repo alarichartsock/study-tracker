@@ -36,6 +36,9 @@ test('server logs one structured line per request with flags; never logs bodies,
     for (let i = 0; i < 11; i++) await call('/api/me/x');
     await call('/api/admin/logs', 'GET', undefined, { Cookie: ck2 });
     await new Promise(r => setTimeout(r, 30));
+    await call('/api/health', 'GET', undefined, { 'User-Agent': 'Render/1.0' });
+    await new Promise(r => setTimeout(r, 20));
+    assert.ok(!lines.some(l => l.includes('Render/1.0')), 'Render health checks not logged');
     const ev = lines.map(l => JSON.parse(l)), all = lines.join('\n');
     for (const e of ev) for (const k of ['t', 'id', 'method', 'path', 'status', 'ms', 'bytes', 'ip']) assert.ok(k in e, k);
     assert.ok(!/super-secret-pw|wrong-password-zz|SECRETCODE|sid=/.test(all), 'no secrets in logs');
