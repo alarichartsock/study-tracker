@@ -638,6 +638,12 @@ function createApp(opts = {}) {
         try { return send(res, 200, await aff.onboard(a.id, baseUrl(req))); } catch (e) { return send(res, e.status || 502, { error: e.message }); } }
       if (p.startsWith('/api/admin/')) {
         if (!user.admin) { res.log.flags.push('admin_denied'); return send(res, 403, { error: 'Admin only' }); }
+        if (p === '/api/admin/logs/stream' && M === 'GET') { // Server-Sent Events: live request feed (admin only)
+          res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
+          if (res.socket) res.socket.setNoDelay(true); const lean = e => { const { stack, ...r } = e; return r; };
+          const since = Date.now() - 5 * 60e3; res.write('retry: 3000\nevent: init\ndata: ' + JSON.stringify(rlog.buffer.filter(e => Date.parse(e.t) >= since).slice(-500).map(lean)) + '\n\n');
+          const off = rlog.subscribe(e => res.write('data: ' + JSON.stringify(lean(e)) + '\n\n')), hb = setInterval(() => res.write(': hb ' + Date.now() + '\n\n'), 15000);
+          const stop = () => { off(); clearInterval(hb); }; req.on('close', stop); res.on('close', stop); return; }
         { const lm = /^\/api\/admin\/logs\/([\w-]{1,40})$/.exec(p); if (lm && lm[1] !== 'stats' && M === 'GET') { const r = rlog.find(lm[1]); return r ? send(res, 200, r) : send(res, 404, { error: 'log event not found' }); } }
         if (p === '/api/admin/logs/stats' && M === 'GET') return send(res, 200, rlog.longStats());
         if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, +q.limit || 500))); }

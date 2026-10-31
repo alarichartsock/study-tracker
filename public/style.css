@@ -615,3 +615,6 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .log-search{margin:0 0 10px}.log-search input{width:100%;font-size:1rem;padding:10px 14px;border-radius:12px}.log-tbl mark,.log-pre mark{background:#ffe066;color:inherit;border-radius:3px;padding:0 1px}
 .imp-sum .ach-tx b{white-space:normal}.imp-list{max-height:55vh;overflow:auto}
 .log-warn{border:1px solid #e03131;box-shadow:0 0 0 3px rgba(224,49,49,.12)}
+
+.live-big{font-size:2rem;font-weight:700;margin-top:4px}.live-conn{font-size:.8rem;color:var(--muted)}.live-conn.on{color:var(--ok)}.live-conn.on::before{content:'\25cf ';animation:livepulse 1.4s infinite}
+@keyframes livepulse{50%{opacity:.25}}.live-new{animation:livein .6s ease-out}@keyframes livein{from{opacity:0;transform:translateY(-6px);background:rgba(76,110,245,.18)}to{opacity:1;transform:none}}

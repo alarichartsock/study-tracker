@@ -1,5 +1,5 @@
 'use strict';
-window.SH_LANDING = window.SH_LANDING || location.href; // original URL (UTM/gclid) before replaceState strips the query
+const BOOT_HASH = location.hash; window.SH_LANDING = window.SH_LANDING || location.href; // original URL (UTM/gclid) before replaceState strips the query
 const signupMeta = () => { const o = { lang: (navigator.language || '').slice(0, 35) }; try { const ft = window.SHConsent?.firstTouch(); if (ft) o.ft = ft; } catch { /* ignore */ } return o; };
 // GA4 events: queued until consent.js loads; consent.js drops PII and never throws
 const track = (n, p) => { try { if (window.SHConsent && SHConsent.track) SHConsent.track(n, p); else (window.SHQ = window.SHQ || []).push([n, p]); } catch { /* never break the app */ } };
@@ -97,7 +97,7 @@ async function boot() {
   { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
     if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
-  { const lm = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(location.hash); if (lm && ME && ME.admin) { UI.logEv = lm[1]; view = "logev"; } }
+  { const lm = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(BOOT_HASH); if (lm && ME && ME.admin) { UI.logEv = lm[1]; view = "logev"; } else if (BOOT_HASH === '#/admin/live' && ME && ME.admin) view = 'loglive'; }
   go(view);
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
@@ -217,10 +217,12 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dat
   if (!nav || !top || !app) return;
   const place = () => { if (mq.matches) { if (nav.parentElement !== app) app.appendChild(nav); } else if (nav.parentElement !== top) top.insertBefore(nav, top.querySelector('.top-r')); };
   place(); mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place); })();
-function go(v) { if ((v === 'users' || v === 'logev') && !(ME && ME.admin)) v = 'timer';
+function go(v) { if ((v === 'users' || v === 'logev' || v === 'loglive') && !(ME && ME.admin)) v = 'timer';
   if (v !== view || !go.sent) { go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
-  view = v; if (v !== 'logev') localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === (v === 'logev' ? 'users' : v)));
-  if (v !== 'logev' && /^#\/admin\/logs\//.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+  view = v; if (v !== 'logev' && v !== 'loglive') localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === (v === 'logev' || v === 'loglive' ? 'users' : v)));
+  if (v !== 'loglive' && UI.live && UI.live.es) { UI.live.es.close(); UI.live.es = null; }
+  if (v === 'loglive' && location.hash !== '#/admin/live') history.replaceState(history.state, '', '#/admin/live');
+  if (v !== 'logev' && v !== 'loglive' && /^#\/admin\/(logs\/|live)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
   render(); if (!(v === 'users' && UI.usersBack)) window.scrollTo(0, 0); }
 async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); }
 async function refresh() { await load(); render(); }
@@ -808,7 +810,7 @@ const logsView = async () => {
   const sel = (id, opts, v) => '<select id="' + id + '">' + opts.map(([k, l]) => '<option value="' + k + '"' + (k === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>';
   const inp = (id, ph, v, t = 'text') => '<input id="' + id + '" type="' + t + '" placeholder="' + ph + '" value="' + esc(v || '') + '" style="max-width:190px">';
   const loc = x => x ? new Date(x.getTime() - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : '';
-  const filters = '<div class="log-search"><input id="lfQ" type="search" placeholder="Search logs: path, IP, user, UA, request id, status, error, flag \u00b7 e.g. status:415 ip:1.2.3.4 path:/api/admin" value="' + esc(F.q || '') + '" autocomplete="off" spellcheck="false" aria-label="Search logs"></div><div class="row" style="flex-wrap:wrap;gap:6px;margin:0 0 10px">' + Object.keys(LOGR).map(r => '<button class="btn small' + (!F.from && F.range === r ? ' primary' : '') + '" data-act="logRange" data-r="' + r + '">' + r + '</button>').join('') + '</div>'
+  const filters = '<div class="row" style="margin:0 0 8px"><button class="btn primary small" data-act="logLive">\u25cf Live view</button></div><div class="log-search"><input id="lfQ" type="search" placeholder="Search logs: path, IP, user, UA, request id, status, error, flag \u00b7 e.g. status:415 ip:1.2.3.4 path:/api/admin" value="' + esc(F.q || '') + '" autocomplete="off" spellcheck="false" aria-label="Search logs"></div><div class="row" style="flex-wrap:wrap;gap:6px;margin:0 0 10px">' + Object.keys(LOGR).map(r => '<button class="btn small' + (!F.from && F.range === r ? ' primary' : '') + '" data-act="logRange" data-r="' + r + '">' + r + '</button>').join('') + '</div>'
     + '<div class="row log-f" style="flex-wrap:wrap;gap:6px;margin:0 0 10px">' + sel('lfStatus', [['', 'Any status'], ['2xx', '2xx'], ['3xx', '3xx'], ['4xx', '4xx'], ['5xx', '5xx'], ['401', '401'], ['403', '403'], ['404', '404'], ['415', '415']], F.status)
     + sel('lfMethod', [['', 'Any method'], ['GET', 'GET'], ['POST', 'POST'], ['PUT', 'PUT'], ['DELETE', 'DELETE'], ['HEAD', 'HEAD']], F.method) + inp('lfPath', 'Path contains', F.path) + inp('lfIp', 'IP', F.ip) + inp('lfUid', 'User id', F.uid, 'number')
     + inp('lfFrom', 'From', F.from ? loc(new Date(F.from)) : '', 'datetime-local') + inp('lfTo', 'To', F.to ? loc(new Date(F.to)) : '', 'datetime-local')
@@ -847,10 +849,10 @@ ACT.logApply = () => { const v = id => $(id).value.trim(); Object.assign(UI.logF
 ACT.logReset = () => { UI.logF = null; UI.logOpen = null; render(); };
 ACT.logIp = b => { UI.logF.ip = b.dataset.v; render(); };
 ACT.logPath = b => { UI.logF.path = b.dataset.v; render(); };
-ACT.logOpen = b => { const id = b.dataset.id; if (!/^[\w-]{1,40}$/.test(id)) return; UI.usersScroll = window.scrollY; UI.logEv = id; history.pushState({ logev: id }, '', '#/admin/logs/' + id); go('logev'); };
+ACT.logOpen = b => { const id = b.dataset.id; if (!/^[\w-]{1,40}$/.test(id)) return; UI.logFrom = view === 'loglive' ? 'live' : view === 'logev' ? UI.logFrom : 'users'; if (view !== 'logev') UI.usersScroll = window.scrollY; UI.logEv = id; history.pushState({ logev: id }, '', '#/admin/logs/' + id); go('logev'); };
 ACT.logBack = () => { if (history.state && history.state.logev) history.back(); else logBack(); };
-function logBack() { UI.usersBack = true; go('users'); }
-window.addEventListener('popstate', () => { const m = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(location.hash); if (m && ME && ME.admin) { UI.logEv = m[1]; go('logev'); } else if (view === 'logev') logBack(); });
+function logBack() { if (UI.logFrom === 'live') return go('loglive'); UI.usersBack = true; go('users'); }
+window.addEventListener('popstate', () => { const m = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(location.hash); if (m && ME && ME.admin) { UI.logEv = m[1]; go('logev'); } else if (location.hash === '#/admin/live' && ME && ME.admin) go('loglive'); else if (view === 'logev' || view === 'loglive') { UI.logFrom = 'users'; logBack(); } });
 TITLES.logev = 'Log event';
 VIEWS.logev = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; const id = UI.logEv; let r;
   try { r = await api('/api/admin/logs/' + encodeURIComponent(id)); } catch (e) { return '<div class="card"><button class="btn" data-act="logBack">&larr; Back to logs</button><p class="mt">Event ' + esc(id) + ' was not found.</p></div>'; }
@@ -866,6 +868,37 @@ VIEWS.logev = async () => { if (!ME.admin) return '<p class="muted">Admin only.<
     + '<div class="card"><div class="row" style="margin:0 0 8px"><h3 style="margin:0">Raw JSON</h3><span class="sp"></span><button class="btn small" data-act="logCopy">Copy</button></div><pre class="log-pre">' + esc(UI.logRaw) + '</pre></div>'; };
 ACT.logCopy = async () => { try { await navigator.clipboard.writeText(UI.logRaw || ''); toast('Copied'); } catch { toast('Copy failed'); } };
 AFTER.logev = () => {};
+// ---- admin live request feed (Server-Sent Events from /api/admin/logs/stream) ----
+TITLES.loglive = 'Live traffic';
+ACT.logLive = () => { history.pushState({ live: 1 }, '', '#/admin/live'); go('loglive'); };
+ACT.liveBack = () => { UI.logFrom = 'users'; if (history.state && history.state.live) history.back(); else logBack(); };
+ACT.livePause = () => { const L = UI.live; L.paused = !L.paused; if (!L.paused) { L.events = [...L.queue.reverse(), ...L.events].slice(0, 500); L.queue = []; liveDraw(true); } liveStats(); };
+ACT.liveMode = () => { UI.live.visits = !UI.live.visits; liveDraw(); liveStats(); };
+const LIVE_ASSET = /\.(js|css|png|jpe?g|svg|ico|webp|webmanifest|json|txt|xml|map|woff2?)$/i;
+const isVisit = e => e.method === 'GET' && !e.kind && !/^\/api\//.test(e.path || '') && !LIVE_ASSET.test((e.path || '').split('?')[0]) && (e.path || '') !== '/sw.js';
+VIEWS.loglive = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; const L = UI.live ||= { events: [], queue: [], paused: false, visits: true, es: null, seen: new Set() };
+  return '<div class="row" style="margin:0 0 10px;flex-wrap:wrap;gap:8px"><button class="btn" data-act="liveBack">&larr; Back to logs</button><span class="sp"></span><span id="liveConn" class="live-conn">connecting\u2026</span>'
+    + '<button class="btn small" id="liveModeB" data-act="liveMode"></button><button class="btn small" id="livePauseB" data-act="livePause"></button></div>'
+    + '<div class="grid2 live-kpis"><div class="card"><small class="muted">Active visitors (unique IPs, last 5 min)</small><div class="live-big" id="liveActive">0</div></div><div class="card"><small class="muted">Requests / min (last minute)</small><div class="live-big" id="liveRpm">0</div></div></div>'
+    + '<div class="card"><div style="overflow-x:auto"><table class="u-tbl log-tbl"><thead><tr><th>Time (PT)</th><th>Status</th><th>Method</th><th>Path</th><th>ms</th><th>IP</th><th>Country</th><th>User</th><th>Flags</th></tr></thead><tbody id="liveRows"></tbody></table></div><p class="muted small" id="liveEmpty">Waiting for requests\u2026</p></div>'; };
+const liveTime = t => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+const liveRow = (e, fresh) => '<tr class="u-row' + (fresh ? ' live-new' : '') + '" data-act="logOpen" data-id="' + esc(e.id || '') + '" tabindex="0" style="cursor:pointer"><td>' + esc(liveTime(e.t)) + '</td><td class="lst' + String(e.status || 5)[0] + '">' + esc(e.status ?? 'exc') + '</td><td>' + esc(e.method || e.kind || '') + '</td><td class="log-path">' + esc(e.path || e.where || '') + '</td><td>' + esc(e.ms ?? '') + '</td><td>' + esc(e.ip || '') + '</td><td>' + esc(e.cc || '\u2014') + '</td><td>' + esc(e.uid ?? '') + '</td><td>' + (e.flags || []).map(f => '<span class="log-flag">' + esc(f) + '</span>').join(' ') + '</td></tr>';
+function liveDraw(fresh) { const L = UI.live, tb = $('liveRows'); if (!tb) return; const rows = L.events.filter(e => !L.visits || isVisit(e)); tb.innerHTML = rows.map(e => liveRow(e, false)).join(''); $('liveEmpty').hidden = rows.length > 0; }
+function liveStats() { const L = UI.live; if (!$('liveActive')) return; const now = Date.now(), all = [...L.queue, ...L.events];
+  $('liveActive').textContent = new Set(all.filter(e => isVisit(e) && now - Date.parse(e.t) < 5 * 60e3).map(e => e.ip)).size;
+  $('liveRpm').textContent = all.filter(e => (!L.visits || isVisit(e)) && now - Date.parse(e.t) < 60e3).length;
+  $('livePauseB').textContent = L.paused ? '\u25b6 Resume' + (L.queue.length ? ' (' + L.queue.length + ' new)' : '') : '\u275a\u275a Pause';
+  $('liveModeB').textContent = L.visits ? 'Showing: page visits only' : 'Showing: all requests'; }
+function liveAdd(e) { const L = UI.live; if (!e || (e.id && L.seen.has(e.id))) return; if (e.id) L.seen.add(e.id);
+  if (L.paused) { L.queue.push(e); if (L.queue.length > 500) L.queue.shift(); return; }
+  L.events.unshift(e); if (L.events.length > 500) L.events.length = 500;
+  if (L.visits && !isVisit(e)) return; const tb = $('liveRows'); if (!tb) return; tb.insertAdjacentHTML('afterbegin', liveRow(e, true)); while (tb.rows.length > 500) tb.deleteRow(-1); $('liveEmpty').hidden = true; }
+AFTER.loglive = () => { const L = UI.live; liveDraw(); liveStats(); if (L.es) L.es.close();
+  const es = L.es = new EventSource('/api/admin/logs/stream'), conn = s => { const c = $('liveConn'); if (c) { c.textContent = s; c.classList.toggle('on', s === 'live'); } };
+  es.onopen = () => conn('live'); es.onerror = () => conn('reconnecting\u2026');
+  es.addEventListener('init', m => { try { const a = JSON.parse(m.data); for (const e of a.sort((x, y) => String(y.t).localeCompare(String(x.t)))) if (e.id && !L.seen.has(e.id)) { L.seen.add(e.id); L.events.push(e); } L.events.sort((x, y) => String(y.t).localeCompare(String(x.t))); L.events.length = Math.min(L.events.length, 500); liveDraw(); liveStats(); } catch { /* ignore */ } });
+  es.onmessage = m => { if (view !== 'loglive') { es.close(); return; } try { liveAdd(JSON.parse(m.data)); liveStats(); } catch { /* ignore */ } };
+  clearInterval(UI.liveT); UI.liveT = setInterval(() => { if (view !== 'loglive') return clearInterval(UI.liveT); liveStats(); }, 5000); };
 // ---- admin usage metrics (English-only, admin-only) ----
 const sparkSvg = (v, w = 90, h = 22) => { const mx = Math.max(1, ...v), bw = w / v.length; return '<svg class="u-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + v.map((x, i) => '<rect x="' + (i * bw).toFixed(1) + '" y="' + (h - (x ? Math.max(1.5, x / mx * h) : 0)).toFixed(1) + '" width="' + Math.max(1, bw - 1).toFixed(1) + '" height="' + (x ? Math.max(1.5, x / mx * h) : 0).toFixed(1) + '" fill="var(--acc)"/>').join('') + '</svg>'; };
 const ago = t => { if (!t) return '\u2014'; const m = (Date.now() - Date.parse(t)) / 6e4; return m < 60 ? Math.max(0, Math.round(m)) + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };
