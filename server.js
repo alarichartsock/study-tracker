@@ -639,6 +639,8 @@ function createApp(opts = {}) {
         try { return send(res, 200, await aff.onboard(a.id, baseUrl(req))); } catch (e) { return send(res, e.status || 502, { error: e.message }); } }
       if (p.startsWith('/api/admin/')) {
         if (!user.admin) { res.log.flags.push('admin_denied'); return send(res, 403, { error: 'Admin only' }); }
+        { const lm = /^\/api\/admin\/logs\/([\w-]{1,40})$/.exec(p); if (lm && lm[1] !== 'stats' && M === 'GET') { const r = rlog.find(lm[1]); return r ? send(res, 200, r) : send(res, 404, { error: 'log event not found' }); } }
+        if (p === '/api/admin/logs/stats' && M === 'GET') return send(res, 200, rlog.longStats());
         if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, +q.limit || 500))); }
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/affiliates' && M === 'GET') return send(res, 200, { affiliates: aff.list().map(a => ({ ...a, username: (store.userById(a.user_id) || {}).username || null })), payoutsMode: aff.connectMode() });

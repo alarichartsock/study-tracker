@@ -97,6 +97,7 @@ async function boot() {
   { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
     if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
+  { const lm = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(location.hash); if (lm && ME && ME.admin) { UI.logEv = lm[1]; view = "logev"; } }
   go(view);
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
@@ -216,9 +217,11 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dat
   if (!nav || !top || !app) return;
   const place = () => { if (mq.matches) { if (nav.parentElement !== app) app.appendChild(nav); } else if (nav.parentElement !== top) top.insertBefore(nav, top.querySelector('.top-r')); };
   place(); mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place); })();
-function go(v) { if (v === 'users' && !(ME && ME.admin)) v = 'timer';
+function go(v) { if ((v === 'users' || v === 'logev') && !(ME && ME.admin)) v = 'timer';
   if (v !== view || !go.sent) { go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
-  view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
+  view = v; if (v !== 'logev') localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === (v === 'logev' ? 'users' : v)));
+  if (v !== 'logev' && /^#\/admin\/logs\//.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+  render(); if (!(v === 'users' && UI.usersBack)) window.scrollTo(0, 0); }
 async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
@@ -741,7 +744,7 @@ VIEWS.set = async () => {
   <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund, and lifetime access isn't refundable. This can't be undone, so export your data first if you want a copy.</p>
     <div class="row"><span class="sp"></span><button class="btn danger" data-act="delAcct">Delete account…</button></div>`}</div>`;
 };
-VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; return (await adminAffiliates()) + await usersView() + await usageView() + await logsView(); };
+VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; if (UI.usersBack && UI.usersHTML) return UI.usersHTML; return (UI.usersHTML = (await adminAffiliates()) + await usersView() + await usageView() + await logsView()); };
 const usersView = async () => {
   const s = await api('/api/admin/stats'), sb = s.subscriptions, rng = [30, 60, 90].includes(UI.usrRange) ? UI.usrRange : 30;
   let tot = s.baseline || 0; const all = s.signups.map(([d, v]) => [d, v, tot += v]), ser = all.slice(-rng), n = ser.length;
@@ -785,15 +788,16 @@ function fitAxes(root = document) { for (const ax of root.querySelectorAll('.dax
   const keep = new Set(ord.filter(tryAdd)); L.forEach(e => e.style.visibility = keep.has(e) ? 'visible' : 'hidden'); } }
 window.addEventListener('resize', () => { clearTimeout(fitAxes.t); fitAxes.t = setTimeout(() => fitAxes(), 120); });
 // ---- admin request logs (English-only, admin-only) ----
-const LOGR = { '24h': 24, '48h': 48, '7d': 168, '14d': 336 };
+const LOGR = { '24h': 24, '48h': 48, '7d': 168, '14d': 336, '30d': 720, '90d': 2160, 'All': 0 };
 const logsView = async () => {
   const F = UI.logF ||= { range: '48h', status: '', path: '', ip: '', uid: '', method: '', from: '', to: '', suspicious: false };
-  const hrs = LOGR[F.range] || 48, from = F.from ? new Date(F.from) : new Date(Date.now() - hrs * 36e5), to = F.to ? new Date(F.to) : new Date();
+  const hrs = LOGR[F.range] ?? 48, from = F.from ? new Date(F.from) : hrs ? new Date(Date.now() - hrs * 36e5) : new Date('2026-01-01T00:00:00Z'), to = F.to ? new Date(F.to) : new Date();
   const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), limit: '300' }); for (const k of ['status', 'path', 'ip', 'uid', 'method', 'q']) if (F[k]) qs.set(k, F[k]); if (F.suspicious) qs.set('suspicious', '1');
-  const d = await api('/api/admin/logs?' + qs), S = d.summary, row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b>' + v + '</b></div>';
-  const t0 = new Date(from); t0.setMinutes(0, 0, 0); const ds = []; for (let t = +t0; t <= +to; t += 36e5) ds.push(new Date(t));
-  const vals = ds.map(x => S.hours[x.toISOString().slice(0, 13)] || 0), mx = Math.max(1, ...vals), W = 700, H = 120, w = W / Math.max(1, ds.length);
-  const chart = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:120px;display:block;border-bottom:1px solid var(--line, rgba(128,128,128,.3))">' + vals.map((v, i) => '<rect x="' + (i * w + w * .1).toFixed(1) + '" y="' + (H - (v ? Math.max(2, v / mx * (H - 8)) : 0)).toFixed(1) + '" width="' + Math.max(.5, w * .8).toFixed(1) + '" height="' + (v ? Math.max(2, v / mx * (H - 8)) : 0).toFixed(1) + '" fill="var(--acc)" opacity=".8"' + tip(ds[i].toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric' }) + ' \u00b7 ' + v + ' requests', false) + '/>').join('') + '</svg>' + hourAxis(ds);
+  const [d, LS] = await Promise.all([api('/api/admin/logs?' + qs), api('/api/admin/logs/stats')]), S = d.summary; UI.logQS = String(qs); UI.logTotal = d.total; const _u = 0, row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b>' + v + '</b></div>';
+  const byDay = (+to - +from) > 15 * 864e5, first = byDay && d.oldest && !F.from && !hrs ? new Date(d.oldest) : from, t0 = new Date(first); t0.setUTCMinutes(0, 0, 0); if (byDay) t0.setUTCHours(0);
+  const ds = []; for (let t = +t0; t <= +to; t += byDay ? 864e5 : 36e5) ds.push(new Date(t));
+  const vals = ds.map(x => byDay ? S.days[x.toISOString().slice(0, 10)] || 0 : S.hours[x.toISOString().slice(0, 13)] || 0), mx = Math.max(1, ...vals), W = 700, H = 120, w = W / Math.max(1, ds.length);
+  const chart = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:120px;display:block;border-bottom:1px solid var(--line, rgba(128,128,128,.3))">' + vals.map((v, i) => '<rect x="' + (i * w + w * .1).toFixed(1) + '" y="' + (H - (v ? Math.max(2, v / mx * (H - 8)) : 0)).toFixed(1) + '" width="' + Math.max(.5, w * .8).toFixed(1) + '" height="' + (v ? Math.max(2, v / mx * (H - 8)) : 0).toFixed(1) + '" fill="var(--acc)" opacity=".8"' + tip((byDay ? ds[i].toISOString().slice(0, 10) : ds[i].toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric' })) + ' \u00b7 ' + v + ' requests', false) + '/>').join('') + '</svg>' + (byDay ? dayAxis(ds.map(x => x.toISOString().slice(0, 10))) : hourAxis(ds));
   const sel = (id, opts, v) => '<select id="' + id + '">' + opts.map(([k, l]) => '<option value="' + k + '"' + (k === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>';
   const inp = (id, ph, v, t = 'text') => '<input id="' + id + '" type="' + t + '" placeholder="' + ph + '" value="' + esc(v || '') + '" style="max-width:190px">';
   const loc = x => x ? new Date(x.getTime() - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : '';
@@ -810,18 +814,51 @@ const logsView = async () => {
   const cls = c => c >= 500 ? 'lst5' : c >= 400 ? 'lst4' : c >= 300 ? 'lst3' : 'lst2', ft = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
   const det = e => '<tr class="u-detail"><td colspan="8"><pre class="log-pre">' + hl(JSON.stringify(e, null, 2)) + '</pre></td></tr>';
   const tbl = d.events.length ? '<div style="overflow-x:auto"><table class="u-tbl log-tbl"><thead><tr><th>Time</th><th>Status</th><th>Method</th><th>Path</th><th>ms</th><th>User</th><th>IP</th><th>Flags / reason</th></tr></thead><tbody>'
-    + d.events.map(e => '<tr class="u-row" data-act="logOpen" data-id="' + esc(e.id || e.t) + '" tabindex="0" style="cursor:pointer"><td>' + esc(ft(e.t)) + '</td><td><b class="' + cls(e.status || 500) + '">' + hl(e.status || 'exc') + '</b></td><td>' + hl(e.method || '') + '</td><td class="log-path">' + hl(e.path || e.where || '') + '</td><td>' + (e.ms ?? '') + '</td><td>' + hl(e.uid ?? '') + '</td><td>' + hl(e.ip || '') + '</td><td>' + (e.flags ? e.flags.map(f => '<span class="log-flag">' + hl(f) + '</span>').join(' ') + ' ' : '') + '<small class="muted">' + hl(e.err || '') + '</small></td></tr>' + (UI.logOpen === (e.id || e.t) ? det(e) : '')).join('') + '</tbody></table></div>' : '<p class="muted small">No matching requests.</p>';
-  return '<h2 class="u-h">Logs</h2><div class="card"><h3>Requests per hour <small class="muted">' + d.total + ' matching</small></h3>' + filters + chart + '</div>'
+    + d.events.map(e => '<tr class="u-row" data-act="logOpen" data-id="' + esc(e.id || e.t) + '" tabindex="0" style="cursor:pointer"><td>' + esc(ft(e.t)) + '</td><td><b class="' + cls(e.status || 500) + '">' + hl(e.status || 'exc') + '</b></td><td>' + hl(e.method || '') + '</td><td class="log-path">' + hl(e.path || e.where || '') + '</td><td>' + (e.ms ?? '') + '</td><td>' + hl(e.uid ?? '') + '</td><td>' + hl(e.ip || '') + '</td><td>' + (e.flags ? e.flags.map(f => '<span class="log-flag">' + hl(f) + '</span>').join(' ') + ' ' : '') + '<small class="muted">' + hl(e.err || '') + '</small></td></tr>').join('') + '</tbody></table></div>' : '<p class="muted small">No matching requests.</p>';
+  const D = d.disk, MB = b => (b / 1048576).toFixed(b < 1048576 * 10 ? 1 : 0) + ' MB';
+  const diskCard = D ? '<div class="card' + (D.warn ? ' log-warn' : '') + '"><h3>Log storage</h3>' + (D.warn ? '<p><b>Warning:</b> the disk is ' + D.pct + '% full (warning at ' + D.warnPct + '%). Logs are never deleted automatically; download or move old log files, or grow the disk.</p>' : '')
+    + '<div style="height:10px;border-radius:5px;background:rgba(128,128,128,.2);overflow:hidden;margin:4px 0 8px"><i style="display:block;height:100%;width:' + Math.min(100, D.pct) + '%;background:' + (D.warn ? '#e03131' : 'var(--acc)') + '"></i></div>'
+    + row('Disk used', MB(D.usedBytes) + ' of ' + MB(D.totalBytes) + ' (' + D.pct + '%)') + row('Log files', D.files + ' \u00b7 ' + MB(D.logsBytes)) + '<p class="muted small">Every event is kept. Past days are gzipped; today is plain JSONL.</p></div>' : '';
+  const L = LS.days, LN = L.length, Lmx = Math.max(1, ...L.map(x => x[1].requests)), LW = 700, LH = 110, lw = LW / Math.max(1, LN);
+  const lchart = '<svg viewBox="0 0 ' + LW + ' ' + LH + '" preserveAspectRatio="none" style="width:100%;height:110px;display:block;border-bottom:1px solid var(--line, rgba(128,128,128,.3))">' + L.map(([k, v], i) => { const hh = v.requests ? Math.max(2, v.requests / Lmx * (LH - 8)) : 0, eh = v.requests ? hh * (v.e4xx + v.e5xx) / v.requests : 0;
+      return '<rect x="' + (i * lw + lw * .12).toFixed(1) + '" y="' + (LH - hh).toFixed(1) + '" width="' + Math.max(.5, lw * .76).toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="var(--acc)" opacity=".75"/><rect x="' + (i * lw + lw * .12).toFixed(1) + '" y="' + (LH - eh).toFixed(1) + '" width="' + Math.max(.5, lw * .76).toFixed(1) + '" height="' + eh.toFixed(1) + '" fill="#e8590c"' + tip(k + ' \u00b7 ' + v.requests + ' requests \u00b7 ' + v.errorRate + '% errors \u00b7 p50 ' + (v.p50 ?? '\u2014') + ' ms \u00b7 p95 ' + (v.p95 ?? '\u2014') + ' ms \u00b7 ' + v.visitors + ' visitors \u00b7 ' + v.flagged + ' flagged', false) + '/>'; }).join('') + '</svg>' + dayAxis(L.map(x => x[0]));
+  const tot = L.reduce((a, [, v]) => ({ r: a.r + v.requests, e: a.e + v.e4xx + v.e5xx, f: a.f + v.flagged }), { r: 0, e: 0, f: 0 });
+  const ltbl = '<div style="overflow-x:auto;max-height:320px"><table class="u-tbl log-tbl"><thead><tr><th>Day</th><th>Requests</th><th>Error rate</th><th>4xx</th><th>5xx</th><th>p50 ms</th><th>p95 ms</th><th>Visitors (IPs)</th><th>Flagged</th></tr></thead><tbody>' + L.slice().reverse().map(([k, v]) => '<tr><td>' + k + '</td><td>' + v.requests + '</td><td>' + v.errorRate + '%</td><td>' + v.e4xx + '</td><td>' + v.e5xx + '</td><td>' + (v.p50 ?? '\u2014') + '</td><td>' + (v.p95 ?? '\u2014') + '</td><td>' + v.visitors + '</td><td>' + v.flagged + '</td></tr>').join('') + '</tbody></table></div>';
+  const longCard = '<div class="card"><h3>Long-term stats <small class="muted">all time, per day</small></h3><div class="row muted small" style="gap:4px 12px;flex-wrap:wrap;margin:0 0 6px"><span><span class="dot" style="background:var(--acc)"></span> Requests</span><span><span class="dot" style="background:#e8590c"></span> Errors (4xx+5xx)</span><span>' + tot.r + ' requests \u00b7 ' + (tot.r ? Math.round(tot.e / tot.r * 1000) / 10 : 0) + '% errors \u00b7 ' + tot.f + ' flagged since ' + esc(L[0][0]) + '</span></div>' + lchart + ltbl + '</div>';
+  return '<h2 class="u-h">Logs</h2><div class="card"><h3>Requests per ' + (byDay ? 'day' : 'hour') + ' <small class="muted">' + d.total + ' matching</small></h3>' + filters + chart + '</div>'
     + '<div class="grid2"><div class="card"><h3>Status</h3>' + stRow + '<h3 class="mt">Flagged</h3>' + flRow + '</div><div class="card"><h3>Top IPs</h3>' + tops(S.topIps, 'logIp') + '<h3 class="mt">Top 4xx paths</h3>' + tops(S.top4xx, 'logPath') + '</div></div>'
-    + '<div class="card"><h3>Requests <small class="muted">newest first, up to 300 \u00b7 tap a row for details</small></h3>' + tbl + '<p class="muted small">' + d.buffered + ' events in memory; history kept on disk for about 14 days. Bodies, cookies, passwords and tokens are never logged.</p></div>'; };
-AFTER.users = () => { fitAxes(); const q = $('lfQ'); if (!q) return; if (UI.logFocus) { q.focus(); const n = q.value.length; q.setSelectionRange(n, n); UI.logFocus = false; }
+    + '<div class="card"><div class="row" style="margin:0 0 8px"><h3 style="margin:0">Requests <small class="muted">newest first, up to 300 \u00b7 tap a row for details</small></h3><span class="sp"></span><button id="logNew" class="btn small primary log-pill" data-act="logLoadNew" hidden>New events</button></div>' + tbl + '<p class="muted small">' + d.buffered + ' recent events in memory; the full history is kept on disk and searched when needed. Bodies, cookies, passwords and tokens are never logged.</p></div>' + diskCard + longCard; };
+AFTER.users = () => { fitAxes(); if (UI.usersBack) { UI.usersBack = false; const y = UI.usersScroll || 0; requestAnimationFrame(() => window.scrollTo(0, y)); } logPoll(); const q = $('lfQ'); if (!q) return; if (UI.logFocus) { q.focus(); const n = q.value.length; q.setSelectionRange(n, n); UI.logFocus = false; }
   q.oninput = () => { clearTimeout(UI.logT); UI.logT = setTimeout(() => { UI.logF.q = q.value.trim(); UI.logOpen = null; UI.logFocus = true; render(); }, 350); }; };
+// Live updates never re-render the list by themselves: we only count newer events and offer a pill to load them.
+function logPoll() { clearInterval(UI.logPollT); UI.logPollT = setInterval(async () => { if (view !== 'users' || document.hidden || !UI.logQS) return clearInterval(UI.logPollT);
+  try { const r = await api('/api/admin/logs?' + UI.logQS.replace(/(^|&)limit=\d+/, '$1limit=1').replace(/(^|&)to=[^&]*/, '')), n = r.total - (UI.logTotal || 0), pill = $('logNew');
+    if (pill && n > 0) { pill.textContent = n + ' new event' + (n === 1 ? '' : 's') + ' \u2014 load'; pill.hidden = false; } } catch { /* ignore */ } }, 20000); }
+ACT.logLoadNew = () => { UI.usersHTML = null; render(); };
 ACT.logRange = b => { Object.assign(UI.logF, { range: b.dataset.r, from: '', to: '' }); render(); };
 ACT.logApply = () => { const v = id => $(id).value.trim(); Object.assign(UI.logF, { status: v('lfStatus'), method: v('lfMethod'), path: v('lfPath'), ip: v('lfIp'), uid: v('lfUid'), from: v('lfFrom') ? new Date(v('lfFrom')).toISOString() : '', to: v('lfTo') ? new Date(v('lfTo')).toISOString() : '', suspicious: $('lfSus').checked }); render(); };
 ACT.logReset = () => { UI.logF = null; UI.logOpen = null; render(); };
 ACT.logIp = b => { UI.logF.ip = b.dataset.v; render(); };
 ACT.logPath = b => { UI.logF.path = b.dataset.v; render(); };
-ACT.logOpen = b => { UI.logOpen = UI.logOpen === b.dataset.id ? null : b.dataset.id; render(); };
+ACT.logOpen = b => { const id = b.dataset.id; if (!/^[\w-]{1,40}$/.test(id)) return; UI.usersScroll = window.scrollY; UI.logEv = id; history.pushState({ logev: id }, '', '#/admin/logs/' + id); go('logev'); };
+ACT.logBack = () => { if (history.state && history.state.logev) history.back(); else logBack(); };
+function logBack() { UI.usersBack = true; go('users'); }
+window.addEventListener('popstate', () => { const m = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(location.hash); if (m && ME && ME.admin) { UI.logEv = m[1]; go('logev'); } else if (view === 'logev') logBack(); });
+TITLES.logev = 'Log event';
+VIEWS.logev = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; const id = UI.logEv; let r;
+  try { r = await api('/api/admin/logs/' + encodeURIComponent(id)); } catch (e) { return '<div class="card"><button class="btn" data-act="logBack">&larr; Back to logs</button><p class="mt">Event ' + esc(id) + ' was not found.</p></div>'; }
+  const e = r.event, row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b style="min-width:0;overflow-wrap:anywhere;text-align:right">' + v + '</b></div>', ft = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const fields = Object.entries(e).filter(([k]) => k !== 'stack').map(([k, v]) => row(esc(k), k === 't' ? esc(ft(v)) + ' <small class="muted">' + esc(v) + '</small>' : k === 'flags' ? v.map(f => '<span class="log-flag">' + esc(f) + '</span>').join(' ') : esc(typeof v === 'object' ? JSON.stringify(v) : v ?? '\u2014'))).join('');
+  const rel = r.related.length ? '<div style="overflow-x:auto"><table class="u-tbl log-tbl"><thead><tr><th>Time</th><th>Status</th><th>Method</th><th>Path</th><th>User</th><th>IP</th><th>Flags / reason</th></tr></thead><tbody>' + r.related.map(x => '<tr class="u-row" data-act="logOpen" data-id="' + esc(x.id || '') + '" tabindex="0" style="cursor:pointer"><td>' + esc(ft(x.t)) + '</td><td>' + esc(x.status ?? 'exc') + '</td><td>' + esc(x.method || '') + '</td><td class="log-path">' + esc(x.path || x.where || '') + '</td><td>' + esc(x.uid ?? '') + '</td><td>' + esc(x.ip || '') + '</td><td>' + (x.flags || []).map(f => '<span class="log-flag">' + esc(f) + '</span>').join(' ') + ' <small class="muted">' + esc(x.err || '') + '</small></td></tr>').join('') + '</tbody></table></div>' : '<p class="muted small">No other requests from this IP or user within 5 minutes.</p>';
+  UI.logRaw = JSON.stringify(e, null, 2);
+  return '<div class="row" style="margin:0 0 10px"><button class="btn" data-act="logBack">&larr; Back to logs</button><span class="sp"></span><small class="muted">#/admin/logs/' + esc(id) + '</small></div>'
+    + '<div class="grid2"><div class="card"><h3>' + esc(e.method || e.kind || 'Event') + ' ' + esc(e.path || e.where || '') + '</h3>' + fields + '</div>'
+    + '<div class="card"><h3>Flags</h3>' + ((e.flags || []).length ? e.flags.map(f => '<span class="log-flag">' + esc(f) + '</span>').join(' ') : '<p class="muted small">None.</p>') + (e.err ? '<h3 class="mt">Reason</h3><p>' + esc(e.err) + '</p>' : '')
+    + (e.stack ? '<h3 class="mt">Stack trace</h3><pre class="log-pre">' + esc(e.stack) + '</pre>' : '') + '</div></div>'
+    + '<div class="card"><h3>Same IP or user, \u00b15 minutes <small class="muted">' + r.related.length + '</small></h3>' + rel + '</div>'
+    + '<div class="card"><div class="row" style="margin:0 0 8px"><h3 style="margin:0">Raw JSON</h3><span class="sp"></span><button class="btn small" data-act="logCopy">Copy</button></div><pre class="log-pre">' + esc(UI.logRaw) + '</pre></div>'; };
+ACT.logCopy = async () => { try { await navigator.clipboard.writeText(UI.logRaw || ''); toast('Copied'); } catch { toast('Copy failed'); } };
+AFTER.logev = () => {};
 // ---- admin usage metrics (English-only, admin-only) ----
 const sparkSvg = (v, w = 90, h = 22) => { const mx = Math.max(1, ...v), bw = w / v.length; return '<svg class="u-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + v.map((x, i) => '<rect x="' + (i * bw).toFixed(1) + '" y="' + (h - (x ? Math.max(1.5, x / mx * h) : 0)).toFixed(1) + '" width="' + Math.max(1, bw - 1).toFixed(1) + '" height="' + (x ? Math.max(1.5, x / mx * h) : 0).toFixed(1) + '" fill="var(--acc)"/>').join('') + '</svg>'; };
 const ago = t => { if (!t) return '\u2014'; const m = (Date.now() - Date.parse(t)) / 6e4; return m < 60 ? Math.max(0, Math.round(m)) + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };

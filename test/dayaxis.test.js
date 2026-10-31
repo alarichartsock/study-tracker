@@ -13,9 +13,9 @@ test('dayAxis: one tick per day, first/last and month changes marked as priority
   assert.equal(ctx.dayAxis([]), '');
 });
 test('every admin chart uses the day axis and fitAxes runs after the Users view renders', () => {
-  assert.equal((src.match(/\+ dayAxis\(/g) || []).length, 3);
+  assert.ok((src.match(/\+ dayAxis\(/g) || []).length >= 4);
   assert.match(src, /AFTER\.users = \(\) => \{ fitAxes\(\)/);
-  assert.match(fs.readFileSync(__dirname + '/../public/sw.js', 'utf8'), /shell-v97/);
+  assert.match(fs.readFileSync(__dirname + '/../public/sw.js', 'utf8'), /shell-v98/);
 });
 test('hourAxis: hourly ticks, midnight gets a day label and a major tick', () => {
   const ds = []; for (let i = 0; i < 30; i++) ds.push(new Date(2026, 9, 29, 12 + i));

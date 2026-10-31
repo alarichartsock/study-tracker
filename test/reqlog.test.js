@@ -9,12 +9,12 @@ test('redactQuery hides secrets, tokens, codes and emails', () => {
   assert.match(q, /code=\[redacted\]/); assert.match(q, /state=\[redacted\]/); assert.match(q, /token=\[redacted\]/); assert.match(q, /e=\[redacted\]/); assert.match(q, /k=\[redacted\]/);
   assert.match(q, /page=2/); assert.match(q, /ref=FRIEND/); assert.equal(redactQuery(''), '');
 });
-test('file persistence survives restart, and old files are pruned', () => {
+test('file persistence survives restart; past days are gzipped and never deleted', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-'));
   fs.writeFileSync(path.join(dir, 'requests-2020-01-01.jsonl'), '{"t":"2020-01-01T00:00:00Z"}\n');
   const a = createLogger({ dir, stdout: false }); a.record({ t: new Date().toISOString(), id: 'x', status: 200 }); a.close();
-  assert.ok(!fs.existsSync(path.join(dir, 'requests-2020-01-01.jsonl')));
-  return new Promise(r => setTimeout(r, 50)).then(() => { const b = createLogger({ dir, stdout: false }); assert.equal(b.buffer.length, 1); assert.equal(b.buffer[0].id, 'x'); b.close(); });
+  assert.ok(!fs.existsSync(path.join(dir, 'requests-2020-01-01.jsonl'))); assert.ok(fs.existsSync(path.join(dir, 'requests-2020-01-01.jsonl.gz')), 'gzipped, not deleted');
+  return new Promise(r => setTimeout(r, 50)).then(() => { const b = createLogger({ dir, stdout: false }); assert.equal(b.buffer.length, 2); assert.equal(b.buffer[1].id, 'x'); assert.equal(b.query({ from: '2019-12-31T00:00:00Z' }).total, 2, 'old gz day still searchable'); b.close(); });
 });
 test('ring buffer is capped', () => { const l = createLogger({ ring: 3, stdout: false }); for (let i = 0; i < 10; i++) l.record({ t: new Date().toISOString(), i }); assert.equal(l.buffer.length, 3); assert.equal(l.buffer[2].i, 9); });
 
@@ -39,7 +39,7 @@ test('server logs one structured line per request with flags; never logs bodies,
     await call('/api/health', 'GET', undefined, { 'User-Agent': 'Render/1.0' });
     await new Promise(r => setTimeout(r, 20));
     assert.ok(!lines.some(l => l.includes('Render/1.0')), 'Render health checks not logged');
-    const ev = lines.map(l => JSON.parse(l)), all = lines.join('\n');
+    const ev = lines.map(l => JSON.parse(l)).filter(e => !e.kind), all = lines.join('\n');
     for (const e of ev) for (const k of ['t', 'id', 'method', 'path', 'status', 'ms', 'bytes', 'ip']) assert.ok(k in e, k);
     assert.ok(!/super-secret-pw|wrong-password-zz|SECRETCODE|sid=/.test(all), 'no secrets in logs');
     const fl = f => ev.filter(e => (e.flags || []).includes(f));
@@ -65,4 +65,27 @@ test('search: free text across fields, field:value tokens, and on-disk history b
   const l = createLogger({ dir, ring: 1, stdout: false }); assert.equal(l.buffer.length, 1); // only old2 fits in the ring
   const r = l.query({ q: 'ip:9.9.9.9' }); assert.equal(r.total, 1); assert.equal(r.events[0].id, 'old1');
   assert.equal(l.query({ q: '.env', status: '4xx' }).total, 1); assert.equal(l.query({ q: '.env', status: '2xx' }).total, 0); l.close();
+});
+test('lifetime retention: rollover gzips, long-term daily stats are cached, disk warning at 60%, find by id with context', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-life-')); let T = Date.parse('2026-10-29T12:00:00Z');
+  const l = createLogger({ dir, stdout: false, now: () => T, diskBytes: 1 }); // tiny "disk" => warning fires
+  l.record({ t: new Date(T).toISOString(), id: 'a1', method: 'GET', path: '/', status: 200, ms: 10, ip: '1.1.1.1' });
+  l.record({ t: new Date(T + 60e3).toISOString(), id: 'a2', method: 'GET', path: '/x', status: 404, ms: 30, ip: '1.1.1.1' });
+  T = Date.parse('2026-10-30T12:00:00Z');
+  l.record({ t: new Date(T).toISOString(), id: 'b1', method: 'POST', path: '/api/login', status: 401, ms: 5, ip: '2.2.2.2', flags: ['failed_login'] });
+  await new Promise(r => setTimeout(r, 80));
+  const f = fs.readdirSync(dir); assert.ok(f.includes('requests-2026-10-29.jsonl.gz')); assert.ok(f.includes('requests-2026-10-30.jsonl'));
+  const s = l.longStats(), d29 = s.days.find(x => x[0] === '2026-10-29')[1];
+  assert.equal(d29.requests, 2); assert.equal(d29.errorRate, 50); assert.equal(d29.visitors, 1); assert.equal(d29.p95, 30);
+  assert.ok(fs.existsSync(path.join(dir, 'daily-stats.json'))); assert.ok(s.disk.warn);
+  assert.ok(l.buffer.some(e => (e.flags || []).includes('disk_warning')));
+  const r = l.find('a1'); assert.equal(r.event.path, '/'); assert.deepEqual(r.related.map(x => x.id), ['a2']); assert.equal(l.find('nope'), null); assert.equal(l.find('../etc'), null);
+  l.close();
+  const l2 = createLogger({ dir, ring: 1, stdout: false, now: () => T }); assert.equal(l2.find('a2').event.status, 404, 'found in gz history beyond the ring'); l2.close();
+});
+test('admin log detail route and paused live updates are wired in the client', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(src, /'#\/admin\/logs\/' \+ id/); assert.match(src, /VIEWS\.logev = async/); assert.match(src, /api\('\/api\/admin\/logs\/' \+ encodeURIComponent\(id\)\)/);
+  assert.match(src, /data-act="logBack"/); assert.match(src, /data-act="logCopy"/); assert.match(src, /new event/); assert.match(src, /UI\.usersBack && UI\.usersHTML/);
+  assert.ok(!/setInterval\([^)]*render\(\)/.test(src), 'no timer re-renders the list');
 });

@@ -614,3 +614,4 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .log-tbl td{font-size:.8rem}.log-path{max-width:340px;overflow:hidden;text-overflow:ellipsis}.log-pre{white-space:pre-wrap;word-break:break-all;font-size:.75rem;margin:0;max-height:360px;overflow:auto}.log-flag{display:inline-block;padding:0 6px;border-radius:8px;background:rgba(230,73,128,.15);color:#c2255c;font-size:.72rem}.lst2{color:var(--ok)}.lst3{color:var(--muted)}.lst4{color:#e8590c}.lst5{color:#e03131}
 .log-search{margin:0 0 10px}.log-search input{width:100%;font-size:1rem;padding:10px 14px;border-radius:12px}.log-tbl mark,.log-pre mark{background:#ffe066;color:inherit;border-radius:3px;padding:0 1px}
 .imp-sum .ach-tx b{white-space:normal}.imp-list{max-height:55vh;overflow:auto}
+.log-warn{border:1px solid #e03131;box-shadow:0 0 0 3px rgba(224,49,49,.12)}
