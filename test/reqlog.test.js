@@ -54,3 +54,15 @@ test('server logs one structured line per request with flags; never logs bodies,
   } finally { await new Promise(r => server.close(r)); }
 });
 test('unexpected exceptions are logged with a stack trace', () => { const lines = [], l = createLogger({ out: x => lines.push(x) }); l.error(new TypeError('boom')); const e = JSON.parse(lines[0]); assert.equal(e.kind, 'exception'); assert.match(e.stack, /TypeError: boom/); });
+test('search: free text across fields, field:value tokens, and on-disk history beyond the ring', () => {
+  const { parseQuery, matchTerm } = require('../lib/reqlog');
+  assert.deepEqual(parseQuery('status:415 ip:1.2.3.4 "bad thing" wp'), [{ field: 'status', v: '415' }, { field: 'ip', v: '1.2.3.4' }, { v: 'bad thing' }, { v: 'wp' }]);
+  const e = { id: 'abc123', t: '2026-10-30T00:00:00Z', method: 'POST', path: '/api/admin/logs', status: 415, ip: '1.2.3.4', uid: 7, ua: 'python-requests/2.32', err: 'JSON required', flags: ['bad_content_type'] };
+  for (const q of ['python', 'abc123', 'json req', 'bad_content', '415', 'status:4xx', 'user:7', 'path:/api/admin', 'flag:bad_content_type', 'method:post']) assert.ok(parseQuery(q).every(t => matchTerm(e, t)), q);
+  for (const q of ['status:200', 'ip:1.2.3.40', 'user:70', 'nomatch']) assert.ok(!parseQuery(q).every(t => matchTerm(e, t)), q);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-q-')), day = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(path.join(dir, 'requests-' + day + '.jsonl'), [{ t: new Date(Date.now() - 6e4).toISOString(), id: 'old1', path: '/.env', status: 404, ip: '9.9.9.9' }, { t: new Date(Date.now() - 5e4).toISOString(), id: 'old2', path: '/', status: 200, ip: '8.8.8.8' }].map(x => JSON.stringify(x)).join('\n') + '\n');
+  const l = createLogger({ dir, ring: 1, stdout: false }); assert.equal(l.buffer.length, 1); // only old2 fits in the ring
+  const r = l.query({ q: 'ip:9.9.9.9' }); assert.equal(r.total, 1); assert.equal(r.events[0].id, 'old1');
+  assert.equal(l.query({ q: '.env', status: '4xx' }).total, 1); assert.equal(l.query({ q: '.env', status: '2xx' }).total, 0); l.close();
+});
