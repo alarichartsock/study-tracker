@@ -122,8 +122,8 @@ test('JSON export/import', async t => {
   await c('/api/sessions', 'POST', { subject: 'CARS', start: '2026-10-01T16:00:00Z', end: '2026-10-01T17:00:00Z' });
   await c('/api/settings', 'POST', { busyToken: 'secret-token' });
   const ex = await c('/api/export.json'); assert.equal(ex.body.data.sessions.length, 1); assert.ok(!JSON.stringify(ex.body).includes('secret-token'));
-  assert.deepEqual((await c('/api/import.json', 'POST', ex.body)).body, { added: 0, skipped: 1 }); // dedupe
-  assert.deepEqual((await app.user('/api/import.json', 'POST', ex.body)).body, { added: 1, skipped: 0 });
+  { const b = (await c('/api/import.json', 'POST', ex.body)).body; assert.deepEqual([b.added, b.skipped, b.summary.trophies], [0, 1, []]); } // dedupe
+  { const b = (await app.user('/api/import.json', 'POST', ex.body)).body; assert.deepEqual([b.added, b.skipped], [1, 0]); assert.ok(Array.isArray(b.summary.trophies)); }
 });
 
 test('v2 data file is upgraded to v3 with a backup and nothing lost', async t => {

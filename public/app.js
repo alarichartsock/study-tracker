@@ -612,7 +612,8 @@ AFTER.trophy = async () => { const A = await api('/api/achievements'); localStor
 // ---- achievement notifications: the server diffs earned vs. already-notified (per user, so each unlock is announced once) ----
 const achQ = []; let achBusy = false, achT = 0;
 function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }
-async function checkAchievements() { if (!ME) return; try { const r = await api('/api/achievements/new'); if (!r.new || !r.new.length) return;
+let IMPORTING = 0; // while an import runs, per-trophy cards, system notifications and GA events are held back
+async function checkAchievements() { if (!ME || IMPORTING) return; try { const r = await api('/api/achievements/new'); if (!r.new || !r.new.length) return;
   api('/api/achievements/seen', 'POST', { ids: r.new.map(a => a.id) }).catch(() => {});
   for (const a of r.new) { achQ.push(a); achSystem(a); track('trophy_earned', { achievement_id: String(a.id) }); } achNext(); } catch { /* ignore */ } }
 const achNotifOn = () => localStorage.achNotif !== 'off';
@@ -643,9 +644,23 @@ VIEWS.data = () => `<div class="card"><h3>Import CSV</h3><p class="muted small">
   <div class="card"><h3>Backup &amp; export</h3><div class="row wrap gap"><a class="btn" href="/api/export.csv">Sessions CSV</a><a class="btn" href="/api/export.json">Full JSON backup</a>
     <label class="btn" style="margin:0">Restore JSON backup<input type="file" accept=".json,application/json" class="hid" data-chg="jsonImport"></label></div>
     <p class="muted small">Restoring merges and never deletes; sessions already present are skipped.</p></div>`;
+// One summary after an import instead of a flood of notifications; "View" lists everything unlocked.
+function importSummary(r) { const s = r.summary || {}, t = s.trophies || [], n = r.added || 0, parts = [n + ' session' + (n === 1 ? '' : 's')];
+  if (t.length) parts.push(t.length + ' troph' + (t.length === 1 ? 'y' : 'ies') + ' unlocked'); if (s.goalDays) parts.push(s.goalDays + ' goal day' + (s.goalDays === 1 ? '' : 's') + ' met');
+  if (s.bestStreak > (s.prevBestStreak || 0)) parts.push('best streak ' + s.bestStreak + ' days');
+  track('data_import_summary', { sessions: n, trophies: t.length, goal_days: s.goalDays || 0 });
+  const el = document.createElement('div'); el.className = 'ach-cele imp-sum' + (reduceMotion() ? ' still' : ''); el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+  el.innerHTML = '<div class="ach-ic">&#128230;</div><div class="ach-tx"><small>Import complete</small><b>' + esc(parts.join(', ')) + '</b>' + (t.length ? '<span><button class="btn small" data-imp="view">View list</button></span>' : '') + '</div><button class="ach-x" aria-label="Dismiss">&times;</button>';
+  document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, tm = setTimeout(close, 12000);
+  el.addEventListener('click', e => { if (e.target.closest('[data-imp=view]')) { clearTimeout(tm); close(); importList(t); } else if (e.target.closest('.ach-x')) { clearTimeout(tm); close(); } });
+  return parts.join(', '); }
+function importList(t) { dialog('<h3>Unlocked by your import</h3><div class="list imp-list">' + t.map(a => '<div class="subj-row"><span>&#127942; <b>' + esc(a.name) + '</b>' + (a.key ? ' <small class="muted">' + esc(a.key) + '</small>' : '') + '<br><small class="muted">' + esc(a.desc) + '</small></span></div>').join('') + '</div><div class="row"><button class="btn" value="cancel" data-imp-go>Open trophies</button><span class="sp"></span><button class="btn primary" value="cancel">Close</button></div>', () => {});
+  const g = document.querySelector('[data-imp-go]'); if (g) g.addEventListener('click', () => setTimeout(() => go('trophy'), 0)); }
+async function runImport(fn) { IMPORTING++; try { return await fn(); } finally { IMPORTING--; } }
 ACT.csvImport = async () => { const f = $('csvFile').files[0]; if (!f) return toast('Choose a CSV file'); const map = {}; ['date', 'start', 'end', 'duration', 'subject', 'note'].forEach(k => { const v = $('m_' + k).value.trim(); if (v) map[k] = v; });
-  const r = await api('/api/import', 'POST', { csv: await f.text(), map }); track('data_import', { format: 'csv', rows: r.added }); $('csvRes').textContent = `Imported ${r.added}, skipped ${r.skipped}.\nDetected columns: ${JSON.stringify(r.columns)}`; await load(); };
-ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const r = await api('/api/import.json', 'POST', JSON.parse(await f.text())); track('data_import', { format: 'json', rows: r.added }); toast(`Restored ${r.added} sessions (${r.skipped} skipped)`); refresh(); };
+  const txt = await f.text(); await runImport(async () => { const r = await api('/api/import', 'POST', { csv: txt, map }); track('data_import', { format: 'csv', rows: r.added }); $('csvRes').textContent = `Imported ${r.added}, skipped ${r.skipped}.\nDetected columns: ${JSON.stringify(r.columns)}`; await load(); importSummary(r); }); };
+ACT.jsonImport = async b => { const f = b.files[0]; if (!f) return; const body = JSON.parse(await f.text()); await runImport(async () => { const r = await api('/api/import.json', 'POST', body); track('data_import', { format: 'json', rows: r.added }); await refresh(); importSummary(r); }); };
 
 // ================= SETTINGS =================
 const usd = c => '$' + ((Number(c) || 0) / 100).toFixed(2);

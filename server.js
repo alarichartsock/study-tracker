@@ -49,6 +49,9 @@ const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
+// days on which the daily goal was met (weekend goal honored)
+function goalDaysMet(ud, h = 0) { const g = (ud.settings && ud.settings.goals) || {}, by = stats.computeStats(ud.sessions || [], { dayStartHour: h }).byDay;
+  return Object.keys(by).filter(k => { const gs = stats.goalFor(stats.keyToDate(k), g); return gs > 0 && by[k] >= gs; }).length; }
 function createApp(opts = {}) {
   // DATA_DIR (e.g. a mounted disk) holds data.db and approved reports; defaults to the repo folder for local installs.
   const dataDir = opts.dataDir || process.env.DATA_DIR || null; if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
@@ -506,19 +509,25 @@ function createApp(opts = {}) {
       if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
       if (p === '/api/export.json') { const { active, ...data } = maskedState(ud); void active;
         return send(res, 200, { app: 'mcat-tracker', exported: new Date().toISOString(), user: user.username, data }, 'application/json', { 'Content-Disposition': 'attachment; filename="mcat-tracker-export.json"' }); }
-      if (p === '/api/import.json' && M === 'POST') { // merge a JSON export back in (dedupes sessions by start+end+subject)
+      // Imports are historic data: snapshot achievements/goal days first, then mark everything newly earned as already
+      // notified so the client shows ONE summary instead of a card, system notification and GA event per trophy.
+      const importSnap = () => { const A = analytics.achievements(ud, h); return { ids: new Set(achN.earnedIds(A)), goal: goalDaysMet(ud, h), streak: stats.computeStats(ud.sessions, { dayStartHour: h }).bestStreak }; };
+      const importDone = before => { const A = analytics.achievements(ud, h); if (!Array.isArray(ud.achNotified)) achN.pending(ud, A); achN.markSeen(ud, A, achN.earnedIds(A));
+        const trophies = [...A.global, ...A.personal].filter(a => a.earned && !before.ids.has(a.id)).map(a => ({ id: a.id, name: a.name, desc: a.desc, ...(a.key ? { key: a.key } : {}) }));
+        return { trophies, goalDays: Math.max(0, goalDaysMet(ud, h) - before.goal), bestStreak: stats.computeStats(ud.sessions, { dayStartHour: h }).bestStreak, prevBestStreak: before.streak }; };
+      if (p === '/api/import.json' && M === 'POST') { const before = importSnap(); // merge a JSON export back in (dedupes sessions by start+end+subject)
         const d = (j.data || j); const key = s => `${s.start}|${s.end}|${s.subject}`, have = new Set(ud.sessions.map(key)); let added = 0, skipped = 0;
         for (const s of Array.isArray(d.sessions) ? d.sessions : []) { let c; try { c = cleanSession(s); } catch { skipped++; continue; } if (have.has(key(c))) { skipped++; continue; }
           ensureSubject(ud, c.subject); ensureActivity(ud, c.activity); ud.sessions.push({ id: ud.nextId++, ...c, ...(s.extUid ? { extUid: str(s.extUid, 210) } : {}) }); have.add(key(c)); added++; }
         for (const e of Array.isArray(d.exams) ? d.exams : []) { try { let x; try { x = cleanExam(e, {}); } catch { x = cleanExam({ ...e, grade: null }, {}); } ud.exams.push({ id: ud.nextId++, ...x }); } catch { /* skip */ } }
         for (const t of Array.isArray(d.tasks) ? d.tasks : []) { try { ud.tasks.push({ id: ud.nextId++, ...cleanTask(t, {}) }); } catch { /* skip */ } }
-        save(); return send(res, 200, { added, skipped });
+        const sum = importDone(before); save(); return send(res, 200, { added, skipped, summary: sum });
       }
       if (p === '/api/import' && M === 'POST') {
         if (typeof j.csv !== 'string') return send(res, 400, { error: 'csv (string) required' });
-        const r = csv.csvToSessions(j.csv, j.map);
+        const r = csv.csvToSessions(j.csv, j.map), before = importSnap();
         for (const s of r.sessions) { ensureSubject(ud, s.subject); ud.sessions.push({ id: ud.nextId++, ...s, source: 'import' }); }
-        save(); return send(res, 200, { added: r.sessions.length, skipped: r.skipped, columns: r.columns });
+        const sum = importDone(before); save(); return send(res, 200, { added: r.sessions.length, skipped: r.skipped, columns: r.columns, summary: sum });
       }
       // ---- timer ----
       if (p === '/api/timer/start' && M === 'POST') {
