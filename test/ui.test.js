@@ -90,3 +90,10 @@ test('MCAT landing hero: trial CTA above the fold and inert HTML previews with s
   assert.equal((h.match(/class="pv" role="img" aria-label="Preview/g) || []).length, 6); assert.match(h, /not real user data/);
   assert.ok(!/shot-[a-z]+\.webp/.test(h + srv), 'no webp screenshots left'); assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
 });
+
+test('admin Users rows filter Logs to that user with a removable chip; Details button keeps the detail view', () => {
+  const js = require('fs').readFileSync(__dirname + '/../public/app.js', 'utf8');
+  assert.match(js, /data-act="usrLogs" data-id="/); assert.match(js, /data-act="usrOpen" data-id="[^>]*>Details<\/button>/);
+  assert.match(js, /ACT\.usrLogs = b => \{[^]*?UI\.logF\.uid = id/); assert.match(js, /User: ' \+ esc\(/); assert.match(js, /ACT\.logUserClear = /);
+  assert.match(js, /\$\('logsTop'\)\?\.scrollIntoView/);
+});
