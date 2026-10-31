@@ -25,7 +25,15 @@
   function sget(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
   function sput(st, k, v) { try { st.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
   try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, 100); any = true; } });
-    if (any) { sput(sessionStorage, 'shAttr', got); if (!sget(localStorage, 'shFirstTouch')) sput(localStorage, 'shFirstTouch', { ...got, ts: new Date().toISOString().slice(0, 10) }); }
+    if (any) sput(sessionStorage, 'shAttr', got);
+    // first touch: stored on the very first page load (even with no UTMs) so it survives the Google/Apple OAuth round trip, mirrored in a cookie the server reads at sign-up
+    var ftc = (String(document.cookie || '').match(/(?:^|; )sh_ft=([^;]*)/) || [])[1], stored = sget(localStorage, 'shFirstTouch');
+    if (!stored && ftc) { try { stored = JSON.parse(decodeURIComponent(ftc)); sput(localStorage, 'shFirstTouch', stored); } catch (e) { /* ignore */ } }
+    if (!stored) { var lu = new URL(LANDING), ref = '', bad = /(^|\.)(accounts\.google\.com|appleid\.apple\.com|checkout\.stripe\.com|billing\.stripe\.com)$/;
+      try { var ru = document.referrer ? new URL(document.referrer) : null; if (ru && ru.host !== location.host && !bad.test(ru.hostname)) ref = (ru.origin + ru.pathname).slice(0, 200); } catch (e) { /* ignore */ }
+      var lq2 = AKEYS.filter(function (k) { return got[k]; }).map(function (k) { return k + '=' + encodeURIComponent(got[k]); }).join('&'); var oauthBack = /[?&](welcome|complete_signup|oauth_error|code)=/.test(lu.search);
+      if (!oauthBack) { stored = { ...got, ts: new Date().toISOString().slice(0, 10) }; if (ref) stored.referrer = ref; stored.landing = (lu.pathname + (lq2 ? '?' + lq2 : '')).slice(0, 200); sput(localStorage, 'shFirstTouch', stored); } }
+    if (stored && !ftc) try { document.cookie = 'sh_ft=' + encodeURIComponent(JSON.stringify(stored)) + '; Path=/; Max-Age=' + 90 * 86400 + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { /* ignore */ }
     attr = sget(sessionStorage, 'shAttr') || {}; } catch (e) { attr = {}; }
   if (attr.utm_source || attr.utm_medium || attr.utm_campaign) gtag('set', { campaign_source: attr.utm_source, campaign_medium: attr.utm_medium, campaign_name: attr.utm_campaign, campaign_term: attr.utm_term, campaign_content: attr.utm_content });
   var first = sget(localStorage, 'shFirstTouch') || {};

@@ -14,7 +14,7 @@ async function start(opts) {
   const client = () => { let ck = ''; return async (p, method = 'GET', body) => { const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
     const sc = r.headers.get('set-cookie'); if (sc) ck = sc.split(';')[0]; return { status: r.status, body: await r.json() }; }; };
   const hook = async ev => { const raw = JSON.stringify(ev); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
-  return { client, hook, stripe, close: () => new Promise(r => server.close(r)) };
+  return { client, hook, stripe, base, store: server.store, close: () => new Promise(r => server.close(r)) };
 }
 const reg = (c, n) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
 const done = (meta) => ({ id: 'evt_' + Math.random(), type: 'checkout.session.completed', data: { object: { id: 'cs_9', mode: 'subscription', client_reference_id: '2', customer: 'cus_2', subscription: 'sub_1', amount_total: 499, currency: 'usd', metadata: meta } } });
@@ -31,16 +31,16 @@ test('every homepage CTA has a unique cta_id; pricing CTAs carry their plan', ()
   assert.ok(!a.includes('begin_trial'), 'old event name gone');
 });
 
-function consentSandbox(store = { adsConsent: 'denied' }) {
+function consentSandbox(store = { adsConsent: 'denied' }, o = {}) {
   const events = [], ls = { ...store }, ss = {};
   const mkSt = o => ({ getItem: k => (k in o ? o[k] : null), setItem: (k, v) => { o[k] = String(v); } });
-  const win = { dataLayer: [], location: { href: 'https://studyhertz.com/?utm_source=google&utm_medium=cpc&utm_campaign=mcat&gclid=abc', pathname: '/' } };
+  const win = { dataLayer: [], location: { href: o.href || 'https://studyhertz.com/?utm_source=google&utm_medium=cpc&utm_campaign=mcat&gclid=abc', pathname: '/', host: 'studyhertz.com', protocol: 'https:' } };
   const ctx = { window: win, location: win.location, navigator: {}, localStorage: mkSt(ls), sessionStorage: mkSt(ss), URL, JSON, setTimeout, Promise,
-    document: { readyState: 'complete', head: { appendChild() {} }, createElement: () => ({}), getElementById: () => null, addEventListener() {}, body: { appendChild() {} } },
+    document: { cookie: o.cookie || '', referrer: o.referrer || '', readyState: 'complete', head: { appendChild() {} }, createElement: () => ({}), getElementById: () => null, addEventListener() {}, body: { appendChild() {} } },
     fetch: async () => ({ json: async () => ({ gaId: 'G-T' }) }) };
   vm.createContext(ctx); vm.runInContext(pub('consent.js'), ctx);
   win.dataLayer.push = a => events.push([...a]);
-  return { S: win.SHConsent, events, ls };
+  return { S: win.SHConsent, events, ls, doc: ctx.document };
 }
 const tick = () => new Promise(r => setTimeout(r, 10));
 
@@ -67,4 +67,28 @@ test('first-touch attribution is stored once on the user and carried on the serv
   await app.hook(done({ uid: '2', plan: 'monthly', ga_cid: '123.456' }));
   assert.equal(mp.length, 1); assert.equal(mp[0].user_id, 'u2');
   const p = mp[0].events[0].params; assert.equal(p.campaign_source, 'facebook'); assert.equal(p.campaign_name, 'fall'); assert.equal(p.first_click, 'fbclid'); assert.equal(p.campaign_medium, undefined);
+});
+
+test('first touch is captured on the very first load even without UTMs (referrer + landing) and mirrored to a cookie', () => {
+  const { ls, doc, S } = consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/es/?x=1', referrer: 'https://www.instagram.com/some/path?igsh=1' });
+  const ft = JSON.parse(ls.shFirstTouch); assert.equal(ft.referrer, 'https://www.instagram.com/some/path'); assert.equal(ft.landing, '/es/'); assert.ok(ft.ts);
+  assert.match(doc.cookie, /^sh_ft=/); assert.equal(S.firstTouch().referrer, 'https://www.instagram.com/some/path');
+  const g = JSON.parse(consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/?utm_source=ig&utm_medium=paid&fbclid=f1' }).ls.shFirstTouch); assert.equal(g.landing, '/?utm_source=ig&utm_medium=paid&fbclid=f1'); assert.equal(g.fbclid, 'f1');
+});
+test('returning from Google OAuth never overwrites or invents a first touch; the cookie restores it', () => {
+  const back = consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/?welcome=1', referrer: 'https://accounts.google.com/' }); assert.equal(back.ls.shFirstTouch, undefined);
+  const kept = consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/?welcome=1', referrer: 'https://accounts.google.com/', cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ utm_source: 'google', gclid: 'g1' })) });
+  assert.equal(JSON.parse(kept.ls.shFirstTouch).gclid, 'g1');
+  const self = consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/', referrer: 'https://accounts.google.com/o/oauth2' }); assert.equal(JSON.parse(self.ls.shFirstTouch).referrer, undefined);
+});
+test('sign-up saves first touch + browser language server-side (body for email sign-up, cookie fallback), sanitized, never overwritten', async t => {
+  const app = await start({}); t.after(app.close);
+  const own = app.client(); await reg(own, 'owner');
+  const a = app.client(); assert.equal((await a('/api/register', 'POST', { username: 'amy', password: 'pass-12345', agree: true, birthYear: 1990, lang: 'es-MX', ft: { utm_source: 'ig', utm_medium: 'paid', referrer: 'https://l.instagram.com/', landing: '/?utm_source=ig', evil: 'x', utm_term: 'a@b.com' } })).status, 200);
+  await a('/api/attribution', 'POST', { utm_source: 'later', lang: 'fr' });
+  const amy = app.store.db.users.find(u => u.username === 'amy');
+  assert.deepEqual(amy.attribution, { utm_source: 'ig', utm_medium: 'paid', referrer: 'https://l.instagram.com/', landing: '/?utm_source=ig' }); assert.equal(amy.signupLang, 'es-MX');
+  const r = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ utm_source: 'google', gclid: 'g9', referrer: 'javascript:x' })), 'Accept-Language': 'ko-KR,ko;q=0.9' }, body: JSON.stringify({ username: 'kim', password: 'pass-12345', agree: true, birthYear: 1990 }) });
+  assert.equal(r.status, 200); const kim = app.store.db.users.find(u => u.username === 'kim');
+  assert.deepEqual(kim.attribution, { utm_source: 'google', gclid: 'g9' }); assert.equal(kim.signupLang, 'ko-KR');
 });

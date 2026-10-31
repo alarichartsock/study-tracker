@@ -86,6 +86,18 @@ function createApp(opts = {}) {
     if (id.name && !u.displayName) u.displayName = String(id.name).slice(0, 80); // Apple sends the name only once: keep the first one we get
     store.save(); return { u, created };
   }
+  // first-touch attribution + browser language, saved once when an account is created (email or OAuth).
+  // Sources: the sign-up body (localStorage copy), else the sh_ft cookie set on the very first page load.
+  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ts', 'referrer', 'landing'];
+  function cleanAttr(x) { const a = {}; if (!x || typeof x !== 'object') return a;
+    for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : 100);
+    if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing; return a; }
+  const cleanLang = l => { const s = String(l || '').split(',')[0].split(';')[0].trim(); return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/.test(s) ? s.slice(0, 35) : ''; };
+  function saveSignupMeta(u, req, j) { let changed = false;
+    if (!u.attribution) { let a = cleanAttr(j && j.ft); if (!Object.keys(a).length) { try { a = cleanAttr(JSON.parse(auth.parseCookies(req.headers.cookie).sh_ft || 'null')); } catch { a = {}; } }
+      if (Object.keys(a).length) { u.attribution = a; changed = true; } }
+    if (!u.signupLang) { const l = cleanLang(j && j.lang) || cleanLang(req.headers['accept-language']); if (l) { u.signupLang = l; changed = true; } }
+    if (changed) store.save(); }
   function recordConsent(u, method, req) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
@@ -237,6 +249,7 @@ function createApp(opts = {}) {
       if (r.pending) { for (const [k, v] of pendingSignups) if (Date.now() - v.at > 15 * 60e3) pendingSignups.delete(k);
         const t = auth.newToken(); pendingSignups.set(t, { id, at: Date.now() });
         return back('?complete_signup=1', [`ps=${t}; Path=/api/oauth; HttpOnly; Max-Age=900; SameSite=Lax${secureCookies ? '; Secure' : ''}`]); }
+      if (r.created) saveSignupMeta(r.u, req, null);
       return back(r.created ? '?welcome=1' : '', [startSession(r.u.id)]);
     } catch (e) { return back('?oauth_error=' + encodeURIComponent(e.message || 'Sign-in failed')); }
   }
@@ -374,7 +387,7 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) return send(res, 403, { error: AGE_BLOCK });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
         const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) });
-        recordConsent(nu, 'password', req); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
+        recordConsent(nu, 'password', req); saveSignupMeta(nu, req, j); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
         return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/oauth/pending' && M === 'GET') { const t = auth.parseCookies(req.headers.cookie).ps, pe = t && pendingSignups.get(t);
@@ -386,7 +399,7 @@ function createApp(opts = {}) {
         if (!ageOk(j.birthYear)) { pendingSignups.delete(t); return send(res, 403, { error: AGE_BLOCK }, 'application/json', { 'Set-Cookie': 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0' }); }
         const ip = clientIp(req); if (regLimiter.blocked(ip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(ip);
         let r; try { r = oauthAccount(pe.id, { create: true }); } catch (e) { return send(res, 403, { error: e.message }); }
-        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
+        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); if (r.created) saveSignupMeta(r.u, req, j); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
         return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0', ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/login' && M === 'POST') {
@@ -419,9 +432,7 @@ function createApp(opts = {}) {
       if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
         return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.plansFor(bcfg) } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
       // first-touch marketing attribution (UTM / gclid / fbclid), stored once, only for accounts created in the last 2 days
-      if (p === '/api/attribution' && M === 'POST') { if (!user.attribution && Date.now() - new Date(user.created || 0) < 2 * 864e5) { const a = {};
-          for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ts']) if (typeof j[k] === 'string' && j[k] && !j[k].includes('@')) a[k] = j[k].slice(0, 100);
-          if (Object.keys(a).length) { user.attribution = a; store.save(); } }
+      if (p === '/api/attribution' && M === 'POST') { if (Date.now() - new Date(user.created || 0) < 2 * 864e5) saveSignupMeta(user, req, { ft: j, lang: j.lang }); // backfill only; never overwrites
         return send(res, 200, { ok: true }); }
       if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
       if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {

@@ -1,5 +1,6 @@
 'use strict';
 window.SH_LANDING = window.SH_LANDING || location.href; // original URL (UTM/gclid) before replaceState strips the query
+const signupMeta = () => { const o = { lang: (navigator.language || '').slice(0, 35) }; try { const ft = window.SHConsent?.firstTouch(); if (ft) o.ft = ft; } catch { /* ignore */ } return o; };
 // GA4 events: queued until consent.js loads; consent.js drops PII and never throws
 const track = (n, p) => { try { if (window.SHConsent && SHConsent.track) SHConsent.track(n, p); else (window.SHQ = window.SHQ || []).push([n, p]); } catch { /* never break the app */ } };
 const STD_SUBJ = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'], subjParam = s => STD_SUBJ.includes(s) ? s : 'custom';
@@ -90,7 +91,7 @@ async function boot() {
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar();
   try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
-  try { const ft = window.SHConsent?.firstTouch(); if (ft && localStorage.shFTSent !== String(ME.id)) api('/api/attribution', 'POST', ft).then(() => { localStorage.shFTSent = String(ME.id); }).catch(() => {}); } catch { /* ignore */ }
+  try { const ft = window.SHConsent?.firstTouch(); if (ft && localStorage.shFTSent !== String(ME.id)) api('/api/attribution', 'POST', { ...ft, lang: navigator.language || '' }).then(() => { localStorage.shFTSent = String(ME.id); }).catch(() => {}); } catch { /* ignore */ }
   await load();
   if (affQ) { view = 'set'; api('/api/affiliates/me?sync=1').then(r => { if (affQ === 'connected') toast(r.affiliate && r.affiliate.connect.ready ? 'Payouts are set up' : 'Payout setup saved. Stripe may still need a few details.'); if (view === 'set') render(); }).catch(() => {}); }
   { const pl = S.settings && S.settings.lang, cur = window.SHI18N && SHI18N.lang; let ls = null; try { ls = localStorage.lang; } catch { /* ignore */ }
@@ -199,7 +200,7 @@ $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
   if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
-    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode() } : { ...cred, ...legal, ref: refCode() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'google') : 'email'; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: r.trialDays || 30 }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'email' }); sessionStorage.shOauth = ''; boot(); }
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode(), ...signupMeta() } : { ...cred, ...legal, ref: refCode(), ...signupMeta() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'google') : 'email'; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: r.trialDays || 30 }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'email' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
