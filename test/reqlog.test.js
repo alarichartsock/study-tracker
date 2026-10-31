@@ -72,12 +72,14 @@ test('lifetime retention: rollover gzips, long-term daily stats are cached, disk
   l.record({ t: new Date(T).toISOString(), id: 'a1', method: 'GET', path: '/', status: 200, ms: 10, ip: '1.1.1.1' });
   l.record({ t: new Date(T + 60e3).toISOString(), id: 'a2', method: 'GET', path: '/x', status: 404, ms: 30, ip: '1.1.1.1' });
   T = Date.parse('2026-10-30T12:00:00Z');
+  l.record({ t: '2026-10-30T03:00:00.000Z', id: 'pt1', method: 'GET', path: '/late', status: 500, ms: 7, ip: '3.3.3.3' }); // Oct 29, 8 PM Pacific
   l.record({ t: new Date(T).toISOString(), id: 'b1', method: 'POST', path: '/api/login', status: 401, ms: 5, ip: '2.2.2.2', flags: ['failed_login'] });
   await new Promise(r => setTimeout(r, 80));
   const f = fs.readdirSync(dir); assert.ok(f.includes('requests-2026-10-29.jsonl.gz')); assert.ok(f.includes('requests-2026-10-30.jsonl'));
   const s = l.longStats(), d29 = s.days.find(x => x[0] === '2026-10-29')[1];
-  assert.equal(d29.requests, 2); assert.equal(d29.errorRate, 50); assert.equal(d29.visitors, 1); assert.equal(d29.p95, 30);
-  assert.ok(fs.existsSync(path.join(dir, 'daily-stats.json'))); assert.ok(s.disk.warn);
+  assert.equal(d29.requests, 3); assert.equal(d29.e5xx, 1); assert.equal(d29.visitors, 2); assert.equal(s.tz, 'America/Los_Angeles');
+  assert.deepEqual(s.hours.find(x => x[0] === '2026-10-29T20')[1], { requests: 1, e4xx: 0, e5xx: 1, flagged: 0 }); assert.equal(s.hours.find(x => x[0] === '2026-10-29T05')[1].requests, 2);
+  assert.ok(fs.existsSync(path.join(dir, 'hourly-stats.json'))); assert.deepEqual(l.longStats().days, s.days, 'cached result identical'); assert.ok(s.disk.warn);
   assert.ok(l.buffer.some(e => (e.flags || []).includes('disk_warning')));
   const r = l.find('a1'); assert.equal(r.event.path, '/'); assert.deepEqual(r.related.map(x => x.id), ['a2']); assert.equal(l.find('nope'), null); assert.equal(l.find('../etc'), null);
   l.close();

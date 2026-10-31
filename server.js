@@ -57,6 +57,7 @@ function createApp(opts = {}) {
   const fetchImpl = opts.fetch || globalThis.fetch;
   let SMS = null, SMT = 0; const sitemapState = () => { if (!SMS || Date.now() - SMT > 3600e3) { SMS = SEO.computeState({ dir: dataDir }); SMT = Date.now(); } return SMS; };
   const logDir = opts.logDir !== undefined ? opts.logDir : (dataDir ? path.join(dataDir, 'logs') : null);
+  const deploys = require('./lib/deploys').createDeploys({ dir: dataDir });
   const rlog = reqlog.createLogger({ dir: logDir, stdout: opts.requestLog ?? (!opts.quiet && !process.env.NODE_TEST_CONTEXT), ...(opts.logOut ? { out: opts.logOut } : {}) });
   const reportsDir = opts.reportsDir || (dataDir ? path.join(dataDir, 'reports', 'approved') : path.join(__dirname, '..', 'mcat-tracker-reports', 'approved'));
   // behind a reverse proxy (Render, Cloudflare) the socket address is the proxy's; TRUST_PROXY=1 uses the forwarded client IP
@@ -657,7 +658,7 @@ function createApp(opts = {}) {
           const off = rlog.subscribe(e => res.write('data: ' + JSON.stringify(lean(e)) + '\n\n')), hb = setInterval(() => res.write(': hb ' + Date.now() + '\n\n'), 15000);
           const stop = () => { off(); clearInterval(hb); }; req.on('close', stop); res.on('close', stop); return; }
         { const lm = /^\/api\/admin\/logs\/([\w-]{1,40})$/.exec(p); if (lm && lm[1] !== 'stats' && M === 'GET') { const r = rlog.find(lm[1]); return r ? send(res, 200, r) : send(res, 404, { error: 'log event not found' }); } }
-        if (p === '/api/admin/logs/stats' && M === 'GET') return send(res, 200, rlog.longStats());
+        if (p === '/api/admin/logs/stats' && M === 'GET') return send(res, 200, { ...rlog.longStats(), deploys: deploys.list() });
         if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, +q.limit || 500))); }
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/affiliates' && M === 'GET') return send(res, 200, { affiliates: aff.list().map(a => ({ ...a, username: (store.userById(a.user_id) || {}).username || null })), payoutsMode: aff.connectMode() });
@@ -708,7 +709,7 @@ function createApp(opts = {}) {
       send(res, 404, { error: 'not found' });
     } catch (e) { if (res.log && e instanceof Error && e.constructor !== Error && !(e instanceof SyntaxError)) { res.log.stack = e.stack; res.log.flags.push('exception'); } if (!res.headersSent) send(res, 400, { error: String(e.message || e) }); else res.end(); }
   });
-  server.store = store; server.aff = aff; server.rlog = rlog;
+  server.store = store; server.aff = aff; server.rlog = rlog; server.deploys = deploys;
   server.on('close', () => rlog.close());
   return server;
 }
@@ -720,6 +721,7 @@ if (require.main === module) {
   process.on('uncaughtException', e => { app.rlog.error(e, { where: 'uncaughtException' }); app.rlog.close(); setTimeout(() => process.exit(1), 200); });
   app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'StudyHertz on :' + port));
   setTimeout(() => INDEXNOW.onDeploy().catch(() => {}), 15000).unref();
+  if (process.env.RENDER) { app.deploys.recordBoot(); setTimeout(() => app.deploys.refreshFromApi().catch(() => {}), 60000).unref(); } // durable deploy markers for the admin charts
   // monthly affiliate payouts: checked every 6 hours, runs once per calendar month in the first days (no-op unless Connect is enabled)
   setInterval(() => { if (new Date().getUTCDate() <= 3 && app.aff) app.aff.runPayouts().then(r => { if (r && r.payouts) console.log('affiliate payouts', r.mode, r.month, r.payouts.length); }).catch(e => console.error('affiliate payouts', e.message)); }, 6 * 3600e3).unref();
 }

@@ -619,3 +619,4 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .live-big{font-size:2rem;font-weight:700;margin-top:4px}.live-conn{font-size:.8rem;color:var(--muted)}.live-conn.on{color:var(--ok)}.live-conn.on::before{content:'\25cf ';animation:livepulse 1.4s infinite}
 @keyframes livepulse{50%{opacity:.25}}.live-new{animation:livein .6s ease-out}@keyframes livein{from{opacity:0;transform:translateY(-6px);background:rgba(76,110,245,.18)}to{opacity:1;transform:none}}
 .log-uchip{padding:4px 6px 4px 12px;cursor:default;font-size:.9em}.log-uchip .btn{padding:0 8px;min-height:0;line-height:1.6}
+.lt-days{margin-top:10px}.lt-days summary{cursor:pointer;font-weight:600;margin:4px 0}

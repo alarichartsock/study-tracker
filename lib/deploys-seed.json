@@ -1,0 +1,578 @@
+[
+{
+"id": "dep-dbgorc1srm7s73ee5us0",
+"commit": "801ed14",
+"msg": "Terms of Service clickwrap, age gate, consent log, privacy v1.0",
+"start": "2026-10-28T05:52:48.752319Z",
+"finish": "2026-10-28T05:53:25.733672Z",
+"status": "deactivated",
+"trigger": "blueprint_sync"
+},
+{
+"id": "dep-dbgp8u0u01pc73aojl10",
+"commit": "f8eea68",
+"msg": "Restyle landing footer: wordmark, GPL-3.0 line, organized links",
+"start": "2026-10-28T06:21:44.60421Z",
+"finish": "2026-10-28T06:22:19.865084Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbgpc2ei0phs738lc37g",
+"commit": "c347004",
+"msg": "Google Analytics 4 behind cookie consent (GA_MEASUREMENT_ID)",
+"start": "2026-10-28T06:28:25.151838Z",
+"finish": "2026-10-28T06:28:57.184906Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbgpehei0phs738lhsfg",
+"commit": "de28d49",
+"msg": "Favicon: use the StudyHertz wave logo everywhere",
+"start": "2026-10-28T06:33:41.638904Z",
+"finish": "2026-10-28T06:34:14.310679Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbgphn67bikc73b8hrbg",
+"commit": "27abbb5",
+"msg": "Google consent mode advanced",
+"start": "2026-10-28T06:40:28.311786Z",
+"finish": "2026-10-28T06:41:13.826389Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbgpm5rbc2fs73bbis10",
+"commit": "4cf515f",
+"msg": "SEO: per-page titles and descriptions, canonicals, og/twitter image, JSON-LD, robots.txt, sitemap, compression and caching",
+"start": "2026-10-28T06:49:59.57041Z",
+"finish": "2026-10-28T06:50:43.736963Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbh1j7vf3r2c73asnr30",
+"commit": "4cf515f",
+"msg": "SEO: per-page titles and descriptions, canonicals, og/twitter image, JSON-LD, robots.txt, sitemap, compression and caching",
+"start": "2026-10-28T15:49:51.369903Z",
+"finish": "2026-10-28T15:50:39.540592Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbh1lcajnfac739tf0gg",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T15:54:26.039019Z",
+"finish": "2026-10-28T15:55:04.305422Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbh1nrd9fdbs73dafi20",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T15:59:41.248382Z",
+"finish": "2026-10-28T16:00:22.683717Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbh1r3142hec73e8cmug",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T16:06:36.77316Z",
+"finish": "2026-10-28T16:07:19.131644Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbh1sj0m7kps73f1v52g",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T16:09:48.968513Z",
+"finish": "2026-10-28T16:10:33.940758Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbh1vmugekts7393v9m0",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T16:16:27.383796Z",
+"finish": "2026-10-28T16:17:00.45626Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbh1vougkaas73ca9rgg",
+"commit": "a499273",
+"msg": "Test auto-deploy",
+"start": "2026-10-28T16:17:00.703592Z",
+"finish": "2026-10-28T16:17:41.800195Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbh21n15efls73b908a0",
+"commit": "f08c552",
+"msg": "Fix Subscribe button in trial banner (clicks outside main were ignored); SW cache v64",
+"start": "2026-10-28T16:20:44.274603Z",
+"finish": "2026-10-28T16:21:27.080713Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbh22295efls73b90rk0",
+"commit": "6d6555a",
+"msg": "Trial banner matches main content width; SW cache v65",
+"start": "2026-10-28T16:21:29.687724Z",
+"finish": "2026-10-28T16:22:08.03615Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbh278vlk1mc739o7c20",
+"commit": "6d6555a",
+"msg": "Trial banner matches main content width; SW cache v65",
+"start": "2026-10-28T16:32:35.997546Z",
+"finish": "2026-10-28T16:33:13.185984Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbha40q9lscs739fs8ag",
+"commit": "b3a6ed0",
+"msg": "Add Bing site verification file",
+"start": "2026-10-29T01:31:47.033641Z",
+"finish": "2026-10-29T01:32:26.317242Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbha5729lscs739ftqbg",
+"commit": "8fe74cb",
+"msg": "Serve BingSiteAuth.xml",
+"start": "2026-10-29T01:34:20.365371Z",
+"finish": "2026-10-29T01:35:00.119233Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhh4aq9lscs739mp3bg",
+"commit": "edd88d7",
+"msg": "Admin-only Users dashboard with /api/admin/stats; SW cache v66",
+"start": "2026-10-29T09:30:19.303562Z",
+"finish": "2026-10-29T09:31:25.667671Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhh4q1bgsac73b9ln00",
+"commit": "edd88d7",
+"msg": "Admin-only Users dashboard with /api/admin/stats; SW cache v66",
+"start": "2026-10-29T09:31:26.296874Z",
+"finish": "2026-10-29T09:32:15.509928Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbhh7vc9v7es73ba1qj0",
+"commit": "a75319f",
+"msg": "Users dashboard: 30/60/90-day daily chart with cumulative line, plan mix card; SW cache v67",
+"start": "2026-10-29T09:38:05.695199Z",
+"finish": "2026-10-29T09:38:48.977276Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhh9s8473hc73cik7tg",
+"commit": "32c8077",
+"msg": "Users chart: no-wrap edge-aligned axis labels, wrapping summary/legend on mobile; SW cache v68",
+"start": "2026-10-29T09:42:09.417507Z",
+"finish": "2026-10-29T09:42:54.926974Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhhopfb9u1s739si8l0",
+"commit": "c76bbe5",
+"msg": "GA4 in-app tracking: SPA page_views, product events, UTM/gclid attribution, PII guard; SW cache v69",
+"start": "2026-10-29T10:13:57.828923Z",
+"finish": "2026-10-29T10:14:44.371023Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhku6fb9u1s73a13peg",
+"commit": "e9bc9bd",
+"msg": "Landing: MCAT-specific hero, 30-day trial CTA above the fold, real app screenshots (webp, lazy), Google-first sign-up, clearer form errors; ",
+"start": "2026-10-29T13:50:17.577986Z",
+"finish": "2026-10-29T13:51:19.83693Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhkvgff3r2c73d67000",
+"commit": "e9bc9bd",
+"msg": "Landing: MCAT-specific hero, 30-day trial CTA above the fold, real app screenshots (webp, lazy), Google-first sign-up, clearer form errors; ",
+"start": "2026-10-29T13:53:05.778561Z",
+"finish": "2026-10-29T13:53:42.268116Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbhl2495efls739015dg",
+"commit": "6207a68",
+"msg": "Landing: replace webp screenshots with inert HTML/CSS previews (sample numbers, follows light/dark theme); remove webp files and STATIC entr",
+"start": "2026-10-29T13:58:41.330031Z",
+"finish": "2026-10-29T13:59:30.234827Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhpmaq9lscs73a4qf4g",
+"commit": "c71b276",
+"msg": "Referral program: per-user code and /?ref= link with copy button, 60-day trial for referred sign-ups, +30 days for the referrer on the frien",
+"start": "2026-10-29T19:14:51.722072Z",
+"finish": "2026-10-29T19:15:34.220789Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhu5ltg1s2s73fqe5ig",
+"commit": "c71b276",
+"msg": "Referral program: per-user code and /?ref= link with copy button, 60-day trial for referred sign-ups, +30 days for the referrer on the frien",
+"start": "2026-10-30T00:20:39.887949Z",
+"finish": "2026-10-30T00:21:27.162149Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbhu5t0j7e8c73bdr020",
+"commit": "c71b276",
+"msg": "Referral program: per-user code and /?ref= link with copy button, 60-day trial for referred sign-ups, +30 days for the referrer on the frien",
+"start": "2026-10-30T00:21:27.638253Z",
+"finish": "2026-10-30T00:22:08.760146Z",
+"status": "deactivated",
+"trigger": "manual"
+},
+{
+"id": "dep-dbhu714s728c73d00da0",
+"commit": "c71b276",
+"msg": "Referral program: per-user code and /?ref= link with copy button, 60-day trial for referred sign-ups, +30 days for the referrer on the frien",
+"start": "2026-10-30T00:23:32.070933Z",
+"finish": "2026-10-30T00:24:09.99099Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbhu72242p8c739e37r0",
+"commit": "d69a1f6",
+"msg": "Billing: read the Stripe key from GROK_FULL_ACCESS (fallback STRIPE_SECRET_KEY); live keys use STRIPE_LIVE_* webhook secret and prices with ",
+"start": "2026-10-30T00:24:10.403044Z",
+"finish": "2026-10-30T00:24:50.431363Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhu95u0tbcc73aibj50",
+"commit": "c3ff549",
+"msg": "Billing: treat restricted rk_live_ keys as live when resolving STRIPE_LIVE_* config; test",
+"start": "2026-10-30T00:28:07.40737Z",
+"finish": "2026-10-30T00:28:45.941876Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhueajm8hqs73cotpvg",
+"commit": "5edec68",
+"msg": "Account deletion: self-service Settings card (type DELETE/email + password) and admin per-user delete; cancels Stripe subscription first (ab",
+"start": "2026-10-30T00:39:06.777839Z",
+"finish": "2026-10-30T00:39:49.117154Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhug46q1p3s73friv50",
+"commit": "426d87f",
+"msg": "GA4 ecommerce: purchase event once per completed checkout (transaction_id = Stripe checkout session, value, USD, items; localStorage + serve",
+"start": "2026-10-30T00:42:56.95558Z",
+"finish": "2026-10-30T00:43:33.88964Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhujpu0tbcc73aimk30",
+"commit": "958407d",
+"msg": "SEO: landing + pricing in the initial HTML (visible without JS/API), boot falls back to the signed-out landing instead of an error page, rob",
+"start": "2026-10-30T00:50:47.263815Z",
+"finish": "2026-10-30T00:51:23.294508Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhumrss728c73d72rrg",
+"commit": "fa433aa",
+"msg": "Landing v2: section nav, tabbed feature tour (6 server-rendered previews with sample data), how it works, MCAT section-by-section, mid and f",
+"start": "2026-10-30T00:57:19.704812Z",
+"finish": "2026-10-30T00:58:00.615624Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhun1oj7e8c73be5b2g",
+"commit": "fa433aa",
+"msg": "Landing v2: section nav, tabbed feature tour (6 server-rendered previews with sample data), how it works, MCAT section-by-section, mid and f",
+"start": "2026-10-30T00:58:01.055376Z",
+"finish": "2026-10-30T00:58:42.147218Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbhuo5uq1p3s73frq9j0",
+"commit": "cd53497",
+"msg": "Lifetime plan: one-time $100 payment-mode checkout (STRIPE_LIVE_PRICE_LIFETIME), webhook grants never-expiring lifetime access and sets any ",
+"start": "2026-10-30T01:00:07.97237Z",
+"finish": "2026-10-30T01:01:14.936934Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhurajm8hqs73cpbae0",
+"commit": "f94a568",
+"msg": "Landing: wallpaper gradient fades out instead of ending in a hard line (mask + 100lvh), document-length soft gradient behind the long landin",
+"start": "2026-10-30T01:06:51.026582Z",
+"finish": "2026-10-30T01:07:31.717956Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhv03ivcj2c73f92c40",
+"commit": "d864d7e",
+"msg": "Heatmap: clearer 5-step scale with outlined empty days (landing preview + app); landing preview fits 7 columns (1fr grid, aspect-ratio cells",
+"start": "2026-10-30T01:17:02.527846Z",
+"finish": "2026-10-30T01:17:44.201993Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhv3c7f3r2c73866u40",
+"commit": "abe8e92",
+"msg": "Landing: long background gradient spans the full viewport width on desktop instead of the 1160px column (no vertical edge); SW cache v80",
+"start": "2026-10-30T01:24:00.8675Z",
+"finish": "2026-10-30T01:24:42.765132Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhv67jm8hqs73cpmi20",
+"commit": "ee75e52",
+"msg": "SEO: IndexNow key file + npm run indexnow + one submit per deployed commit (marker on /var/data, logs status only); logo images get alt text",
+"start": "2026-10-30T01:30:06.393628Z",
+"finish": "2026-10-30T01:31:10.054053Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhvf9mq1p3s73fsgr80",
+"commit": "d2b1450",
+"msg": "Landing: practice-exam sparkline markers are HTML dots so they stay round at any width (SVG line still stretches); SW cache v82",
+"start": "2026-10-30T01:49:26.150962Z",
+"finish": "2026-10-30T01:50:02.11592Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhvqq15efls73fdvnqg",
+"commit": "f25e88d",
+"msg": "i18n: es, zh-CN, ko, hi, vi, fr. Dependency-free runtime translator (public/i18n.js) with per-locale JSON catalogs (899 keys), Intl dates in",
+"start": "2026-10-30T02:14:00.152387Z",
+"finish": "2026-10-30T02:14:41.227312Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhvrsg473hc73b4hgv0",
+"commit": "4631c54",
+"msg": "Landing background: one continuous fixed full-viewport gradient layer (body::before radial gradients, no blurred blobs/filter/mask, no secti",
+"start": "2026-10-30T02:16:19.023299Z",
+"finish": "2026-10-30T02:16:53.842803Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhvtcss728c739tq2rg",
+"commit": "32f9e46",
+"msg": "i18n: landing buttons wrap for long translations at 375px (vi header/hero CTA overflow); SW cache v85",
+"start": "2026-10-30T02:19:31.532198Z",
+"finish": "2026-10-30T02:20:08.566706Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbhvv5p5efls7397c3ng",
+"commit": "0ee9f26",
+"msg": "Landing header: section links no longer shrink/clip (FAQ was cut to FA after the globe picker was added); translated locales hide them below",
+"start": "2026-10-30T02:23:19.542825Z",
+"finish": "2026-10-30T02:24:02.394027Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbi0258473hc73eh532g",
+"commit": "1b09e34",
+"msg": "i18n: short numeric keys translate (goal ring 'of 6h', ordinals) while never matching ordinary words; test; SW cache v87",
+"start": "2026-10-30T02:29:41.509821Z",
+"finish": "2026-10-30T02:30:19.413234Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbi034ss728c739tvc8g",
+"commit": "3e42c88",
+"msg": "GA4 conversion insights: view_item_list (pricing/paywall), select_item (plan clicks), sign_up/login method email|google, custom trial_start,",
+"start": "2026-10-30T02:31:48.00617Z",
+"finish": "2026-10-30T02:32:30.846841Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbi0768473hc73eh8vk0",
+"commit": "ec80925",
+"msg": "Affiliate program: applications + admin approval, ?aff= 60-day last-click attribution, commissions on paid invoices/Lifetime with refund rev",
+"start": "2026-10-30T02:40:25.156207Z",
+"finish": "2026-10-30T02:41:10.542631Z",
+"status": "deactivated",
+"trigger": "new_commit"
+},
+{
+"id": "dep-dbil4dou01pc73d8g1cg",
+"commit": "01b60c4",
+"msg": "Mobile bottom nav always visible: re-parent #nav out of the sticky header on phones (WebKit fixed-in-sticky clipping on toolbar collapse), p",
+"start": "2026-10-31T02:28:07.200815Z",
+"finish": "2026-10-31T02:28:51.133196Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbil7srbc2fs73akvf1g",
+"commit": "9315abd",
+"msg": "First-touch attribution captured on the very first page load (UTMs, click ids, external referrer, landing; cookie mirror survives the OAuth ",
+"start": "2026-10-31T02:35:31.837323Z",
+"finish": "2026-10-31T02:36:08.977292Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbilnvdg1s2s73dk22ig",
+"commit": "693a799",
+"msg": "Admin Users: rich usage metrics (DAU/WAU/MAU + stickiness, 30-day active chart, retention D1/D7/D30 + weekly cohorts, activation, plan split",
+"start": "2026-10-31T03:09:49.70694Z",
+"finish": "2026-10-31T03:10:40.890705Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbilrok9v7es73fvk6tg",
+"commit": "b32ed1b",
+"msg": "Admin charts: day x axis with a tick per day and width-fitted date labels (first/last + month changes always), on Users-per-day, active-user",
+"start": "2026-10-31T03:17:54.225172Z",
+"finish": "2026-10-31T03:18:30.01504Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbilvpou01pc73dasgjg",
+"commit": "3a538f6",
+"msg": "Structured request logging: one JSON line per request (request id header, redacted query, status, ms, bytes, uid, IP, UA, referer origin, co",
+"start": "2026-10-31T03:26:31.888135Z",
+"finish": "2026-10-31T03:27:09.65376Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbim0o7lk1mc73f3r8q0",
+"commit": "c7c2e56",
+"msg": "Request log: skip successful Render platform health checks (every ~5s) so they don't crowd the ring buffer and 14-day file",
+"start": "2026-10-31T03:28:33.013451Z",
+"finish": "2026-10-31T03:29:12.049125Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbim4gou01pc73db8sa0",
+"commit": "2c8f0e0",
+"msg": "Admin Logs: debounced search bar across path/IP/user/UA/request id/status/method/error/flags with field:value tokens (status:415 ip: path: u",
+"start": "2026-10-31T03:36:35.871442Z",
+"finish": "2026-10-31T03:37:11.486102Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbim6q142hec73at106g",
+"commit": "729e074",
+"msg": "Import: bundle notifications. Server snapshots trophies/goal days before CSV/JSON import, marks newly earned trophies as notified and return",
+"start": "2026-10-31T03:41:28.044184Z",
+"finish": "2026-10-31T03:42:08.648245Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbim99flk1mc73f4j43g",
+"commit": "f43939e",
+"msg": "Fix POST /api/flags 400 'unknown flag': client sent view:users (admin-only view, not a Grand Tour key) on every render; now only sends FLAG_",
+"start": "2026-10-31T03:46:45.350672Z",
+"finish": "2026-10-31T03:47:26.069505Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbimciqjnfac73b1j3r0",
+"commit": "5b6ce2f",
+"msg": "Lifetime log retention (gzip past days, no auto-delete, disk usage + 60% warning, long-term daily stats) + admin log event detail route #/ad",
+"start": "2026-10-31T03:53:47.807863Z",
+"finish": "2026-10-31T03:54:22.818151Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbinobrbc2fs73ar7jig",
+"commit": "b4701c7",
+"msg": "Admin Logs: response-time scatter (ms per request, log scale, colored by status class, hover tooltip) for the filtered range; /api/admin/log",
+"start": "2026-10-31T05:27:11.360231Z",
+"finish": "2026-10-31T05:27:53.722123Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbintgp42hec73b17evg",
+"commit": "0a8eb9e",
+"msg": "SEO: IndexNow also submits /affiliates (matches sitemap); tests; SW v100",
+"start": "2026-10-31T05:38:11.683102Z",
+"finish": "2026-10-31T05:38:45.81533Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbioah8ae00c73c8ahsg",
+"commit": "6bbeeb0",
+"msg": "Admin Users: tapping a row filters Logs to that user (uid filter, scrolls to Logs, removable 'User: <name>' chip); Details button keeps the ",
+"start": "2026-10-31T06:05:57.382367Z",
+"finish": "2026-10-31T06:06:38.844526Z",
+"status": "deactivated",
+"trigger": "api"
+},
+{
+"id": "dep-dbiod5bbc2fs73asolg0",
+"commit": "9f4e560",
+"msg": "Admin Logs: Export CSV in the Requests card; admin-only /api/admin/logs/export.csv streams all events matching the current range/filters/sea",
+"start": "2026-10-31T06:11:33.93769Z",
+"finish": "2026-10-31T06:12:15.492977Z",
+"status": "live",
+"trigger": "api"
+}
+]
