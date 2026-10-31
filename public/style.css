@@ -599,3 +599,11 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .aff-stats .stat{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--card2);min-width:0}
 .aff-stats .stat b{font-size:18px}
 .aff-adm{flex-wrap:wrap;gap:8px;align-items:center}
+
+/* v90: phone bottom nav is always visible. It is re-parented to #app (see app.js) and pinned to the layout viewport. */
+@media(max-width:760px){
+ #app,#app>main{transform:none;filter:none;-webkit-backdrop-filter:none;backdrop-filter:none;will-change:auto;contain:none}
+ #app>#nav.tabbar{position:fixed!important;left:10px;right:10px;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;transform:translateZ(0)!important;-webkit-transform:translateZ(0)!important;
+  z-index:100;margin:0;visibility:visible!important;opacity:1!important;display:flex!important}
+ main{padding-bottom:calc(110px + env(safe-area-inset-bottom))!important}
+}

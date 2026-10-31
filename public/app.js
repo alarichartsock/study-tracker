@@ -208,6 +208,13 @@ function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.a
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
+// Phones: the bottom nav must not live inside the sticky header. iOS/Android WebKit can scroll or clip a
+// position:fixed element whose ancestor is position:sticky (with a backdrop-filtered ::before) when the browser
+// toolbar collapses, so on narrow screens re-parent it to #app (no transform/filter) and keep it always visible.
+(() => { const nav = document.getElementById('nav'), top = document.querySelector('#app > .top'), app = document.getElementById('app'), mq = matchMedia('(max-width:760px)');
+  if (!nav || !top || !app) return;
+  const place = () => { if (mq.matches) { if (nav.parentElement !== app) app.appendChild(nav); } else if (nav.parentElement !== top) top.insertBefore(nav, top.querySelector('.top-r')); };
+  place(); mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place); })();
 function go(v) { if (v === 'users' && !(ME && ME.admin)) v = 'timer';
   if (v !== view || !go.sent) { go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
   view = localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); render(); window.scrollTo(0, 0); }
