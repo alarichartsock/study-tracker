@@ -89,3 +89,14 @@ test('admin log detail route and paused live updates are wired in the client', (
   assert.match(src, /data-act="logBack"/); assert.match(src, /data-act="logCopy"/); assert.match(src, /new event/); assert.match(src, /UI\.usersBack && UI\.usersHTML/);
   assert.ok(!/setInterval\([^)]*render\(\)/.test(src), 'no timer re-renders the list');
 });
+
+// Response-time points for the admin chart
+{
+  const assert = require('assert'); const { createLogger } = require('../lib/reqlog');
+  const L = createLogger({});
+  for (let i = 0; i < 300; i++) L.record({ t: new Date(Date.UTC(2026, 9, 30, 0, 0, i)).toISOString(), id: 'p' + i, kind: 'request', method: 'GET', path: '/x' + i, status: i % 50 ? 200 : 404, ms: i === 137 ? 9999 : i % 7 });
+  const a = L.query({ pts: '5000' }, 10); assert.strictEqual(a.points.length, 300); assert.strictEqual(a.sampled, false); assert.deepStrictEqual(Object.keys(a.points[0]).sort(), ['id', 'ms', 'path', 'status', 't']);
+  const b = L.query({ pts: '100', status: '2xx' }, 10); assert.strictEqual(b.points.length, 100); assert.ok(b.sampled); assert.ok(b.points.some(p => p.ms === 9999), 'slowest kept'); assert.ok(b.points.every(p => p.status === 200));
+  assert.strictEqual(L.query({}, 10).points, undefined);
+  console.log('reqlog points ok');
+}
