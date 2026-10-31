@@ -724,7 +724,7 @@ VIEWS.set = async () => {
   <div class="card danger-zone"><h3>Delete account</h3>${ME.admin ? '<p class="muted small">The admin account can\'t be deleted from here.</p>' : `<p class="muted small">Permanently deletes your account and all of your study data. An active subscription is canceled right away, with no refund, and lifetime access isn't refundable. This can't be undone, so export your data first if you want a copy.</p>
     <div class="row"><span class="sp"></span><button class="btn danger" data-act="delAcct">Delete account…</button></div>`}</div>`;
 };
-VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; return (await adminAffiliates()) + await usersView() + await usageView(); };
+VIEWS.users = async () => { if (!ME.admin) return '<p class="muted">Admin only.</p>'; return (await adminAffiliates()) + await usersView() + await usageView() + await logsView(); };
 const usersView = async () => {
   const s = await api('/api/admin/stats'), sb = s.subscriptions, rng = [30, 60, 90].includes(UI.usrRange) ? UI.usrRange : 30;
   let tot = s.baseline || 0; const all = s.signups.map(([d, v]) => [d, v, tot += v]), ser = all.slice(-rng), n = ser.length;
@@ -753,10 +753,13 @@ const usersView = async () => {
     + '<div class="card"><h3>Engagement</h3>' + row('Users who logged a session', s.studied) + row('Sessions logged', s.sessions) + row('Hours studied', s.studyHours) + row('Registration', s.registrationOpen ? 'open' : 'closed') + '<p class="muted small">Counts only. Updated ' + esc(new Date(s.generated).toLocaleString()) + '.</p></div></div>'; };
 // ---- admin chart x axis: a tick per day, labels fitted to the measured width (first/last + month changes always) ----
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const dayAxis = keys => { const n = keys.length; if (!n) return ''; let h = '<div class="dax" aria-hidden="true">';
-  keys.forEach((k, i) => { const [, m, d] = k.split('-').map(Number), x = ((i + 0.5) / n * 100).toFixed(3), mc = i > 0 && keys[i - 1].slice(0, 7) !== k.slice(0, 7), pr = i === 0 || i === n - 1 ? 3 : mc ? 2 : 0;
-    h += '<i class="' + (mc ? 'mj' : '') + '" style="left:' + x + '%"></i><span data-i="' + i + '" data-p="' + pr + '" class="' + (i === 0 ? 'f' : i === n - 1 ? 'l' : '') + '" style="left:' + x + '%">' + (pr ? MON[m - 1] + ' ' + d : m + '/' + d) + '</span>'; });
+const tickAxis = items => { const n = items.length; if (!n) return ''; let h = '<div class="dax" aria-hidden="true">';
+  items.forEach(([lab, pr, mj], i) => { const x = ((i + 0.5) / n * 100).toFixed(3); pr = i === 0 || i === n - 1 ? 3 : pr;
+    h += '<i class="' + (mj ? 'mj' : '') + '" style="left:' + x + '%"></i><span data-i="' + i + '" data-p="' + pr + '" class="' + (i === 0 ? 'f' : i === n - 1 ? 'l' : '') + '" style="left:' + x + '%">' + esc(lab) + '</span>'; });
   return h + '</div>'; };
+const dayAxis = keys => tickAxis(keys.map((k, i) => { const [, m, d] = k.split('-').map(Number), mc = i > 0 && keys[i - 1].slice(0, 7) !== k.slice(0, 7), pr = i === 0 || i === keys.length - 1 ? 3 : mc ? 2 : 0; return [pr ? MON[m - 1] + ' ' + d : m + '/' + d, pr, mc]; }));
+const hr12 = h => (h % 12 || 12) + (h < 12 ? 'a' : 'p');
+const hourAxis = ds => tickAxis(ds.map((d, i) => { const mid = d.getHours() === 0, edge = i === 0 || i === ds.length - 1; return [edge ? MON[d.getMonth()] + ' ' + d.getDate() + ' ' + hr12(d.getHours()) : mid ? MON[d.getMonth()] + ' ' + d.getDate() : hr12(d.getHours()), mid ? 2 : 0, mid]; }));
 function fitAxes(root = document) { for (const ax of root.querySelectorAll('.dax')) { const W = ax.clientWidth; if (!W) continue; const L = [...ax.querySelectorAll('span')], n = L.length, gap = 8, taken = [];
   L.forEach(e => e.style.visibility = 'visible'); const ext = e => { const i = +e.dataset.i, w = e.offsetWidth, c = (i + 0.5) / n * W; return e.classList.contains('f') ? [Math.min(c, 0), Math.min(c, 0) + w] : e.classList.contains('l') ? [Math.max(c, W) - w, Math.max(c, W)] : [c - w / 2, c + w / 2]; };
   const tryAdd = e => { const [a, b] = ext(e); if (taken.some(([x, y]) => a < y + gap && b > x - gap)) return false; taken.push([a, b]); return true; };
@@ -765,6 +768,40 @@ function fitAxes(root = document) { for (const ax of root.querySelectorAll('.dax
   const keep = new Set(ord.filter(tryAdd)); L.forEach(e => e.style.visibility = keep.has(e) ? 'visible' : 'hidden'); } }
 window.addEventListener('resize', () => { clearTimeout(fitAxes.t); fitAxes.t = setTimeout(() => fitAxes(), 120); });
 AFTER.users = () => fitAxes();
+// ---- admin request logs (English-only, admin-only) ----
+const LOGR = { '24h': 24, '48h': 48, '7d': 168, '14d': 336 };
+const logsView = async () => {
+  const F = UI.logF ||= { range: '48h', status: '', path: '', ip: '', uid: '', method: '', from: '', to: '', suspicious: false };
+  const hrs = LOGR[F.range] || 48, from = F.from ? new Date(F.from) : new Date(Date.now() - hrs * 36e5), to = F.to ? new Date(F.to) : new Date();
+  const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString(), limit: '300' }); for (const k of ['status', 'path', 'ip', 'uid', 'method']) if (F[k]) qs.set(k, F[k]); if (F.suspicious) qs.set('suspicious', '1');
+  const d = await api('/api/admin/logs?' + qs), S = d.summary, row = (l, v) => '<div class="subj-row"><span>' + l + '</span><b>' + v + '</b></div>';
+  const t0 = new Date(from); t0.setMinutes(0, 0, 0); const ds = []; for (let t = +t0; t <= +to; t += 36e5) ds.push(new Date(t));
+  const vals = ds.map(x => S.hours[x.toISOString().slice(0, 13)] || 0), mx = Math.max(1, ...vals), W = 700, H = 120, w = W / Math.max(1, ds.length);
+  const chart = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:120px;display:block;border-bottom:1px solid var(--line, rgba(128,128,128,.3))">' + vals.map((v, i) => '<rect x="' + (i * w + w * .1).toFixed(1) + '" y="' + (H - (v ? Math.max(2, v / mx * (H - 8)) : 0)).toFixed(1) + '" width="' + Math.max(.5, w * .8).toFixed(1) + '" height="' + (v ? Math.max(2, v / mx * (H - 8)) : 0).toFixed(1) + '" fill="var(--acc)" opacity=".8"' + tip(ds[i].toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric' }) + ' \u00b7 ' + v + ' requests', false) + '/>').join('') + '</svg>' + hourAxis(ds);
+  const sel = (id, opts, v) => '<select id="' + id + '">' + opts.map(([k, l]) => '<option value="' + k + '"' + (k === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>';
+  const inp = (id, ph, v, t = 'text') => '<input id="' + id + '" type="' + t + '" placeholder="' + ph + '" value="' + esc(v || '') + '" style="max-width:190px">';
+  const loc = x => x ? new Date(x.getTime() - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : '';
+  const filters = '<div class="row" style="flex-wrap:wrap;gap:6px;margin:0 0 10px">' + Object.keys(LOGR).map(r => '<button class="btn small' + (!F.from && F.range === r ? ' primary' : '') + '" data-act="logRange" data-r="' + r + '">' + r + '</button>').join('') + '</div>'
+    + '<div class="row log-f" style="flex-wrap:wrap;gap:6px;margin:0 0 10px">' + sel('lfStatus', [['', 'Any status'], ['2xx', '2xx'], ['3xx', '3xx'], ['4xx', '4xx'], ['5xx', '5xx'], ['401', '401'], ['403', '403'], ['404', '404'], ['415', '415']], F.status)
+    + sel('lfMethod', [['', 'Any method'], ['GET', 'GET'], ['POST', 'POST'], ['PUT', 'PUT'], ['DELETE', 'DELETE'], ['HEAD', 'HEAD']], F.method) + inp('lfPath', 'Path contains', F.path) + inp('lfIp', 'IP', F.ip) + inp('lfUid', 'User id', F.uid, 'number')
+    + inp('lfFrom', 'From', F.from ? loc(new Date(F.from)) : '', 'datetime-local') + inp('lfTo', 'To', F.to ? loc(new Date(F.to)) : '', 'datetime-local')
+    + '<label class="switch small"><input type="checkbox" id="lfSus"' + (F.suspicious ? ' checked' : '') + '> Suspicious only</label><button class="btn small primary" data-act="logApply">Apply</button><button class="btn small" data-act="logReset">Reset</button></div>';
+  const st = S.status, stRow = ['2xx', '3xx', '4xx', '5xx', 'exception'].filter(k => st[k]).map(k => row(k, st[k])).join('') || '<p class="muted small">No requests.</p>';
+  const tops = (a, act) => a.length ? a.map(([k, v]) => '<div class="subj-row"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis"><a href="#" data-act="' + act + '" data-v="' + esc(k) + '">' + esc(k) + '</a></span><b>' + v + '</b></div>').join('') : '<p class="muted small">None.</p>';
+  const fl = Object.entries(S.flagged).sort((a, b) => b[1] - a[1]), flRow = fl.length ? fl.map(([k, v]) => row(esc(k.replace(/_/g, ' ')), v)).join('') : '<p class="muted small">Nothing flagged.</p>';
+  const cls = c => c >= 500 ? 'lst5' : c >= 400 ? 'lst4' : c >= 300 ? 'lst3' : 'lst2', ft = t => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  const det = e => '<tr class="u-detail"><td colspan="8"><pre class="log-pre">' + esc(JSON.stringify(e, null, 2)) + '</pre></td></tr>';
+  const tbl = d.events.length ? '<div style="overflow-x:auto"><table class="u-tbl log-tbl"><thead><tr><th>Time</th><th>Status</th><th>Method</th><th>Path</th><th>ms</th><th>User</th><th>IP</th><th>Flags / reason</th></tr></thead><tbody>'
+    + d.events.map(e => '<tr class="u-row" data-act="logOpen" data-id="' + esc(e.id || e.t) + '" tabindex="0" style="cursor:pointer"><td>' + esc(ft(e.t)) + '</td><td><b class="' + cls(e.status || 500) + '">' + (e.status || 'exc') + '</b></td><td>' + esc(e.method || '') + '</td><td class="log-path">' + esc(e.path || e.where || '') + '</td><td>' + (e.ms ?? '') + '</td><td>' + (e.uid ?? '') + '</td><td>' + esc(e.ip || '') + '</td><td>' + (e.flags ? e.flags.map(f => '<span class="log-flag">' + esc(f) + '</span>').join(' ') + ' ' : '') + '<small class="muted">' + esc(e.err || '') + '</small></td></tr>' + (UI.logOpen === (e.id || e.t) ? det(e) : '')).join('') + '</tbody></table></div>' : '<p class="muted small">No matching requests.</p>';
+  return '<h2 class="u-h">Logs</h2><div class="card"><h3>Requests per hour <small class="muted">' + d.total + ' matching</small></h3>' + filters + chart + '</div>'
+    + '<div class="grid2"><div class="card"><h3>Status</h3>' + stRow + '<h3 class="mt">Flagged</h3>' + flRow + '</div><div class="card"><h3>Top IPs</h3>' + tops(S.topIps, 'logIp') + '<h3 class="mt">Top 4xx paths</h3>' + tops(S.top4xx, 'logPath') + '</div></div>'
+    + '<div class="card"><h3>Requests <small class="muted">newest first, up to 300 \u00b7 tap a row for details</small></h3>' + tbl + '<p class="muted small">' + d.buffered + ' events in memory; history kept on disk for about 14 days. Bodies, cookies, passwords and tokens are never logged.</p></div>'; };
+ACT.logRange = b => { Object.assign(UI.logF, { range: b.dataset.r, from: '', to: '' }); render(); };
+ACT.logApply = () => { const v = id => $(id).value.trim(); Object.assign(UI.logF, { status: v('lfStatus'), method: v('lfMethod'), path: v('lfPath'), ip: v('lfIp'), uid: v('lfUid'), from: v('lfFrom') ? new Date(v('lfFrom')).toISOString() : '', to: v('lfTo') ? new Date(v('lfTo')).toISOString() : '', suspicious: $('lfSus').checked }); render(); };
+ACT.logReset = () => { UI.logF = null; UI.logOpen = null; render(); };
+ACT.logIp = b => { UI.logF.ip = b.dataset.v; render(); };
+ACT.logPath = b => { UI.logF.path = b.dataset.v; render(); };
+ACT.logOpen = b => { UI.logOpen = UI.logOpen === b.dataset.id ? null : b.dataset.id; render(); };
 // ---- admin usage metrics (English-only, admin-only) ----
 const sparkSvg = (v, w = 90, h = 22) => { const mx = Math.max(1, ...v), bw = w / v.length; return '<svg class="u-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' + v.map((x, i) => '<rect x="' + (i * bw).toFixed(1) + '" y="' + (h - (x ? Math.max(1.5, x / mx * h) : 0)).toFixed(1) + '" width="' + Math.max(1, bw - 1).toFixed(1) + '" height="' + (x ? Math.max(1.5, x / mx * h) : 0).toFixed(1) + '" fill="var(--acc)"/>').join('') + '</svg>'; };
 const ago = t => { if (!t) return '\u2014'; const m = (Date.now() - Date.parse(t)) / 6e4; return m < 60 ? Math.max(0, Math.round(m)) + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };

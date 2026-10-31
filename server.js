@@ -2,7 +2,7 @@
 // StudyHertz - zero-dependency Node server
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
 const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require('./lib/stats'), analytics = require('./lib/analytics');
-const usage = require('./lib/usage'), reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
+const reqlog = require('./lib/reqlog'), usage = require('./lib/usage'), reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const { Store, PALETTE } = require('./lib/store');
@@ -54,6 +54,8 @@ function createApp(opts = {}) {
   const dataDir = opts.dataDir || process.env.DATA_DIR || null; if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
   const store = new Store(opts.dataFile || path.join(dataDir || __dirname, 'data.json'));
   const fetchImpl = opts.fetch || globalThis.fetch;
+  const logDir = opts.logDir !== undefined ? opts.logDir : (dataDir ? path.join(dataDir, 'logs') : null);
+  const rlog = reqlog.createLogger({ dir: logDir, stdout: opts.requestLog ?? (!opts.quiet && !process.env.NODE_TEST_CONTEXT), ...(opts.logOut ? { out: opts.logOut } : {}) });
   const reportsDir = opts.reportsDir || (dataDir ? path.join(dataDir, 'reports', 'approved') : path.join(__dirname, '..', 'mcat-tracker-reports', 'approved'));
   // behind a reverse proxy (Render, Cloudflare) the socket address is the proxy's; TRUST_PROXY=1 uses the forwarded client IP
   const trustProxy = opts.trustProxy ?? process.env.TRUST_PROXY === '1';
@@ -226,7 +228,7 @@ function createApp(opts = {}) {
   async function stripeWebhook(req, res) {
     if (!billing.enabled(bcfg)) return send(res, 404, { error: 'not found' });
     const raw = await readBody(req, 1e6);
-    if (!billing.verifySignature(raw, req.headers['stripe-signature'], bcfg.webhookSecret)) return send(res, 400, { error: 'invalid signature' });
+    if (!billing.verifySignature(raw, req.headers['stripe-signature'], bcfg.webhookSecret)) return (res.log && res.log.flags.push('bad_webhook_signature'), send(res, 400, { error: 'invalid signature' }));
     let ev; try { ev = JSON.parse(raw); } catch { return send(res, 400, { error: 'invalid payload' }); }
     if (ev.livemode && !bcfg.allowLive) return send(res, 200, { ignored: 'livemode' });
     if (!ev.id || !store.sql.eventNew(ev.id, String(ev.type))) return send(res, 200, { duplicate: true });
@@ -278,6 +280,7 @@ function createApp(opts = {}) {
   }
 
   const send = (res, code, body, type = 'application/json', extra = {}) => {
+    if (code >= 400 && res.log && body && typeof body === 'object' && body.error) res.log.err = String(body.error);
     res.writeHead(code, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin', ...extra });
     res.end(type === 'application/json' ? JSON.stringify(body) : body);
   };
@@ -350,6 +353,7 @@ function createApp(opts = {}) {
     hd['Content-Length'] = body.length; res.writeHead(200, hd); res.end(req.method === 'HEAD' ? undefined : body);
   }
   const server = http.createServer(async (req, res) => {
+    rlog.begin(req, res, clientIp(req));
     const u = new URL(req.url, 'http://x'), p = u.pathname, M = req.method;
     try {
       if ((M === 'GET' || M === 'HEAD') && i18n.ROUTES[p + '/']) { res.writeHead(301, { Location: p + '/' + (u.search || '') }); return res.end(); }
@@ -360,16 +364,17 @@ function createApp(opts = {}) {
       if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, ROBOTS, 'text/plain; charset=utf-8', 'public, max-age=3600');
       if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', 'public, max-age=3600');
       if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
-      if (!p.startsWith('/api/')) return plain(404, NOT_FOUND_HTML, 'text/html; charset=utf-8', 'no-cache');
+      if (!p.startsWith('/api/')) return (res.log.err = 'not found', plain(404, NOT_FOUND_HTML, 'text/html; charset=utf-8', 'no-cache'));
       if (p === '/api/stripe/webhook' && M === 'POST') return stripeWebhook(req, res); // raw body: verified before parsing
       const om = /^\/api\/oauth\/([a-z]+)\/(start|callback)$/.exec(p);
       if (om && (M === 'GET' || (M === 'POST' && om[2] === 'callback'))) return oauthRoute(req, res, om[1], om[2]);
       let j = {};
       if (M !== 'GET' && M !== 'HEAD') {
         const raw = await readBody(req);
-        if (raw) { if (!/application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'JSON required' }); j = JSON.parse(raw); if (!j || typeof j !== 'object') j = {}; }
+        if (raw) { if (!/application\/json/.test(req.headers['content-type'] || '')) { res.log.flags.push('bad_content_type'); return send(res, 415, { error: 'JSON required' }); } j = JSON.parse(raw); if (!j || typeof j !== 'object') j = {}; }
       }
       const user = currentUser(req);
+      if (user) res.log.uid = user.id;
       if (user) { try { if (usage.touch(user)) store.save(); } catch { /* activity tracking must never break a request */ } }
 
       // ---- public auth endpoints ----
@@ -408,7 +413,7 @@ function createApp(opts = {}) {
         if (ipLimiter.blocked(ip) || userLimiter.blocked(uk)) return send(res, 429, { error: 'Too many attempts. Try again in 15 minutes.' });
         const found = store.findUser(j.username || '');
         const ok = found && found.hash ? await auth.verifyPassword(j.password || '', found.salt, found.hash) : (await auth.hashPassword('x'), false); // equalize timing
-        if (!ok) { ipLimiter.fail(ip); userLimiter.fail(uk); return send(res, 401, { error: 'Invalid username or password' }); }
+        if (!ok) { ipLimiter.fail(ip); userLimiter.fail(uk); res.log.flags.push('failed_login'); return send(res, 401, { error: 'Invalid username or password' }); }
         userLimiter.reset(uk);
         return send(res, 200, { user: publicUser(found) }, 'application/json', { 'Set-Cookie': startSession(found.id) });
       }
@@ -624,7 +629,8 @@ function createApp(opts = {}) {
       if (p === '/api/affiliates/connect' && M === 'POST') { const a = aff.byUser(user.id); if (!a) return send(res, 404, { error: 'not an affiliate' });
         try { return send(res, 200, await aff.onboard(a.id, baseUrl(req))); } catch (e) { return send(res, e.status || 502, { error: e.message }); } }
       if (p.startsWith('/api/admin/')) {
-        if (!user.admin) return send(res, 403, { error: 'Admin only' });
+        if (!user.admin) { res.log.flags.push('admin_denied'); return send(res, 403, { error: 'Admin only' }); }
+        if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, +q.limit || 500))); }
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/affiliates' && M === 'GET') return send(res, 200, { affiliates: aff.list().map(a => ({ ...a, username: (store.userById(a.user_id) || {}).username || null })), payoutsMode: aff.connectMode() });
         { const m = /^\/api\/admin\/affiliates\/(\d+)$/.exec(p); if (m && M === 'POST') { try { return send(res, 200, aff.decide(+m[1], j)); } catch (e) { return send(res, e.status || 400, { error: e.message }); } } }
@@ -672,15 +678,18 @@ function createApp(opts = {}) {
         }
       }
       send(res, 404, { error: 'not found' });
-    } catch (e) { send(res, 400, { error: String(e.message || e) }); }
+    } catch (e) { if (res.log && e instanceof Error && e.constructor !== Error && !(e instanceof SyntaxError)) { res.log.stack = e.stack; res.log.flags.push('exception'); } if (!res.headersSent) send(res, 400, { error: String(e.message || e) }); else res.end(); }
   });
-  server.store = store; server.aff = aff;
+  server.store = store; server.aff = aff; server.rlog = rlog;
+  server.on('close', () => rlog.close());
   return server;
 }
 
 module.exports = { createApp };
 if (require.main === module) {
   const port = +process.env.PORT || 3000, app = createApp();
+  process.on('unhandledRejection', e => app.rlog.error(e, { where: 'unhandledRejection' }));
+  process.on('uncaughtException', e => { app.rlog.error(e, { where: 'uncaughtException' }); app.rlog.close(); setTimeout(() => process.exit(1), 200); });
   app.listen(port, process.env.HOST || '0.0.0.0', () => console.log(new Date().toISOString(), 'StudyHertz on :' + port));
   setTimeout(() => INDEXNOW.onDeploy().catch(() => {}), 15000).unref();
   // monthly affiliate payouts: checked every 6 hours, runs once per calendar month in the first days (no-op unless Connect is enabled)
