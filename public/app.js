@@ -225,7 +225,9 @@ const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (
 const VIEWS = {}, AFTER = {}, ACT = {};
 document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href^="/api/export"], a[data-oauth]'); if (!a) return;
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
-async function render() { if (!S) return; if (view !== 'admin' && view !== 'mcat') markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
+// views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
+const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
+async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });

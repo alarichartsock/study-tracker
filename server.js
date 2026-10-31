@@ -283,7 +283,7 @@ function createApp(opts = {}) {
   }
 
   const send = (res, code, body, type = 'application/json', extra = {}) => {
-    if (code >= 400 && res.log && body && typeof body === 'object' && body.error) res.log.err = String(body.error);
+    if (code >= 400 && res.log && body && typeof body === 'object' && body.error && !res.log.err) res.log.err = String(body.error);
     res.writeHead(code, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin', ...extra });
     res.end(type === 'application/json' ? JSON.stringify(body) : body);
   };
@@ -504,7 +504,7 @@ function createApp(opts = {}) {
       if (p === '/api/achievements/seen' && M === 'POST') { const A = analytics.achievements(ud, h), n = achN.markSeen(ud, A, Array.isArray(j.ids) ? j.ids.slice(0, 500) : []); if (n) save(); return send(res, 200, { ok: true, marked: n }); }
       if (p === '/api/flags' && M === 'POST') { const fl = ud.flags ||= {}, k = String(j.key || '');
         if (k === 'onboarded') fl.onboarded = 1; else if (k.startsWith('view:') && analytics.VIEW_KEYS.includes(k.slice(5))) { fl.views ||= []; if (!fl.views.includes(k.slice(5))) fl.views.push(k.slice(5)); }
-        else return send(res, 400, { error: 'unknown flag' });
+        else { res.log.err = 'unknown flag: ' + k.replace(/[^\w:.-]/g, '').slice(0, 40); return send(res, 400, { error: 'unknown flag' }); }
         save(); return send(res, 200, { ok: true }); }
       if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
       if (p === '/api/export.json') { const { active, ...data } = maskedState(ud); void active;
