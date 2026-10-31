@@ -16,7 +16,7 @@ test('submit posts host, key, keyLocation and the sitemap URLs', async () => {
   let call; const s = await IN.submit(undefined, async (u, o) => { call = { u, o }; return { status: 202 }; });
   assert.equal(s, 202); assert.equal(call.u, 'https://api.indexnow.org/indexnow'); assert.equal(call.o.method, 'POST');
   const b = JSON.parse(call.o.body); assert.equal(b.host, 'studyhertz.com'); assert.equal(b.key, IN.KEY);
-  assert.equal(b.keyLocation, 'https://studyhertz.com/' + IN.KEY + '.txt'); assert.deepEqual(b.urlList, ['https://studyhertz.com/', ...['es', 'zh-cn', 'ko', 'hi', 'vi', 'fr'].map(p => 'https://studyhertz.com/' + p + '/'), 'https://studyhertz.com/pricing', 'https://studyhertz.com/terms', 'https://studyhertz.com/privacy']);
+  assert.equal(b.keyLocation, 'https://studyhertz.com/' + IN.KEY + '.txt'); assert.deepEqual(b.urlList, ['https://studyhertz.com/', ...['es', 'zh-cn', 'ko', 'hi', 'vi', 'fr'].map(p => 'https://studyhertz.com/' + p + '/'), 'https://studyhertz.com/pricing', 'https://studyhertz.com/terms', 'https://studyhertz.com/privacy', 'https://studyhertz.com/affiliates']);
 });
 
 test('onDeploy submits once per commit in production, skips elsewhere, logs only the status', async () => {
@@ -34,7 +34,7 @@ test('onDeploy submits once per commit in production, skips elsewhere, logs only
 
 test('every <img> in the served HTML has an alt attribute', async t => {
   const app = await start(); t.after(app.close);
-  for (const p of ['/', '/pricing', '/terms', '/privacy']) {
+  for (const p of ['/', '/pricing', '/terms', '/privacy', '/affiliates']) {
     const imgs = (await (await fetch(app.base + p)).text()).match(/<img\b[^>]*>/g) || [];
     for (const i of imgs) { assert.match(i, /\balt="/, p + ': ' + i); if (/\balt=""/.test(i)) assert.match(i, /aria-hidden="true"/, p + ' decorative img must be aria-hidden: ' + i); }
   }
