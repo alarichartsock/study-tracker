@@ -1,5 +1,5 @@
 // Offline-friendly app shell. API calls always go to the network (never cached).
-const CACHE = 'studyhertz-shell-v103';
+const CACHE = 'studyhertz-shell-v104';
 const SHELL = ['/', '/app.js', '/mix.js', '/mcat.js', '/trophy-spec.js', '/trophy3d.js', '/trophy3d-hq.js', '/trophy-tier.js', '/vendor/three/three.module.min.js', '/vendor/three/three.core.min.js', '/style.css', '/favicon.svg', '/manifest.webmanifest', '/icon-192.png', '/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png', '/consent.js', '/i18n.js', '/privacy', '/terms'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));

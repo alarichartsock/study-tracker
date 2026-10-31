@@ -638,6 +638,18 @@ function createApp(opts = {}) {
         try { return send(res, 200, await aff.onboard(a.id, baseUrl(req))); } catch (e) { return send(res, e.status || 502, { error: e.message }); } }
       if (p.startsWith('/api/admin/')) {
         if (!user.admin) { res.log.flags.push('admin_denied'); return send(res, 403, { error: 'Admin only' }); }
+        if (p === '/api/admin/logs/export.csv' && M === 'GET') { // all matching events (cap 100k), streamed; no bodies, cookies or secrets are ever logged
+          const q = Object.fromEntries(u.searchParams), cap = 100000, r = rlog.query({ ...q, pts: '', suspicious: q.suspicious === '1' }, cap), names = new Map(store.db.users.map(x => [x.id, x.username]));
+          const rng = String(q.range || 'custom').replace(/[^\w-]/g, '').slice(0, 12) || 'custom', fn = 'studyhertz-logs-' + rng + '-' + new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }) + '.csv';
+          const PT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short' });
+          const cell = v => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+          res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="' + fn + '"', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Total-Count': String(r.total), 'X-Truncated': r.total > cap ? '1' : '0' });
+          res.write('\ufeffid,time_utc,time_pacific,status,method,path,ms,user_id,username,ip,country,user_agent,referrer,flags,reason\n');
+          const ev = r.events; let chunk = '';
+          for (let i = 0; i < ev.length; i++) { const e = ev[i], t = new Date(e.t);
+            chunk += [e.id, e.t, isNaN(t) ? '' : PT.format(t), e.status ?? '', e.method || e.kind || '', e.path || e.where || '', e.ms ?? '', e.uid ?? '', e.uid != null ? names.get(e.uid) || '' : '', e.ip, e.cc, e.ua, e.ref, (e.flags || []).join(' '), e.err].map(cell).join(',') + '\n';
+            if (chunk.length > 65536) { if (!res.write(chunk)) await new Promise(ok => res.once('drain', ok)); chunk = ''; } }
+          return res.end(chunk); }
         if (p === '/api/admin/logs/stream' && M === 'GET') { // Server-Sent Events: live request feed (admin only)
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
           if (res.socket) res.socket.setNoDelay(true); const lean = e => { const { stack, ...r } = e; return r; };

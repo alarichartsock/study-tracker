@@ -29,3 +29,20 @@ test('live view UI: route, pause/resume, visits-only toggle, Pacific time, 500 c
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   for (const s of ["new EventSource('/api/admin/logs/stream')", "'#/admin/live'", 'ACT.livePause', 'ACT.liveMode', "timeZone: 'America/Los_Angeles'", 'L.events.length > 500', "UI.logFrom === 'live'"]) assert.ok(js.includes(s), s);
 });
+
+test('admin CSV export: admin only, all matching rows, escaping, formula guard, attachment name', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-csv-'));
+  const server = createApp({ dataFile: path.join(dir, 'data.json'), quiet: true, logDir: path.join(dir, 'logs'), gaApiSecret: '', trustProxy: true });
+  await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => new Promise(r => server.close(r))); const base = `http://127.0.0.1:${server.address().port}`;
+  const reg = async u => (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
+  const ck = await reg('boss'), ck2 = await reg('user2');
+  assert.equal((await fetch(base + '/api/admin/logs/export.csv')).status, 401); assert.equal((await fetch(base + '/api/admin/logs/export.csv', { headers: { Cookie: ck2 } })).status, 403);
+  for (let i = 0; i < 350; i++) await fetch(base + '/pricing', { headers: { 'User-Agent': '=HYPERLINK("x"),a', 'CF-IPCountry': 'FR' } }).then(r => r.arrayBuffer());
+  await fetch(base + '/api/me', { headers: { Cookie: ck2 } });
+  const r = await fetch(base + '/api/admin/logs/export.csv?path=/pricing&range=48h', { headers: { Cookie: ck } }), txt = await r.text();
+  assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /text\/csv/); assert.match(r.headers.get('content-disposition'), /attachment; filename="studyhertz-logs-48h-\d{4}-\d{2}-\d{2}\.csv"/);
+  const lines = txt.replace(/^\ufeff/, '').trim().split('\n'); assert.equal(lines[0], 'id,time_utc,time_pacific,status,method,path,ms,user_id,username,ip,country,user_agent,referrer,flags,reason');
+  assert.equal(lines.length - 1, 350); assert.ok(lines[1].includes(',FR,"\'=HYPERLINK(""x""),a",'), lines[1]); assert.match(lines[1], /P[DS]T/);
+  const u = await (await fetch(base + '/api/admin/logs/export.csv?uid=' + server.store.db.users.find(x => x.username === 'user2').id, { headers: { Cookie: ck } })).text(); assert.match(u, /,user2,/);
+  assert.doesNotMatch(txt + u, /pass-12345|sid=/);
+});
