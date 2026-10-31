@@ -41,9 +41,7 @@ const pricingHead = html => html.replace(/<title>[^<]*<\/title>/, '<title>Pricin
   .replace(/(<meta property="og:description" content=")[^"]*/, '$1' + PRICING_DESC).replace(/(<meta name="twitter:title" content=")[^"]*/, '$1StudyHertz Pricing').replace(/(<meta name="twitter:description" content=")[^"]*/, '$1' + PRICING_DESC);
 // Real 404 page for unknown non-API paths (status 404, noindex)
 const NOT_FOUND_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | StudyHertz</title><link rel="stylesheet" href="/style.css"></head><body><main style="max-width:560px;margin:15vh auto;padding:20px;text-align:center"><h1>Page not found</h1><p class="muted">That page does not exist.</p><p><a class="btn primary" href="/">Go to StudyHertz</a></p></main></body></html>\n';
-const ROBOTS = 'User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nAllow: /affiliates\nAllow: /api/public-config\nAllow: /api/me\nDisallow: /api/\nDisallow: /terms/v\n\nSitemap: ' + SITE + '/sitemap.xml\n';
-const SITEMAP = (lastmod) => '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  [['/', '1.0', 'weekly'], ...Object.keys(require('./lib/i18n').ROUTES).map(r => [r, '0.9', 'weekly']), ['/pricing', '0.8', 'monthly'], ['/terms', '0.3', 'yearly'], ['/privacy', '0.3', 'yearly'], ['/affiliates', '0.4', 'monthly']].map(([u, pr, cf]) => `  <url><loc>${SITE}${u}</loc><lastmod>${lastmod}</lastmod><changefreq>${cf}</changefreq><priority>${pr}</priority></url>\n`).join('') + '</urlset>\n';
+const SEO = require('./lib/seo');
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
@@ -57,6 +55,7 @@ function createApp(opts = {}) {
   const dataDir = opts.dataDir || process.env.DATA_DIR || null; if (dataDir) fs.mkdirSync(dataDir, { recursive: true });
   const store = new Store(opts.dataFile || path.join(dataDir || __dirname, 'data.json'));
   const fetchImpl = opts.fetch || globalThis.fetch;
+  let SMS = null, SMT = 0; const sitemapState = () => { if (!SMS || Date.now() - SMT > 3600e3) { SMS = SEO.computeState({ dir: dataDir }); SMT = Date.now(); } return SMS; };
   const logDir = opts.logDir !== undefined ? opts.logDir : (dataDir ? path.join(dataDir, 'logs') : null);
   const rlog = reqlog.createLogger({ dir: logDir, stdout: opts.requestLog ?? (!opts.quiet && !process.env.NODE_TEST_CONTEXT), ...(opts.logOut ? { out: opts.logOut } : {}) });
   const reportsDir = opts.reportsDir || (dataDir ? path.join(dataDir, 'reports', 'approved') : path.join(__dirname, '..', 'mcat-tracker-reports', 'approved'));
@@ -364,8 +363,8 @@ function createApp(opts = {}) {
       if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
       const plain = (code, body, type, cc) => { const b = Buffer.from(body); res.writeHead(code, { 'Content-Type': type, 'Content-Length': b.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cc }); res.end(M === 'HEAD' ? undefined : b); };
       if ((M === 'GET' || M === 'HEAD') && p === INDEXNOW.KEY_PATH) return plain(200, INDEXNOW.KEY, 'text/plain; charset=utf-8', 'public, max-age=86400');
-      if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, ROBOTS, 'text/plain; charset=utf-8', 'public, max-age=3600');
-      if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SITEMAP(LEGAL.effective), 'application/xml; charset=utf-8', 'public, max-age=3600');
+      if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, SEO.robots(), 'text/plain; charset=utf-8', 'public, max-age=3600');
+      if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SEO.sitemap(sitemapState().lastmod), 'application/xml; charset=utf-8', 'public, max-age=3600');
       if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
       if (!p.startsWith('/api/')) return (res.log.err = 'not found', plain(404, NOT_FOUND_HTML, 'text/html; charset=utf-8', 'no-cache'));
       if (p === '/api/stripe/webhook' && M === 'POST') return stripeWebhook(req, res); // raw body: verified before parsing

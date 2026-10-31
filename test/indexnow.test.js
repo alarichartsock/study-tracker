@@ -19,17 +19,19 @@ test('submit posts host, key, keyLocation and the sitemap URLs', async () => {
   assert.equal(b.keyLocation, 'https://studyhertz.com/' + IN.KEY + '.txt'); assert.deepEqual(b.urlList, ['https://studyhertz.com/', ...['es', 'zh-cn', 'ko', 'hi', 'vi', 'fr'].map(p => 'https://studyhertz.com/' + p + '/'), 'https://studyhertz.com/pricing', 'https://studyhertz.com/terms', 'https://studyhertz.com/privacy', 'https://studyhertz.com/affiliates']);
 });
 
-test('onDeploy submits once per commit in production, skips elsewhere, logs only the status', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-in-m-')); let n = 0; const logs = [];
-  const fetchFn = async () => (n++, { status: 200 }), log = m => logs.push(m);
-  assert.equal(await IN.onDeploy({ env: { RENDER_GIT_COMMIT: 'a' }, dir, fetchFn, log }), 'skip');
-  const env = { RENDER: 'true', RENDER_GIT_COMMIT: 'a' };
-  assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 200);
+test('onDeploy submits only changed routes in production, skips elsewhere, logs only the status', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-in-m-')); const bodies = []; const logs = [];
+  const fetchFn = async (u, o) => (bodies.push(JSON.parse(o.body)), { status: 200 }), log = m => logs.push(m);
+  assert.equal(await IN.onDeploy({ env: {}, dir, fetchFn, log }), 'skip');
+  const env = { RENDER: 'true' };
+  assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 200); assert.deepEqual(bodies[0].urlList, IN.URLS);
   assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 'dup');
-  assert.equal(await IN.onDeploy({ env: { ...env, RENDER_GIT_COMMIT: 'b' }, dir, fetchFn, log }), 200);
-  assert.equal(n, 2); assert.deepEqual(logs, ['IndexNow submit: 200', 'IndexNow submit: 200']);
-  assert.equal(await IN.onDeploy({ env: { ...env, RENDER_GIT_COMMIT: 'c' }, dir, fetchFn: async () => { throw new Error('x'); }, log }), 'error');
-  assert.equal(fs.readFileSync(path.join(dir, '.indexnow-commit'), 'utf8'), 'b');
+  const f = path.join(dir, '.indexnow-hashes.json'), h = JSON.parse(fs.readFileSync(f, 'utf8')); h['/privacy'] = 'old'; fs.writeFileSync(f, JSON.stringify(h));
+  assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 200); assert.deepEqual(bodies[1].urlList, ['https://studyhertz.com/privacy']);
+  assert.equal(bodies.length, 2); assert.deepEqual(logs, ['IndexNow submit: 200 (11 URLs)', 'IndexNow submit: 200 (1 URLs)']);
+  h['/terms'] = 'old'; fs.writeFileSync(f, JSON.stringify(h));
+  assert.equal(await IN.onDeploy({ env, dir, fetchFn: async () => { throw new Error('x'); }, log }), 'error');
+  assert.equal(JSON.parse(fs.readFileSync(f, 'utf8'))['/terms'], 'old');
 });
 
 test('every <img> in the served HTML has an alt attribute', async t => {
