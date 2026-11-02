@@ -143,9 +143,6 @@ function emailBar() {
 }
 async function saveEmail(email, password) { const v = String(email || '').trim(); if (!EMAIL_RE.test(v)) throw new Error('Enter a valid email address');
   const r = await api('/api/account/email', 'POST', { email: v, ...(password ? { password } : {}) }); ME = r.user; emailBar(); toast('Email saved'); track('email_added'); return r; }
-ACT.emailBarSave = async () => { await saveEmail($('ebEmail').value); if (view === 'set') render(); };
-ACT.emailBarLater = () => { try { localStorage['shEmailSnooze' + ME.id] = String(Date.now()); } catch { /* ignore */ } emailBar(); };
-ACT.saveEmail = async () => { await saveEmail($('sEmail').value, $('sEmailPw') ? $('sEmailPw').value : ''); render(); };
 function showPaywall(blocked) {
   if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked }); window.SHConsent?.viewList('paywall', BILL.plans && !BILL.plans.lifetime ? ['monthly', 'yearly'] : undefined);
   let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
@@ -244,6 +241,9 @@ async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/ap
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
+ACT.emailBarSave = async () => { await saveEmail($('ebEmail').value); if (view === 'set') render(); };
+ACT.emailBarLater = () => { try { localStorage['shEmailSnooze' + ME.id] = String(Date.now()); } catch { /* ignore */ } emailBar(); };
+ACT.saveEmail = async () => { await saveEmail($('sEmail').value, $('sEmailPw') ? $('sEmailPw').value : ''); render(); };
 document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href^="/api/export"], a[data-oauth]'); if (!a) return;
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
