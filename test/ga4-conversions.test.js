@@ -100,3 +100,10 @@ test('ChatGPT ad click ids (oppref/olref) are kept in first touch unmodified, al
   const old = consentSandbox({ adsConsent: 'denied', shFirstTouch: JSON.stringify({ ts: '2026-10-01', landing: '/' }) }, { href: 'https://studyhertz.com/?oppref=new1', cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ ts: '2026-10-01', landing: '/' })) });
   assert.equal(JSON.parse(old.ls.shFirstTouch).oppref, 'new1'); assert.equal(JSON.parse(old.ls.shFirstTouch).ts, '2026-10-01'); assert.match(decodeURIComponent(old.doc.cookie), /new1/); assert.equal(old.S.adsOk(), false);
 });
+
+test('Microsoft UET: loads and fires sign_up only with ad consent; msclkid kept in first touch', async () => {
+  const d = consentSandbox({ adsConsent: 'denied' }, { href: 'https://studyhertz.com/?msclkid=mk1' });
+  d.S.signup(5); assert.equal(d.S.adsOk(), false); assert.match(d.ls.shFirstTouch, /"msclkid":"mk1"/);
+  const g = consentSandbox({ adsConsent: 'granted' }, { href: 'https://studyhertz.com/?msclkid=mk1' });
+  g.S.signup(5); assert.ok(g.S.adsOk());
+});

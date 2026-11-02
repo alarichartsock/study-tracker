@@ -94,7 +94,7 @@ function createApp(opts = {}) {
   }
   // first-touch attribution + browser language, saved once when an account is created (email or OAuth).
   // Sources: the sign-up body (localStorage copy), else the sh_ft cookie set on the very first page load.
-  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
+  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
   function cleanAttr(x) { const a = {}; if (!x || typeof x !== 'object') return a;
     for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
     if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing; return a; }

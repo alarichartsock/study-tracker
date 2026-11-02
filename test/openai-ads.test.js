@@ -50,7 +50,7 @@ test('no consent: nothing sent until the user accepts ad cookies; not configured
 
 test('usage source labels ChatGPT ads', () => {
   const pu = a => usage.perUser({ id: 1, username: 'a', attribution: a }, {}).source;
-  assert.equal(pu({ oppref: 'x', utm_source: 'google' }), 'ChatGPT ad'); assert.equal(pu({ utm_source: 'chatgpt.com' }), 'ChatGPT ad'); assert.equal(pu({ gclid: 'g' }), 'google (gclid)');
+  assert.equal(pu({ oppref: 'x', utm_source: 'google' }), 'ChatGPT ad'); assert.equal(pu({ utm_source: 'chatgpt.com' }), 'ChatGPT ad'); assert.equal(pu({ gclid: 'g' }), 'google (gclid)'); assert.equal(pu({ msclkid: 'm' }), 'Microsoft ad');
   const lib = require('../lib/openai-ads'); assert.equal(lib.create({}).enabled, false);
   assert.equal(lib.create(OENV).build({ id: 'o1', type: 'order_created', url: 'https://x.com/', amount: 10000, currency: 'usd' }).data.type, 'contents');
 });
