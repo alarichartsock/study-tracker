@@ -68,8 +68,15 @@
     gtag('consent', 'update', v === 'granted' ? granted() : DENIED);
     // tell the server (signed-in only; 401 is ignored) so ChatGPT Ads conversions follow this choice
     try { fetch('/api/ads-consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ ok: adsOk() }) }).catch(function () {}); } catch (e) { /* ignore */ }
+    if (adsOk()) oaiLoad(); else if (window.oaiq) window.oaiq('consent', false);
   }
   function adsOk() { return get() === 'granted' && !gpc; }
+  // ChatGPT Ads Measurement Pixel (https://developers.openai.com/ads/measurement-pixel), loaded only after ad-cookie consent
+  var OAI_PIXEL = '6c4bWecroRtsmDwv84sBjF', oaiLoaded = false;
+  function oaiLoad() { if (oaiLoaded || !adsOk()) return; oaiLoaded = true;
+    (function (w, d, s, u) { if (w.oaiq) return; var q = function () { q.q.push(arguments); }; q.q = []; w.oaiq = q; var js = d.createElement(s); js.async = true; js.src = u; (d.head || d.documentElement).appendChild(js); })(window, document, 'script', 'https://bzrcdn.openai.com/sdk/oaiq.min.js');
+    window.oaiq('consent', true); window.oaiq('init', { pixelId: OAI_PIXEL }); }
+  oaiLoad();
   window.SHConsent = {
     state: get,
     open: function () { var b = document.getElementById('consent'); if (b) b.remove(); banner(); },
@@ -103,7 +110,9 @@
       GA(function (id) { gtag('config', id, { user_id: 'u' + String(uid), send_page_view: false }); gtag('set', 'user_properties', up); }); },
     adsOk: adsOk,
     firstTouch: function () { return first && Object.keys(first).length ? first : null; },
-    signup: function () {
+    signup: function (uid) {
+      // same event name + id as the server's Conversions API event so OpenAI dedupes them
+      if (uid && adsOk() && window.oaiq) window.oaiq('measure', 'trial_started', { type: 'plan_enrollment' }, { event_id: 'trial_u' + uid });
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }
   };

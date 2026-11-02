@@ -32,7 +32,7 @@ test('ChatGPT ad signup: oppref stored unmodified, source ChatGPT ad, registrati
   assert.equal(sent.length, 1); assert.equal(sent[0].url, 'https://bzr.openai.com/v1/events?pid=px_test'); assert.equal(sent[0].auth, 'Bearer key_secret_x');
   const [e1, e2] = sent[0].body.events; assert.equal(sent[0].body.validate_only, false);
   assert.equal(e1.type, 'registration_completed'); assert.equal(e1.oppref, OPP); assert.deepEqual(e1.data, { type: 'customer_action' }); assert.equal(e1.action_source, 'web'); assert.match(e1.source_url, /^https:\/\//); assert.match(e1.user.external_ids_sha256[0], /^[0-9a-f]{64}$/);
-  assert.equal(e2.type, 'trial_started'); assert.deepEqual(e2.data, { type: 'plan_enrollment', plan_id: 'trial' });
+  assert.equal(e2.type, 'trial_started'); assert.deepEqual(e2.data, { type: 'plan_enrollment' });
   await c('/api/attribution', 'POST', { oppref: OPP, ads: true }); await c('/api/ads-consent', 'POST', { ok: true }); await wait(50);
   assert.equal(sent.length, 1, 'sent once');
   await app.hook(done({ uid: '2', plan: 'monthly' })); await wait(50);
