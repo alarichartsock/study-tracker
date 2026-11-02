@@ -621,3 +621,5 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 @keyframes livepulse{50%{opacity:.25}}.live-new{animation:livein .6s ease-out}@keyframes livein{from{opacity:0;transform:translateY(-6px);background:rgba(76,110,245,.18)}to{opacity:1;transform:none}}
 .log-uchip{padding:4px 6px 4px 12px;cursor:default;font-size:.9em}.log-uchip .btn{padding:0 8px;min-height:0;line-height:1.6}
 .lt-days{margin-top:10px}.lt-days summary{cursor:pointer;font-weight:600;margin:4px 0}
+.log-pager{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 8px}.log-pager .pg-nums{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.log-pager .btn{min-width:34px}.log-pager .btn[disabled]{opacity:.45;cursor:default}.log-pager .pg-gap{padding:0 2px;color:var(--muted)}.log-pager select{padding:2px 4px;margin-left:4px}.log-pager .pg-size{white-space:nowrap;display:inline-flex;align-items:center}
+@media (max-width:600px){.log-pager .pg-far{display:none}.log-pager .pg-info{order:9;flex-basis:100%}.log-pager .pg-size{order:8}.log-pager .sp{display:none}}

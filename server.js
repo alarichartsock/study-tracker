@@ -692,7 +692,7 @@ function createApp(opts = {}) {
           const stop = () => { off(); clearInterval(hb); }; req.on('close', stop); res.on('close', stop); return; }
         { const lm = /^\/api\/admin\/logs\/([\w-]{1,40})$/.exec(p); if (lm && lm[1] !== 'stats' && M === 'GET') { const r = rlog.find(lm[1]); return r ? send(res, 200, r) : send(res, 404, { error: 'log event not found' }); } }
         if (p === '/api/admin/logs/stats' && M === 'GET') return send(res, 200, { ...rlog.longStats(), deploys: deploys.list() });
-        if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, +q.limit || 500))); }
+        if (p === '/api/admin/logs' && M === 'GET') { const q = Object.fromEntries(u.searchParams); return send(res, 200, rlog.query({ ...q, suspicious: q.suspicious === '1' }, Math.min(2000, Math.max(1, +q.limit || 500)))); }
         if (p === '/api/admin/config' && M === 'GET') return send(res, 200, store.db.config);
         if (p === '/api/admin/affiliates' && M === 'GET') return send(res, 200, { affiliates: aff.list().map(a => ({ ...a, username: (store.userById(a.user_id) || {}).username || null })), payoutsMode: aff.connectMode() });
         { const m = /^\/api\/admin\/affiliates\/(\d+)$/.exec(p); if (m && M === 'POST') { try { return send(res, 200, aff.decide(+m[1], j)); } catch (e) { return send(res, e.status || 400, { error: e.message }); } } }
