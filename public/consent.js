@@ -21,19 +21,21 @@
   if (get() === 'granted') gtag('consent', 'update', granted());
   // 3) one shared loader, then config for Ads and (if configured) GA4
   // attribution: UTM + gclid from the original landing URL (app.js records it before replaceState strips the query)
-  var LANDING = window.SH_LANDING || location.href, AKEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'], attr = {};
+  var LANDING = window.SH_LANDING || location.href, AKEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'oppref', 'olref'], attr = {}, LONGK = { oppref: 1, olref: 1 }; // oppref/olref: ChatGPT Ads click ids (opaque, kept unmodified)
   function sget(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
   function sput(st, k, v) { try { st.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
-  try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, 100); any = true; } });
+  try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, LONGK[k] ? 2000 : 100); any = true; } });
     if (any) sput(sessionStorage, 'shAttr', got);
     // first touch: stored on the very first page load (even with no UTMs) so it survives the Google/Apple OAuth round trip, mirrored in a cookie the server reads at sign-up
     var ftc = (String(document.cookie || '').match(/(?:^|; )sh_ft=([^;]*)/) || [])[1], stored = sget(localStorage, 'shFirstTouch');
     if (!stored && ftc) { try { stored = JSON.parse(decodeURIComponent(ftc)); sput(localStorage, 'shFirstTouch', stored); } catch (e) { /* ignore */ } }
     if (!stored) { var lu = new URL(LANDING), ref = '', bad = /(^|\.)(accounts\.google\.com|appleid\.apple\.com|checkout\.stripe\.com|billing\.stripe\.com)$/;
       try { var ru = document.referrer ? new URL(document.referrer) : null; if (ru && ru.host !== location.host && !bad.test(ru.hostname)) ref = (ru.origin + ru.pathname).slice(0, 200); } catch (e) { /* ignore */ }
-      var lq2 = AKEYS.filter(function (k) { return got[k]; }).map(function (k) { return k + '=' + encodeURIComponent(got[k]); }).join('&'); var oauthBack = /[?&](welcome|complete_signup|oauth_error|code)=/.test(lu.search);
+      var lq2 = AKEYS.filter(function (k) { return got[k] && !LONGK[k]; }).map(function (k) { return k + '=' + encodeURIComponent(got[k]); }).join('&'); var oauthBack = /[?&](welcome|complete_signup|oauth_error|code)=/.test(lu.search);
       if (!oauthBack) { stored = { ...got, ts: new Date().toISOString().slice(0, 10) }; if (ref) stored.referrer = ref; stored.landing = (lu.pathname + (lq2 ? '?' + lq2 : '')).slice(0, 200); sput(localStorage, 'shFirstTouch', stored); } }
-    if (stored && !ftc) try { document.cookie = 'sh_ft=' + encodeURIComponent(JSON.stringify(stored)) + '; Path=/; Max-Age=' + 90 * 86400 + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { /* ignore */ }
+    // a later ChatGPT ad click on a browser that already has a first touch: keep the newest OpenAI click id for conversions
+    var ftDirty = false; if (stored && got.oppref && stored.oppref !== got.oppref) { stored.oppref = got.oppref; if (got.olref) stored.olref = got.olref; else delete stored.olref; sput(localStorage, 'shFirstTouch', stored); ftDirty = true; }
+    if (stored && (!ftc || ftDirty)) try { document.cookie = 'sh_ft=' + encodeURIComponent(JSON.stringify(stored)) + '; Path=/; Max-Age=' + 90 * 86400 + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { /* ignore */ }
     attr = sget(sessionStorage, 'shAttr') || {}; } catch (e) { attr = {}; }
   if (attr.utm_source || attr.utm_medium || attr.utm_campaign) gtag('set', { campaign_source: attr.utm_source, campaign_medium: attr.utm_medium, campaign_name: attr.utm_campaign, campaign_term: attr.utm_term, campaign_content: attr.utm_content });
   var first = sget(localStorage, 'shFirstTouch') || {};
@@ -64,7 +66,10 @@
   function choose(v) {
     set(v); var b = document.getElementById('consent'); if (b) b.remove();
     gtag('consent', 'update', v === 'granted' ? granted() : DENIED);
+    // tell the server (signed-in only; 401 is ignored) so ChatGPT Ads conversions follow this choice
+    try { fetch('/api/ads-consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ ok: adsOk() }) }).catch(function () {}); } catch (e) { /* ignore */ }
   }
+  function adsOk() { return get() === 'granted' && !gpc; }
   window.SHConsent = {
     state: get,
     open: function () { var b = document.getElementById('consent'); if (b) b.remove(); banner(); },
@@ -96,6 +101,7 @@
     // signed-in identity: opaque internal id (never username/email) + user properties
     identify: function (uid, props) { if (!uid || seen.idf === uid) return; seen.idf = uid; var up = {}; Object.keys(props || {}).forEach(function (k) { if (typeof props[k] === 'string' && props[k].length <= 36 && props[k].indexOf('@') < 0) up[k] = props[k]; });
       GA(function (id) { gtag('config', id, { user_id: 'u' + String(uid), send_page_view: false }); gtag('set', 'user_properties', up); }); },
+    adsOk: adsOk,
     firstTouch: function () { return first && Object.keys(first).length ? first : null; },
     signup: function () {
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });

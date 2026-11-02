@@ -27,6 +27,7 @@ const DAY = 864e5;
 const INDEXNOW = require('./lib/indexnow');
 const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
+const openaiAds = require('./lib/openai-ads');
 const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
@@ -93,16 +94,28 @@ function createApp(opts = {}) {
   }
   // first-touch attribution + browser language, saved once when an account is created (email or OAuth).
   // Sources: the sign-up body (localStorage copy), else the sh_ft cookie set on the very first page load.
-  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ts', 'referrer', 'landing'];
+  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
   function cleanAttr(x) { const a = {}; if (!x || typeof x !== 'object') return a;
-    for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : 100);
+    for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
     if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing; return a; }
   const cleanLang = l => { const s = String(l || '').split(',')[0].split(';')[0].trim(); return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/.test(s) ? s.slice(0, 35) : ''; };
   function saveSignupMeta(u, req, j) { let changed = false;
     if (!u.attribution) { let a = cleanAttr(j && j.ft); if (!Object.keys(a).length) { try { a = cleanAttr(JSON.parse(auth.parseCookies(req.headers.cookie).sh_ft || 'null')); } catch { a = {}; } }
       if (Object.keys(a).length) { u.attribution = a; changed = true; } }
     if (!u.signupLang) { const l = cleanLang(j && j.lang) || cleanLang(req.headers['accept-language']); if (l) { u.signupLang = l; changed = true; } }
-    if (changed) store.save(); }
+    if (j && j.ads === true && !u.adsOk) { u.adsOk = true; changed = true; }
+    if (changed) store.save(); oaiSignup(u); }
+  // ChatGPT Ads conversions (Conversions API), only for people who accepted advertising cookies. Sent once per account.
+  const oai = openaiAds.create(opts.oaiEnv || process.env, { fetch: opts.oaiFetch });
+  const oaiPending = new Set();
+  function oaiSignup(u) { if (!oai.enabled || !u || !u.adsOk || (u.oai && u.oai.reg) || oaiPending.has(u.id)) return;
+    const at = Date.parse(u.created) || Date.now(); if (Date.now() - at > 6.5 * 864e5) return; // the API accepts events from the last 7 days
+    const a = u.attribution || {}, base = { at, url: SITE + '/', oppref: a.oppref, uid: u.id }; oaiPending.add(u.id);
+    oai.send([{ ...base, id: 'reg_u' + u.id, type: 'registration_completed' }, { ...base, id: 'trial_u' + u.id, type: 'trial_started', plan: 'trial' }])
+      .then(r => { if (r.sent) { u.oai = { ...(u.oai || {}), reg: new Date().toISOString(), ...(oai.validateOnly ? { validateOnly: true } : {}) }; store.save(); } }).finally(() => oaiPending.delete(u.id)); }
+  function oaiPurchase(u, c) { if (!oai.enabled || !u || !u.adsOk || !c || !c.txn) return Promise.resolve(false);
+    const a = u.attribution || {};
+    return oai.send([{ id: c.txn, type: c.plan === 'lifetime' ? 'order_created' : 'subscription_created', at: Date.now(), url: SITE + '/', oppref: a.oppref, uid: u.id, plan: c.plan, amount: Math.round((Number(c.value) || 0) * 100), currency: c.currency || 'USD' }]).then(r => r.sent); }
   function recordConsent(u, method, req) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
@@ -194,7 +207,7 @@ function createApp(opts = {}) {
       const u = store.userById(uid); u.billing ||= {};
       if (!u.billing.lifetime) { u.billing.lifetime = { at: new Date().toISOString(), txn: o.id, amount: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase() };
         const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan: 'lifetime' };
-        if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; u.billing.conversion = conv; store.save(); }
+        if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; if (await oaiPurchase(u, conv)) conv.oai = true; u.billing.conversion = conv; store.save(); }
       aff.commission({ uid, source: o.id, amount: o.amount_total || 0, paymentIntent: typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id, kind: 'lifetime', livemode: ev.livemode });
       // an existing monthly/yearly subscription stops renewing at the end of its paid period (never refunded). A Stripe error
       // makes the webhook fail so Stripe retries; the lifetime grant above is idempotent.
@@ -208,7 +221,7 @@ function createApp(opts = {}) {
       applySub(uid, await stripe('GET', '/subscriptions/' + (typeof o.subscription === 'string' ? o.subscription : o.subscription.id)), { payment_failed: 0 });
       const u = store.userById(uid), meta = o.metadata || {}, plan = billing.PLANS[meta.plan] ? meta.plan : (store.sql.subscription(uid) || {}).plan || 'monthly';
       const conv = { value: (o.amount_total || 0) / 100, currency: String(o.currency || 'usd').toUpperCase(), txn: o.id, plan };
-      if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; // sent server-side: the browser must not send it again
+      if (await gaPurchase(meta.ga_cid, conv, store.userById(uid))) conv.mp = true; if (await oaiPurchase(u, conv)) conv.oai = true; // sent server-side: the browser must not send it again
       u.billing ||= {}; u.billing.conversion = conv; store.save();
     } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
       const uid = uidFor(o.customer, o.metadata); if (uid) applySub(uid, o);
@@ -441,8 +454,10 @@ function createApp(opts = {}) {
       if (p === '/api/billing' && M === 'GET') { const st = bstat(user), c = user.billing && user.billing.conversion;
         return send(res, 200, { ...st, ...(st.enabled ? { plans: billing.plansFor(bcfg) } : {}), ...(c ? { conversion: { ...(bcfg.purchaseLabel ? { label: bcfg.purchaseLabel } : {}), ...c } } : {}) }); }
       // first-touch marketing attribution (UTM / gclid / fbclid), stored once, only for accounts created in the last 2 days
-      if (p === '/api/attribution' && M === 'POST') { if (Date.now() - new Date(user.created || 0) < 2 * 864e5) saveSignupMeta(user, req, { ft: j, lang: j.lang }); // backfill only; never overwrites
+      if (p === '/api/attribution' && M === 'POST') { if (Date.now() - new Date(user.created || 0) < 2 * 864e5) saveSignupMeta(user, req, { ft: j, lang: j.lang, ads: j.ads }); // backfill only; never overwrites
         return send(res, 200, { ok: true }); }
+      // advertising consent accepted after sign-up: lets the ChatGPT Ads sign-up conversion go out (once, within 7 days)
+      if (p === '/api/ads-consent' && M === 'POST') { const ok = j.ok === true; if (ok !== !!user.adsOk) { if (ok) user.adsOk = true; else delete user.adsOk; store.save(); } if (ok) oaiSignup(user); return send(res, 200, { ok: true }); }
       if (p === '/api/billing/conversion-seen' && M === 'POST') { if (user.billing && user.billing.conversion) { delete user.billing.conversion; store.save(); } return send(res, 200, { ok: true }); }
       if ((p === '/api/billing/checkout' || p === '/api/billing/portal') && M === 'POST') {
         if (!billing.enabled(bcfg)) return send(res, 404, { error: 'Billing is not enabled' });

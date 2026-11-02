@@ -92,3 +92,11 @@ test('sign-up saves first touch + browser language server-side (body for email s
   assert.equal(r.status, 200); const kim = app.store.db.users.find(u => u.username === 'kim');
   assert.deepEqual(kim.attribution, { utm_source: 'google', gclid: 'g9' }); assert.equal(kim.signupLang, 'ko-KR');
 });
+
+test('ChatGPT ad click ids (oppref/olref) are kept in first touch unmodified, also on a browser that already had a first touch', () => {
+  const opp = 'gAAAAA' + 'Zz9'.repeat(60);
+  const { ls, doc, S } = consentSandbox({ adsConsent: 'granted' }, { href: 'https://studyhertz.com/?oppref=' + opp + '&olref=xy1' });
+  const ft = JSON.parse(ls.shFirstTouch); assert.equal(ft.oppref, opp); assert.equal(ft.olref, 'xy1'); assert.equal(ft.landing, '/'); assert.match(decodeURIComponent(doc.cookie), /"oppref"/); assert.equal(S.adsOk(), true);
+  const old = consentSandbox({ adsConsent: 'denied', shFirstTouch: JSON.stringify({ ts: '2026-10-01', landing: '/' }) }, { href: 'https://studyhertz.com/?oppref=new1', cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ ts: '2026-10-01', landing: '/' })) });
+  assert.equal(JSON.parse(old.ls.shFirstTouch).oppref, 'new1'); assert.equal(JSON.parse(old.ls.shFirstTouch).ts, '2026-10-01'); assert.match(decodeURIComponent(old.doc.cookie), /new1/); assert.equal(old.S.adsOk(), false);
+});
