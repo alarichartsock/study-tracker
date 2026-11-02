@@ -399,11 +399,11 @@ const legend = () => (legend.order || []).map(s => `<span><i class="dot" style="
 const MEDAL_COLORS = { bronze: '#cd7f32', silver: '#c0c0c0', gold: '#f5c518', platinum: '#a6e3ff' };
 function heatmap(byDay) {
   const c = 12, g = 3, end = k2d(ST.todayKey), start = addD(end, -52 * 7 - ((end.getDay() + 6) % 7)), goal = ST.goals.day.goal || 4 * 3600;
-  const weeks = Math.ceil(((end - start) / DAY + 1) / 7); let out = `<svg width="${30 + weeks * (c + g)}" height="${20 + 7 * (c + g)}">`, lastM = -1;
+  const weeks = Math.ceil(((end - start) / DAY + 1) / 7); const SW = 30 + weeks * (c + g); let out = `<svg width="${SW}" height="${20 + 7 * (c + g)}">`, lastM = -1;
   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach((t, i) => t && (out += `<text x="0" y="${20 + i * (c + g) + c / 2}" dominant-baseline="central" class="dow">${t}</text>`));
   for (let d = new Date(start), i = 0; d <= end; d = addD(d, 1), i++) {
     const w = Math.floor(i / 7), r = (d.getDay() + 6) % 7, v = byDay[dk(d)] || 0, lv = v <= 0 ? 0 : v < goal * 0.25 ? 1 : v < goal * 0.5 ? 2 : v < goal ? 3 : 4, m = medalOf(v), x = 30 + w * (c + g), y = 20 + r * (c + g);
-    if (r === 0 && d.getMonth() !== lastM) { lastM = d.getMonth(); out += `<text x="${x}" y="10">${d.toLocaleDateString(LOC(), { month: 'short' })}</text>`; }
+    if (r === 0 && d.getMonth() !== lastM) { lastM = d.getMonth(); const ml = d.toLocaleDateString(LOC(), { month: 'short' }), edge = x + ml.length * 7 > SW; out += `<text x="${edge ? SW - 2 : x}" y="10"${edge ? ' text-anchor="end"' : ''}>${ml}</text>`; } // month labels near the right edge are right-aligned so they never clip
     out += `<rect class="l${lv}" x="${x}" y="${y}" width="${c}" height="${c}" rx="2"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : ''), false)}></rect>${m ? `<circle cx="${x + c / 2}" cy="${y + c / 2}" r="2.5" style="fill:${MEDAL_COLORS[m]}"/>` : ''}`;
   }
   return out + '</svg>';
