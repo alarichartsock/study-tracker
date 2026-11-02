@@ -54,7 +54,7 @@ test('localized landing routes: lang, translated h1/title/meta, self canonical, 
 
 test('settings accepts a supported language only', async t => {
   const app = await start(); t.after(app.close);
-  const r = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'owner', password: 'pass-12345', agree: true, birthYear: 1990 }) });
+  const r = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'owner', password: 'pass-12345', agree: true, birthYear: 1990 }) });
   const ck = (r.headers.get('set-cookie') || '').split(';')[0]; const H = { 'Content-Type': 'application/json', Cookie: ck };
   assert.equal((await fetch(app.base + '/api/settings', { method: 'POST', headers: H, body: JSON.stringify({ lang: 'ko' }) })).status, 200);
   assert.equal((await (await fetch(app.base + '/api/state', { headers: H })).json()).settings.lang, 'ko');

@@ -30,7 +30,7 @@ async function start(opts = {}) {
     const r = await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': sig || billing.sign(raw, secret) }, body: raw }); return { status: r.status, body: await r.json() }; };
   return { base, client, hook, dataFile, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, name) => c('/api/register', 'POST', { username: name, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, name) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: name, password: 'pass-12345', agree: true, birthYear: 1990 });
 
 test('lib: signature verification, form encoding, status rules, live keys stay off', () => {
   const raw = '{"id":"evt_1"}', h = billing.sign(raw, 'whsec_a');

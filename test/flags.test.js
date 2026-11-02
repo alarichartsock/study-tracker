@@ -13,7 +13,7 @@ test('/api/flags stays strict and logs the rejected key', async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`; let ck = '';
   const c = async (p, body) => { const r = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(ck ? { Cookie: ck } : {}) }, body: JSON.stringify(body) }); const sc = r.headers.get('set-cookie'); if (sc) ck = sc.split(';')[0]; await r.text(); return r.status; };
   try {
-    await c('/api/register', { username: 'flagger', password: 'pass-12345', agree: true, birthYear: 1990 });
+    await c('/api/register', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'flagger', password: 'pass-12345', agree: true, birthYear: 1990 });
     for (const v of analytics.VIEW_KEYS) assert.equal(await c('/api/flags', { key: 'view:' + v }), 200);
     assert.equal(await c('/api/flags', { key: 'onboarded' }), 200);
     assert.equal(await c('/api/flags', { key: 'view:users' }), 400); assert.equal(await c('/api/flags', { key: 'anything' }), 400);

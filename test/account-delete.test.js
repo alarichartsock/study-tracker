@@ -14,7 +14,7 @@ async function start(stripeFetch) {
     const sc = r.headers.get('set-cookie'); if (sc) c.cookie = sc.split(';')[0].endsWith('=') ? '' : sc.split(';')[0]; return { status: r.status, body: await r.json(), setCookie: sc }; }; c.cookie = ''; return c; };
   return { base, client, db: () => new DatabaseSync(path.join(dir, 'data.db'), { readOnly: true }), close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, name) => c('/api/register', 'POST', { username: name, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, name) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: name, password: 'pass-12345', agree: true, birthYear: 1990 });
 const rows = (db, uid) => { const n = (t, col = 'user_id') => db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE ${col} = ? OR ${col} = ?`).get(uid, String(uid)).n;
   return { users: n('users', 'id'), tokens: n('tokens', 'uid'), user_data: n('user_data'), sessions: n('sessions'), subjects: n('subjects'), activities: n('activities'), exams: n('exams'), tasks: n('tasks'), subscriptions: n('subscriptions'),
     reports: db.prepare('SELECT data FROM reports').all().filter(r => JSON.parse(r.data).uid === uid).length }; };

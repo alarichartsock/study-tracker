@@ -16,7 +16,7 @@ async function start(opts) {
   const hook = async ev => { const raw = JSON.stringify(ev); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
   return { client, hook, stripe, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, n) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, n) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
 const done = (meta) => ({ id: 'evt_' + Math.random(), type: 'checkout.session.completed', data: { object: { id: 'cs_9', mode: 'subscription', client_reference_id: '2', customer: 'cus_2', subscription: 'sub_1', amount_total: 499, currency: 'usd', metadata: meta } } });
 
 test('purchase conversion is returned without an Ads label, with plan; no Measurement Protocol without a secret', async t => {

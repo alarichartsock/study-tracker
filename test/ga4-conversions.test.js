@@ -16,7 +16,7 @@ async function start(opts) {
   const hook = async ev => { const raw = JSON.stringify(ev); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
   return { client, hook, stripe, base, store: server.store, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, n) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, n) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
 const done = (meta) => ({ id: 'evt_' + Math.random(), type: 'checkout.session.completed', data: { object: { id: 'cs_9', mode: 'subscription', client_reference_id: '2', customer: 'cus_2', subscription: 'sub_1', amount_total: 499, currency: 'usd', metadata: meta } } });
 
 const pub = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
@@ -84,11 +84,11 @@ test('returning from Google OAuth never overwrites or invents a first touch; the
 test('sign-up saves first touch + browser language server-side (body for email sign-up, cookie fallback), sanitized, never overwritten', async t => {
   const app = await start({}); t.after(app.close);
   const own = app.client(); await reg(own, 'owner');
-  const a = app.client(); assert.equal((await a('/api/register', 'POST', { username: 'amy', password: 'pass-12345', agree: true, birthYear: 1990, lang: 'es-MX', ft: { utm_source: 'ig', utm_medium: 'paid', referrer: 'https://l.instagram.com/', landing: '/?utm_source=ig', evil: 'x', utm_term: 'a@b.com' } })).status, 200);
+  const a = app.client(); assert.equal((await a('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'amy', password: 'pass-12345', agree: true, birthYear: 1990, lang: 'es-MX', ft: { utm_source: 'ig', utm_medium: 'paid', referrer: 'https://l.instagram.com/', landing: '/?utm_source=ig', evil: 'x', utm_term: 'a@b.com' } })).status, 200);
   await a('/api/attribution', 'POST', { utm_source: 'later', lang: 'fr' });
   const amy = app.store.db.users.find(u => u.username === 'amy');
   assert.deepEqual(amy.attribution, { utm_source: 'ig', utm_medium: 'paid', referrer: 'https://l.instagram.com/', landing: '/?utm_source=ig' }); assert.equal(amy.signupLang, 'es-MX');
-  const r = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ utm_source: 'google', gclid: 'g9', referrer: 'javascript:x' })), 'Accept-Language': 'ko-KR,ko;q=0.9' }, body: JSON.stringify({ username: 'kim', password: 'pass-12345', agree: true, birthYear: 1990 }) });
+  const r = await fetch(app.base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'sh_ft=' + encodeURIComponent(JSON.stringify({ utm_source: 'google', gclid: 'g9', referrer: 'javascript:x' })), 'Accept-Language': 'ko-KR,ko;q=0.9' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'kim', password: 'pass-12345', agree: true, birthYear: 1990 }) });
   assert.equal(r.status, 200); const kim = app.store.db.users.find(u => u.username === 'kim');
   assert.deepEqual(kim.attribution, { utm_source: 'google', gclid: 'g9' }); assert.equal(kim.signupLang, 'ko-KR');
 });

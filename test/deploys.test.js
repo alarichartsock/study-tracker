@@ -21,7 +21,7 @@ test('admin long-term stats include hourly Pacific buckets and deploys; UI draws
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-dep2-'));
   const s = createApp({ dataFile: path.join(dir, 'data.json'), quiet: true, logDir: path.join(dir, 'logs'), gaApiSecret: '' });
   await new Promise(r => s.listen(0, '127.0.0.1', r)); t.after(() => new Promise(r => s.close(r))); const base = `http://127.0.0.1:${s.address().port}`;
-  const ck = (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
+  const ck = (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'boss', password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
   await new Promise(r => setTimeout(r, 50));
   const j = await (await fetch(base + '/api/admin/logs/stats', { headers: { Cookie: ck } })).json();
   assert.equal(j.tz, 'America/Los_Angeles'); assert.ok(Array.isArray(j.hours) && j.hours.length); assert.match(j.hours[0][0], /^\d{4}-\d{2}-\d{2}T\d{2}$/); assert.ok(j.deploys.length > 10);

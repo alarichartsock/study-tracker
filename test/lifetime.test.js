@@ -18,7 +18,7 @@ async function start(cfg = CFG, fail = false) {
   const hook = async ev => { const raw = JSON.stringify(ev); const r = await fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); return r.status; };
   return { client, hook, calls, subs, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, n) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, n) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
 const paid = (id, extra = {}) => ({ id, type: 'checkout.session.completed', data: { object: { id: 'cs_life', mode: 'payment', payment_status: 'paid', client_reference_id: '2', customer: 'cus_2', amount_total: 10000, currency: 'usd', metadata: { uid: '2', plan: 'lifetime' }, ...extra } } });
 
 test('loadConfig resolves STRIPE_LIVE_PRICE_LIFETIME for live keys; plans offered only when configured', () => {

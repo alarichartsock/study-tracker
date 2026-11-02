@@ -15,7 +15,7 @@ async function start(opts = {}) {
   const hook = async ev => { const raw = JSON.stringify(ev); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
   return { client, hook, dataFile, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, name, ref) => c('/api/register', 'POST', { username: name, password: 'pass-12345', agree: true, birthYear: 1990, ...(ref ? { ref } : {}) });
+const reg = (c, name, ref) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: name, password: 'pass-12345', agree: true, birthYear: 1990, ...(ref ? { ref } : {}) });
 const sess = c => c('/api/sessions', 'POST', { start: '2026-10-01T10:00:00Z', end: '2026-10-01T11:00:00Z' });
 
 test('billing.status: trialBonusDays extends the trial', () => {

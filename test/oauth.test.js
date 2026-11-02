@@ -87,7 +87,7 @@ async function app(extra = {}) {
     const sid = sc.match(/sid=([^;]+)/); const me = sid ? await (await fetch(B + '/api/me', { headers: { Cookie: 'sid=' + sid[1] } })).json() : null;
     return { loc: to, me, sid: sid && sid[1] };
   };
-  const register = (u, pw) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: pw, agree: true, birthYear: 1990 }) });
+  const register = (u, pw) => fetch(B + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: u, password: pw, agree: true, birthYear: 1990 }) });
   return { B, st, signIn, register, close: () => server.close() };
 }
 

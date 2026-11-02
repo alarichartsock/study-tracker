@@ -158,7 +158,7 @@ function createApp(opts = {}) {
   const checkoutLimiter = new auth.RateLimiter(opts.checkoutMax || 20, 60 * 60e3);
   const baseUrl = req => String(opts.baseUrl || process.env.PUBLIC_BASE_URL || process.env.OAUTH_BASE_URL || ('http://' + (req.headers.host || 'localhost'))).replace(/\/$/, '');
   // paths an expired trial may still POST to (read-only otherwise; data is never deleted)
-  const READONLY_OK = new Set(['/api/password', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen', '/api/attribution', '/api/affiliates/apply', '/api/affiliates/connect']);
+  const READONLY_OK = new Set(['/api/password', '/api/account/email', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen', '/api/attribution', '/api/affiliates/apply', '/api/affiliates/connect']);
   // affiliate program (Connect payouts: test key only unless AFFILIATE_PAYOUTS_LIVE=1)
   const aff = affiliates.create(store.sql.db, { env: process.env, connectKey: opts.affConnectKey, payoutsLive: opts.affPayoutsLive, fetch: opts.affFetch, now: opts.now,
     secret: 'aff:' + (process.env.SESSION_SECRET || store.dbFile || 'sh'), secure: /^https:/.test(String(opts.baseUrl || process.env.PUBLIC_BASE_URL || 'https://studyhertz.com')), emailsOfUser: id => { const x = store.userById(id); return x ? emailsOf(x) : new Set(); } });
@@ -187,6 +187,7 @@ function createApp(opts = {}) {
   const deleteFailed = (res, e) => { if (!opts.quiet) console.error('account delete', e.status || '', e.message);
     return send(res, e.stripe ? 502 : 500, { error: e.stripe ? 'We could not cancel the subscription with Stripe, so nothing was deleted. Please try again in a few minutes.' : 'Deleting the account failed, so nothing was deleted. Please try again.' }); };
   const delLimiter = new auth.RateLimiter(5, 15 * 60e3);
+  const emailLimiter = new auth.RateLimiter(10, 15 * 60e3);
   const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
   // Server-side GA4 purchase via the Measurement Protocol. Only when an API secret is configured AND the browser passed its
   // GA client id at checkout (it does that only after analytics consent was granted). Never throws; returns true when sent.
@@ -316,7 +317,13 @@ function createApp(opts = {}) {
     store.db.tokens[auth.tokenKey(t)] = { uid, exp: now + SESSION_DAYS * 864e5 }; store.save();
     return cookie(t, SESSION_DAYS * 86400);
   }
-  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, hasPassword: !!u.hash, ...(u.displayName ? { displayName: u.displayName } : {}) });
+  const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, hasPassword: !!u.hash, email: u.email || null, emailVerified: !!(u.email && u.emailVerified), ...(u.displayName ? { displayName: u.displayName } : {}) });
+  // Email for username/password accounts: normalized (trim + lowercase), basic shape check, unique across every account's
+  // primary and linked-provider emails. Self-entered emails are stored unverified, so they never auto-link an OAuth login.
+  const normEmail = e => String(e == null ? '' : e).trim().toLowerCase();
+  const validEmail = e => e.length <= 254 && /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(e) && /\.[a-z]{2,}$/.test(e);
+  const emailTaken = (e, exceptId) => store.db.users.some(x => x.id !== exceptId && [x.email, ...(x.identities || []).map(i => i.email)].some(m => m && String(m).toLowerCase() === e));
+  const EMAIL_BAD = 'Enter a valid email address', EMAIL_TAKEN = 'That email is already used by another account';
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
     return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
@@ -407,8 +414,10 @@ function createApp(opts = {}) {
         if (!auth.validPassword(j.password)) return send(res, 400, { error: 'Password must be at least 8 characters' });
         if (j.agree !== true) return send(res, 400, { error: 'Please agree to the Terms of Service and Privacy Policy' });
         if (!ageOk(j.birthYear)) return send(res, 403, { error: AGE_BLOCK });
+        const em = normEmail(j.email); if (!em) return send(res, 400, { error: 'Email is required' }); if (!validEmail(em)) return send(res, 400, { error: EMAIL_BAD });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
-        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) });
+        if (emailTaken(em)) return send(res, 409, { error: EMAIL_TAKEN });
+        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; store.save();
         recordConsent(nu, 'password', req); saveSignupMeta(nu, req, j); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
         return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
@@ -446,6 +455,15 @@ function createApp(opts = {}) {
           if (!(await auth.verifyPassword(j.password || '', user.salt, user.hash))) { delLimiter.fail(k); return send(res, 403, { error: 'That password is not correct.' }); } }
         try { await deleteAccount(user); } catch (e) { return deleteFailed(res, e); }
         return send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': cookie('', 0) });
+      }
+      if (p === '/api/account/email' && M === 'POST') { // add or change the account email (JSON body + SameSite=Lax session, like every POST)
+        const k = 'em:' + user.id; if (emailLimiter.blocked(k)) return send(res, 429, { error: 'Too many attempts. Try again later.' }); emailLimiter.fail(k);
+        const em = normEmail(j.email); if (!validEmail(em)) return send(res, 400, { error: EMAIL_BAD });
+        if (user.email && String(user.email).toLowerCase() === em) return send(res, 200, { user: publicUser(user) });
+        if (user.email && user.hash && !(await auth.verifyPassword(j.password || '', user.salt, user.hash))) return send(res, 403, { error: 'Enter your current password to change your email.' });
+        if (emailTaken(em, user.id)) return send(res, 409, { error: EMAIL_TAKEN });
+        user.email = em; user.emailVerified = false; user.emailAdded = new Date().toISOString(); store.save(); if (res.log) res.log.flags.push('email_set');
+        return send(res, 200, { user: publicUser(user) });
       }
       if (p === '/api/terms/accept' && M === 'POST') { if (j.agree !== true) return send(res, 400, { error: 'Please check the box to continue' }); recordConsent(user, 'reaccept', req); return send(res, 200, { ok: true }); }
       if (user.termsVersion !== LEGAL.terms) return send(res, 403, { error: 'Please review and accept the updated Terms', termsRequired: true });
@@ -688,8 +706,8 @@ function createApp(opts = {}) {
           return send(res, 200, { ok: true }); } }
         { const cm = /^\/api\/admin\/users\/(\d+)\/comp$/.exec(p); if (cm && M === 'POST') { const x = store.userById(+cm[1]); if (!x) return send(res, 404, { error: 'not found' });
           x.billing ||= {}; x.billing.comp = !!j.comp; store.save(); return send(res, 200, { ok: true, comp: x.billing.comp }); } }
-        if (p === '/api/admin/usage' && M === 'GET') { // admin-only usage metrics (no emails beyond usernames already shown in the admin list)
-          const now = new Date(), rows = store.db.users.map(x => usage.perUser(x, store.db.userData[x.id], { now, bstat, achievements: analytics.achievements }));
+        if (p === '/api/admin/usage' && M === 'GET') { // admin-only usage metrics (email presence only, never the address)
+          const now = new Date(), rows = store.db.users.map(x => ({ ...usage.perUser(x, store.db.userData[x.id], { now, bstat, achievements: analytics.achievements }), hasEmail: !!x.email }));
           return send(res, 200, { generated: now.toISOString(), summary: usage.summary(rows, now), users: rows }); }
         if (p === '/api/admin/stats' && M === 'GET') { // aggregate counts only, no personal data
           const now = Date.now(), DAYMS = 864e5, dk = t => new Date(t).toISOString().slice(0, 10), us = store.db.users, ago = t => (now - (Date.parse(t) || 0)) / DAYMS;

@@ -40,8 +40,8 @@ test('/api/admin/usage is admin-only and API use records activity', async () => 
     const sc = r.headers.get('set-cookie'); if (sc) ck = sc.split(';')[0]; return { status: r.status, body: await r.json() }; }; };
   try {
     const a = client(), b = client();
-    assert.equal((await a('/api/register', 'POST', { username: 'admin1', password: 'pass-12345', agree: true, birthYear: 1990 })).status, 200);
-    assert.equal((await b('/api/register', 'POST', { username: 'user2', password: 'pass-12345', agree: true, birthYear: 1990 })).status, 200);
+    assert.equal((await a('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'admin1', password: 'pass-12345', agree: true, birthYear: 1990 })).status, 200);
+    assert.equal((await b('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'user2', password: 'pass-12345', agree: true, birthYear: 1990 })).status, 200);
     await b('/api/me');
     assert.equal((await b('/api/admin/usage')).status, 403);
     const r = await a('/api/admin/usage'); assert.equal(r.status, 200);

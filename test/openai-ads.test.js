@@ -16,7 +16,7 @@ async function start(opts) {
   const hook = async ev => { const raw = JSON.stringify(ev); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
   return { client, hook, stripe, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, n) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
+const reg = (c, n) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: n, password: 'pass-12345', agree: true, birthYear: 1990 });
 const done = (meta) => ({ id: 'evt_' + Math.random(), type: 'checkout.session.completed', data: { object: { id: 'cs_9', mode: 'subscription', client_reference_id: '2', customer: 'cus_2', subscription: 'sub_1', amount_total: 499, currency: 'usd', metadata: meta } } });
 
 const usage = require('../lib/usage');
@@ -27,7 +27,7 @@ const OPP = 'gAAAAAb' + 'x'.repeat(180) + '-_=';
 test('ChatGPT ad signup: oppref stored unmodified, source ChatGPT ad, registration + trial sent once with consent', async t => {
   const sent = []; const app = await start({ oaiEnv: OENV, oaiFetch: async (url, o) => { sent.push({ url, auth: o.headers.Authorization, body: JSON.parse(o.body) }); return { ok: true, status: 200, text: async () => '' }; } }); t.after(app.close);
   const own = app.client(), c = app.client(); await reg(own, 'owner');
-  const r = await c('/api/register', 'POST', { username: 'gpt', password: 'pass-12345', agree: true, birthYear: 1990, ads: true, ft: { oppref: OPP, olref: 'ol1', landing: '/' } });
+  const r = await c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'gpt', password: 'pass-12345', agree: true, birthYear: 1990, ads: true, ft: { oppref: OPP, olref: 'ol1', landing: '/' } });
   assert.equal(r.status, 200); await wait(50);
   assert.equal(sent.length, 1); assert.equal(sent[0].url, 'https://bzr.openai.com/v1/events?pid=px_test'); assert.equal(sent[0].auth, 'Bearer key_secret_x');
   const [e1, e2] = sent[0].body.events; assert.equal(sent[0].body.validate_only, false);
@@ -42,7 +42,7 @@ test('ChatGPT ad signup: oppref stored unmodified, source ChatGPT ad, registrati
 test('no consent: nothing sent until the user accepts ad cookies; not configured: nothing sent', async t => {
   const sent = []; const app = await start({ oaiEnv: OENV, oaiFetch: async (url, o) => { sent.push(JSON.parse(o.body)); return { ok: true, status: 200 }; } }); t.after(app.close);
   const own = app.client(), c = app.client(); await reg(own, 'owner');
-  await c('/api/register', 'POST', { username: 'gpt', password: 'pass-12345', agree: true, birthYear: 1990, ft: { oppref: 'abc' } }); await wait(30);
+  await c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'gpt', password: 'pass-12345', agree: true, birthYear: 1990, ft: { oppref: 'abc' } }); await wait(30);
   assert.equal(sent.length, 0); await c('/api/ads-consent', 'POST', { ok: true }); await wait(50); assert.equal(sent.length, 1); assert.equal(sent[0].events[0].oppref, 'abc');
   const off = await start({ oaiEnv: {}, oaiFetch: async () => { throw new Error('should not fetch'); } }); t.after(off.close);
   const d = off.client(); await reg(d, 'x'); await d('/api/ads-consent', 'POST', { ok: true });

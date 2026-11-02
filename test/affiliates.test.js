@@ -24,7 +24,7 @@ async function start(extra = {}) {
   const hook = async ev => { const raw = JSON.stringify({ livemode: false, ...ev }); return fetch(base + '/api/stripe/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': billing.sign(raw, CFG.webhookSecret) }, body: raw }); };
   return { client, hook, calls, clock, server, close: () => new Promise(r => server.close(r)) };
 }
-const reg = (c, n, extra = {}) => c('/api/register', 'POST', { username: n, password: 'pass-12345', agree: true, birthYear: 1990, ...extra });
+const reg = (c, n, extra = {}) => c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: n, password: 'pass-12345', agree: true, birthYear: 1990, ...extra });
 const APP = { name: 'Dr Prep', email: 'prep@example.com', website: 'https://youtube.com/@prep', audience: '40k pre-med students' };
 async function setup(t, extra) {
   const app = await start(extra); t.after(app.close);

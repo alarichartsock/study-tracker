@@ -7,7 +7,7 @@ test('imports return one summary and mark new trophies as already notified (no p
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`; let ck = '';
   const c = async (p, method = 'GET', body) => { const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(ck ? { Cookie: ck } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined }); const sc = r.headers.get('set-cookie'); if (sc) ck = sc.split(';')[0]; return { status: r.status, body: await r.json() }; };
   try {
-    await c('/api/register', 'POST', { username: 'imp', password: 'pass-12345', agree: true, birthYear: 1990 });
+    await c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'imp', password: 'pass-12345', agree: true, birthYear: 1990 });
     await c('/api/settings', 'POST', { goals: { dailyMin: 60 } });
     assert.deepEqual((await c('/api/achievements/new')).body.new, []); // initializes notified state
     const rows = ['date,start,end,subject']; for (let d = 1; d <= 30; d++) rows.push(`2026-09-${String(d).padStart(2, '0')},09:00,11:00,CARS`);

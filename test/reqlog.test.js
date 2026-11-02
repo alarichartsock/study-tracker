@@ -24,9 +24,9 @@ test('server logs one structured line per request with flags; never logs bodies,
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (p, method = 'GET', body, headers = {}) => { const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers }, body: body !== undefined ? JSON.stringify(body) : undefined }); await r.text(); return r; };
   try {
-    const reg = await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'super-secret-pw', agree: true, birthYear: 1990 }) });
+    const reg = await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'boss', password: 'super-secret-pw', agree: true, birthYear: 1990 }) });
     const ck = reg.headers.get('set-cookie').split(';')[0]; assert.ok(reg.headers.get('x-request-id'));
-    const usr = await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'user2', password: 'pass-12345', agree: true, birthYear: 1990 }) });
+    const usr = await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'user2', password: 'pass-12345', agree: true, birthYear: 1990 }) });
     const ck2 = usr.headers.get('set-cookie').split(';')[0];
     await call('/api/login', 'POST', { username: 'boss', password: 'wrong-password-zz' });
     await call('/.env'); await call('/wp-admin/x.php');

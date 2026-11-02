@@ -7,7 +7,7 @@ test('admin SSE live log stream: admin only, init snapshot, pushes new events, c
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-live-'));
   const server = createApp({ dataFile: path.join(dir, 'data.json'), quiet: true, logDir: path.join(dir, 'logs'), gaApiSecret: '', trustProxy: true });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const port = server.address().port, base = `http://127.0.0.1:${port}`;
-  const reg = async u => (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
+  const reg = async u => (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
   const ck = await reg('boss'), ck2 = await reg('user2');
   assert.equal((await fetch(base + '/api/admin/logs/stream', { headers: { Cookie: ck2 } })).status, 403);
   let buf = ''; const req = http.get({ port, host: '127.0.0.1', path: '/api/admin/logs/stream', headers: { Cookie: ck } });
@@ -34,7 +34,7 @@ test('admin CSV export: admin only, all matching rows, escaping, formula guard, 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sh-csv-'));
   const server = createApp({ dataFile: path.join(dir, 'data.json'), quiet: true, logDir: path.join(dir, 'logs'), gaApiSecret: '', trustProxy: true });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); t.after(() => new Promise(r => server.close(r))); const base = `http://127.0.0.1:${server.address().port}`;
-  const reg = async u => (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
+  const reg = async u => (await fetch(base + '/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: u, password: 'pass-12345', agree: true, birthYear: 1990 }) })).headers.get('set-cookie').split(';')[0];
   const ck = await reg('boss'), ck2 = await reg('user2');
   assert.equal((await fetch(base + '/api/admin/logs/export.csv')).status, 401); assert.equal((await fetch(base + '/api/admin/logs/export.csv', { headers: { Cookie: ck2 } })).status, 403);
   for (let i = 0; i < 350; i++) await fetch(base + '/pricing', { headers: { 'User-Agent': '=HYPERLINK("x"),a', 'CF-IPCountry': 'FR' } }).then(r => r.arrayBuffer());
