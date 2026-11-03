@@ -46,6 +46,9 @@
   // drop anything that could be personal: non-primitive values, strings with '@', overly long text
   function clean(p) { var o = {}; if (!p || typeof p !== 'object') return o; Object.keys(p).forEach(function (k) { var v = p[k];
     if (typeof v === 'number' && isFinite(v)) o[k] = v; else if (typeof v === 'boolean') o[k] = v; else if (typeof v === 'string' && v.indexOf('@') < 0 && v.length <= 120) o[k] = v; }); return o; }
+  function ttProps(plan, value, cur) { plan = PLAN[plan] ? plan : 'monthly'; var v = Number(value); if (!isFinite(v) || v <= 0) v = PLAN[plan][1];
+    return { value: v, currency: String(cur || 'USD').toUpperCase(), content_type: 'product', content_id: 'studyhertz_' + plan, contents: [{ content_id: 'studyhertz_' + plan, content_name: 'StudyHertz ' + PLAN[plan][0], price: v, quantity: 1 }] }; }
+  function tt(name, props, id) { try { if (adsOk() && window.ttq) window.ttq.track(name, props, id ? { event_id: id } : {}); } catch (e) { /* ignore */ } }
   var seen = {}, cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; (document.head || document.documentElement).appendChild(s);
   gtag('js', new Date()); gtag('config', ADS_ID);
@@ -115,12 +118,17 @@
     },
     // GA4 view_item_list (once per page + list) and select_item (plan click), with items arrays
     viewList: function (list, plans) { var key = 'v_' + list; if (seen[key]) return; seen[key] = 1; var ev = firstParams({ item_list_id: list, item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: (plans || ['monthly', 'yearly', 'lifetime']).map(planItem) });
-      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); },
-    selectItem: function (plan, list) { var ev = firstParams({ item_list_id: list || 'pricing', item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: [planItem(plan)] }); GA(function (id) { ev.send_to = id; gtag('event', 'select_item', ev); }); },
+      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); tt('ViewContent', { content_type: 'product', content_id: 'studyhertz_pricing', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { content_id: 'studyhertz_' + p, price: PLAN[p][1], quantity: 1 }; }) }); },
+    selectItem: function (plan, list) { var ev = firstParams({ item_list_id: list || 'pricing', item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: [planItem(plan)] }); GA(function (id) { ev.send_to = id; gtag('event', 'select_item', ev); }); tt('AddToCart', ttProps(plan)); },
     // signed-in identity: opaque internal id (never username/email) + user properties
     identify: function (uid, props) { if (!uid || seen.idf === uid) return; seen.idf = uid; var up = {}; Object.keys(props || {}).forEach(function (k) { if (typeof props[k] === 'string' && props[k].length <= 36 && props[k].indexOf('@') < 0) up[k] = props[k]; });
       GA(function (id) { gtag('config', id, { user_id: 'u' + String(uid), send_page_view: false }); gtag('set', 'user_properties', up); }); },
     adsOk: adsOk,
+    // TikTok standard events (pixel exists only after ad consent); event_id shared with the server Events API for dedup
+    ttPage: function () { if (adsOk() && window.ttq) window.ttq.page(); },
+    ttCheckout: function (plan, value, sid) { if (adsOk() && window.ttq && sid) window.ttq.track('InitiateCheckout', ttProps(plan, value), { event_id: 'ic_' + sid }); },
+    ttPurchase: function (cv) { if (!adsOk() || !window.ttq || !cv || !cv.txn) return; var k = 'shTtPurchase_' + cv.txn; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { /* ignore */ }
+      window.ttq.track('Purchase', ttProps(cv.plan, cv.value, cv.currency), { event_id: cv.txn }); },
     firstTouch: function () { return first && Object.keys(first).length ? first : null; },
     signup: function (uid) {
       // same event name + id as the server's Conversions API event so OpenAI dedupes them

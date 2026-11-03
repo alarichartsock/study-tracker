@@ -117,3 +117,14 @@ test('TikTok pixel: loads and tracks CompleteRegistration only with ad consent; 
   assert.ok(g.win.ttq._i.DBKKRPBC77U0QLCJSAV0);
   g.S.choose('denied'); assert.ok(Array.from(g.win.ttq).some(a => a[0] === 'revokeConsent'));
 });
+
+test('TikTok standard events: ViewContent, AddToCart, InitiateCheckout, Purchase (once), SPA PageView; none without consent', async () => {
+  const names = w => Array.from(w.ttq || []).map(a => a[0] === 'track' ? a[1] : a[0]);
+  const run = S => { S.viewList('pricing'); S.selectItem('yearly', 'pricing'); S.ttCheckout('yearly', 39, 'cs_1'); S.ttPurchase({ txn: 'cs_1', value: 39, currency: 'usd', plan: 'yearly' }); S.ttPurchase({ txn: 'cs_1', value: 39, plan: 'yearly' }); S.ttPage(); };
+  const d = consentSandbox({ adsConsent: 'denied' }); run(d.S); assert.equal(d.win.ttq, undefined);
+  const g = consentSandbox({ adsConsent: 'granted' }); run(g.S); await tick();
+  const n = names(g.win); for (const e of ['ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase']) assert.ok(n.includes(e), e);
+  assert.equal(n.filter(x => x === 'Purchase').length, 1, 'purchase once'); assert.equal(n.filter(x => x === 'page').length, 2, 'initial + SPA page');
+  const tr = n => Array.from(g.win.ttq).find(a => a[0] === 'track' && a[1] === n);
+  assert.equal(tr('Purchase')[3].event_id, 'cs_1'); assert.equal(tr('Purchase')[2].content_id, 'studyhertz_yearly'); assert.equal(tr('Purchase')[2].currency, 'USD'); assert.equal(tr('InitiateCheckout')[3].event_id, 'ic_cs_1');
+});

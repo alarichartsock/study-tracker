@@ -127,7 +127,10 @@ function createApp(opts = {}) {
       .then(r => { if (r.sent) { u.tt = { ...(u.tt || {}), reg: new Date().toISOString() }; store.save(); } }).finally(() => ttPending.delete(u.id)); }
   function ttPurchase(u, c) { if (!tt.enabled || !u || !u.adsOk || !c || !c.txn) return Promise.resolve(false);
     const a = u.attribution || {};
-    return tt.send([{ id: c.txn, event: c.plan === 'lifetime' ? 'CompletePayment' : 'Subscribe', at: Date.now(), url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email, plan: c.plan, value: Number(c.value) || 0, currency: c.currency || 'USD' }]).then(r => r.sent); }
+    const base = { at: Date.now(), url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email, plan: c.plan, value: Number(c.value) || 0, currency: c.currency || 'USD' };
+    return tt.send([{ ...base, id: c.txn, event: 'Purchase' }, ...(c.plan === 'lifetime' ? [] : [{ ...base, id: 'sub_' + c.txn, event: 'Subscribe' }])]).then(r => r.sent); }
+  function ttCheckout(u, sid, plan) { if (!tt.enabled || !u || !u.adsOk || !sid) return; const a = u.attribution || {};
+    tt.send([{ id: 'ic_' + sid, event: 'InitiateCheckout', url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email, plan, value: Number((billing.PLANS[plan] || billing.PLANS.monthly).amount) || 0, currency: 'USD' }]).catch(() => {}); }
   function recordConsent(u, method, req) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
@@ -502,13 +505,13 @@ function createApp(opts = {}) {
             const cs = await stripe('POST', '/checkout/sessions', { mode: 'payment', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices.lifetime, quantity: 1 }],
               success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, payment_intent_data: { metadata: { uid: String(user.id), plan } },
               integration_identifier: 'studyhertz-lifetime-qhxmzpta' });
-            return send(res, 200, { url: cs.url }); }
+            ttCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id }); }
           if (st0.subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
           const customer = await ensureCustomer(user), base = baseUrl(req);
           const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
             success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, subscription_data: { metadata: { uid: String(user.id) } },
             integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
-          return send(res, 200, { url: cs.url });
+          ttCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id });
         } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }
       }
       if (M !== 'GET' && !READONLY_OK.has(p) && !p.startsWith('/api/admin/') && !bstat(user).active)

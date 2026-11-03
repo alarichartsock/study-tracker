@@ -65,8 +65,11 @@ test('TikTok Events API: CompleteRegistration once with consent (ttclid, hashed 
   const b = sent[0].body, e = b.data[0]; assert.equal(b.event_source, 'web'); assert.equal(b.event_source_id, 'DBKKRPBC77U0QLCJSAV0');
   assert.equal(e.event, 'CompleteRegistration'); assert.equal(e.event_id, 'reg_u2'); assert.equal(e.user.ttclid, 'ttc1');
   assert.equal(e.user.email, require('crypto').createHash('sha256').update('tik@example.com').digest('hex')); assert.match(e.user.external_id, /^[0-9a-f]{64}$/);
+  const co = await c('/api/billing/checkout', 'POST', { plan: 'yearly' }); assert.equal(co.body.id, 'cs_9'); await wait(50);
+  assert.equal(sent.length, 2); const ic = sent[1].body.data[0]; assert.equal(ic.event, 'InitiateCheckout'); assert.equal(ic.event_id, 'ic_cs_9'); assert.equal(ic.properties.value, 39); assert.equal(ic.properties.content_id, 'studyhertz_yearly');
   await app.hook(done({ uid: '2', plan: 'monthly' })); await wait(50);
-  assert.equal(sent.length, 2); const s = sent[1].body.data[0]; assert.equal(s.event, 'Subscribe'); assert.equal(s.event_id, 'cs_9'); assert.equal(s.properties.value, 4.99); assert.equal(s.properties.currency, 'USD');
+  assert.equal(sent.length, 3); const [p, s] = sent[2].body.data; assert.equal(p.event, 'Purchase'); assert.equal(p.event_id, 'cs_9'); assert.equal(p.properties.value, 4.99); assert.equal(p.properties.currency, 'USD'); assert.equal(p.properties.content_id, 'studyhertz_monthly');
+  assert.equal(s.event, 'Subscribe'); assert.equal(s.event_id, 'sub_cs_9');
   const logs = []; const lib = require('../lib/tiktok-ads'); assert.equal(lib.create({}).enabled, false);
   const bad = lib.create({ TIKTOK_EVENTS_API_TOKEN: 'tok_hidden' }, { fetch: async () => ({ ok: false, status: 401, json: async () => ({ code: 40001, message: 'bad' }) }), log: m => logs.push(m) });
   assert.equal((await bad.send([{ id: 'x', event: 'Subscribe', url: 'https://x/' }])).sent, false); assert.match(logs[0], /^tiktok-ads: HTTP 401/); assert.ok(!logs[0].includes('tok_hidden'));

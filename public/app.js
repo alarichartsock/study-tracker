@@ -158,7 +158,7 @@ function showPaywall(blocked) {
 }
 async function billingDone() {
   for (let i = 0; i < 8; i++) { BILL = await api('/api/billing').catch(() => BILL); if (BILL.subscribed || BILL.lifetime) break; await new Promise(r => setTimeout(r, 2000)); }
-  if (BILL.conversion) { const cv = BILL.conversion; try { if (cv.label) window.SHConsent?.purchase(cv); } catch { /* ignore */ }
+  if (BILL.conversion) { const cv = BILL.conversion; try { if (cv.label) window.SHConsent?.purchase(cv); } catch { /* ignore */ } try { window.SHConsent?.ttPurchase?.(cv); } catch { /* ignore */ }
     // GA4 purchase: once per checkout (localStorage guard survives reloads; skipped when the server already sent it)
     try { const k = 'shPurchase_' + cv.txn; if (cv.txn && !cv.mp && !localStorage[k]) { localStorage[k] = '1'; window.SHConsent?.ecommerce('purchase', { txn: cv.txn, value: cv.value, currency: cv.currency, plan: cv.plan }); } } catch { /* ignore */ }
     { const pl = BILL.lifetime ? null : (BILL.subscription && BILL.subscription.plan) || null; if (pl && !localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')]) { localStorage['shSub_' + pl + '_' + (BILL.subscription.currentPeriodEnd || '')] = '1'; track('subscribe', { plan: pl, value: PLAN_VALUE[pl], currency: 'USD' }); } } api('/api/billing/conversion-seen', 'POST', {}).catch(() => {}); }
@@ -231,7 +231,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dat
   const place = () => { if (mq.matches) { if (nav.parentElement !== app) app.appendChild(nav); } else if (nav.parentElement !== top) top.insertBefore(nav, top.querySelector('.top-r')); };
   place(); mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place); })();
 function go(v) { if ((v === 'users' || v === 'logev' || v === 'loglive') && !(ME && ME.admin)) v = 'timer';
-  if (v !== view || !go.sent) { go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
+  if (v !== view || !go.sent) { if (go.sent && v !== view) window.SHConsent?.ttPage?.(); go.sent = true; track('page_view', { page_title: TITLES[v] || v, page_path: '/app/' + v, page_location: location.origin + '/app/' + v }); if (v === 'stats') track('view_charts'); if (v === 'trophy') track('view_trophies'); }
   view = v; if (v !== 'logev' && v !== 'loglive') localStorage.view = v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x.dataset.v === (v === 'logev' || v === 'loglive' ? 'users' : v)));
   if (v !== 'loglive' && UI.live && UI.live.es) { UI.live.es.close(); UI.live.es = null; }
   if (v === 'loglive' && location.hash !== '#/admin/live') history.replaceState(history.state, '', '#/admin/live');
@@ -1043,7 +1043,7 @@ ACT.openReg = async b => { await api('/api/admin/config', 'POST', { openRegistra
 ACT.paywall = () => showPaywall();
 ACT.paywallClose = () => { $('paywall')?.remove(); };
 ACT.subscribe = async b => { b.disabled = true; const plan = b.dataset.plan; try { window.SHConsent?.selectItem(plan, $('paywall') && !$('paywall').classList.contains('hid') ? 'paywall' : 'settings'); } catch { /* ignore */ } try { window.SHConsent?.ecommerce('begin_checkout', { plan, value: PLAN_VALUE[plan], currency: 'USD' }); } catch { /* ignore */ }
-  try { const gaCid = await (window.SHConsent?.clientId?.() || null); const r = await api('/api/billing/checkout', 'POST', { plan, ...(gaCid ? { gaCid } : {}) }); location.href = r.url; } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
+  try { const gaCid = await (window.SHConsent?.clientId?.() || null); const r = await api('/api/billing/checkout', 'POST', { plan, ...(gaCid ? { gaCid } : {}) }); try { window.SHConsent?.ttCheckout?.(plan, PLAN_VALUE[plan], r.id); } catch { /* ignore */ } setTimeout(() => { location.href = r.url; }, window.ttq ? 300 : 0); } catch (e) { b.disabled = false; ($('pwErr') || {}).textContent = e.message; if (!$('pwErr')) toast(e.message); } };
 ACT.billPortal = async b => { b.disabled = true; try { location.href = (await api('/api/billing/portal', 'POST', {})).url; } catch (e) { b.disabled = false; toast(e.message); } };
 ACT.comp = async b => { await api('/api/admin/users/' + b.dataset.id + '/comp', 'POST', { comp: b.checked }); toast(b.checked ? 'User comped' : 'Comp removed'); };
 ACT.repFilter = b => { UI.repFilter = b.dataset.f; render(); };
