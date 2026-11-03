@@ -21,7 +21,7 @@
   if (get() === 'granted') gtag('consent', 'update', granted());
   // 3) one shared loader, then config for Ads and (if configured) GA4
   // attribution: UTM + gclid from the original landing URL (app.js records it before replaceState strips the query)
-  var LANDING = window.SH_LANDING || location.href, AKEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'oppref', 'olref'], attr = {}, LONGK = { oppref: 1, olref: 1 }; // msclkid: Microsoft Ads click id // oppref/olref: ChatGPT Ads click ids (opaque, kept unmodified)
+  var LANDING = window.SH_LANDING || location.href, AKEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'ttclid', 'oppref', 'olref'], attr = {}, LONGK = { oppref: 1, olref: 1, ttclid: 1 }; // ttclid: TikTok click id // msclkid: Microsoft Ads click id // oppref/olref: ChatGPT Ads click ids (opaque, kept unmodified)
   function sget(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
   function sput(st, k, v) { try { st.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
   try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, LONGK[k] ? 2000 : 100); any = true; } });
@@ -39,7 +39,7 @@
     attr = sget(sessionStorage, 'shAttr') || {}; } catch (e) { attr = {}; }
   if (attr.utm_source || attr.utm_medium || attr.utm_campaign) gtag('set', { campaign_source: attr.utm_source, campaign_medium: attr.utm_medium, campaign_name: attr.utm_campaign, campaign_term: attr.utm_term, campaign_content: attr.utm_content });
   var first = sget(localStorage, 'shFirstTouch') || {};
-  function firstParams(p) { if (first.utm_source) p.first_source = first.utm_source; if (first.utm_medium) p.first_medium = first.utm_medium; if (first.utm_campaign) p.first_campaign = first.utm_campaign; if (first.gclid) p.first_click = 'gclid'; else if (first.fbclid) p.first_click = 'fbclid'; else if (first.msclkid) p.first_click = 'msclkid'; return p; }
+  function firstParams(p) { if (first.utm_source) p.first_source = first.utm_source; if (first.utm_medium) p.first_medium = first.utm_medium; if (first.utm_campaign) p.first_campaign = first.utm_campaign; if (first.gclid) p.first_click = 'gclid'; else if (first.fbclid) p.first_click = 'fbclid'; else if (first.msclkid) p.first_click = 'msclkid'; else if (first.ttclid) p.first_click = 'ttclid'; return p; }
   var GA = function (fn) { cfg().then(function (c) { try { if (c && c.gaId && typeof window.gtag === 'function') fn(c.gaId); } catch (e) { /* ignore */ } }); };
   var PLAN = { monthly: ['Monthly', 4.99], yearly: ['Yearly', 39], lifetime: ['Lifetime', 100] };
   function planItem(plan, i) { var x = PLAN[plan] || PLAN.monthly; return { item_id: 'studyhertz_' + (PLAN[plan] ? plan : 'monthly'), item_name: 'StudyHertz ' + x[0], item_category: 'subscription', item_list_id: 'pricing', item_list_name: 'Pricing', price: x[1], quantity: 1, index: i || 0 }; }
@@ -68,7 +68,7 @@
     gtag('consent', 'update', v === 'granted' ? granted() : DENIED);
     // tell the server (signed-in only; 401 is ignored) so ChatGPT Ads conversions follow this choice
     try { fetch('/api/ads-consent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ ok: adsOk() }) }).catch(function () {}); } catch (e) { /* ignore */ }
-    if (adsOk()) { oaiLoad(); uetLoad(); } else { if (window.oaiq) window.oaiq('consent', false); if (uetLoaded) { window.uetq = window.uetq || []; window.uetq.push('consent', 'update', { ad_storage: 'denied' }); } }
+    if (adsOk()) { oaiLoad(); uetLoad(); ttqLoad(); } else { if (window.oaiq) window.oaiq('consent', false); if (ttqLoaded && window.ttq) { try { window.ttq.revokeConsent(); window.ttq.disableCookie(); } catch (e) { /* ignore */ } } if (uetLoaded) { window.uetq = window.uetq || []; window.uetq.push('consent', 'update', { ad_storage: 'denied' }); } }
   }
   function adsOk() { return get() === 'granted' && !gpc; }
   // ChatGPT Ads Measurement Pixel (https://developers.openai.com/ads/measurement-pixel), loaded only after ad-cookie consent
@@ -83,6 +83,12 @@
     (function (w, d, t, u, o) { w[u] = w[u] || [], o.ts = (new Date).getTime(); var n = d.createElement(t); n.src = 'https://bat.bing.net/bat.js?ti=' + o.ti + ('uetq' != u ? '&q=' + u : ''), n.async = 1, n.onload = n.onreadystatechange = function () { var s = this.readyState; s && 'loaded' !== s && 'complete' !== s || (o.q = w[u], w[u] = new UET(o), w[u].push('pageLoad'), n.onload = n.onreadystatechange = null); }; var i = d.getElementsByTagName && d.getElementsByTagName(t)[0]; if (i && i.parentNode) i.parentNode.insertBefore(n, i); else (d.head || d.documentElement).appendChild(n); })(window, document, 'script', 'uetq', { ti: UET_TI, enableAutoSpaTracking: true });
     try { window.uetq.push('consent', 'default', { ad_storage: 'granted' }); } catch (e) { /* ignore */ } }
   uetLoad();
+  // TikTok Pixel (standard base code, DBKKRPBC77U0QLCJSAV0), loaded only after ad-cookie consent
+  var TTQ_ID = 'DBKKRPBC77U0QLCJSAV0', ttqLoaded = false;
+  function ttqLoad() { if (ttqLoaded || !adsOk()) return; ttqLoaded = true;
+    !function (w, d, t) { w.TiktokAnalyticsObject = t; var ttq = w[t] = w[t] || []; ttq.methods = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent']; ttq.setAndDefer = function (t, e) { t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); }; }; for (var i = 0; i < ttq.methods.length; i++) ttq.setAndDefer(ttq, ttq.methods[i]); ttq.instance = function (t) { for (var e = ttq._i[t] || [], n = 0; n < ttq.methods.length; n++) ttq.setAndDefer(e, ttq.methods[n]); return e; }; ttq.load = function (e, n) { var r = 'https://analytics.tiktok.com/i18n/pixel/events.js'; ttq._i = ttq._i || {}, ttq._i[e] = [], ttq._i[e]._u = r, ttq._t = ttq._t || {}, ttq._t[e] = +new Date, ttq._o = ttq._o || {}, ttq._o[e] = n || {}; n = d.createElement('script'); n.type = 'text/javascript', n.async = !0, n.src = r + '?sdkid=' + e + '&lib=' + t; e = d.getElementsByTagName && d.getElementsByTagName('script')[0]; if (e && e.parentNode) e.parentNode.insertBefore(n, e); else (d.head || d.documentElement).appendChild(n); };
+      ttq.load(TTQ_ID); try { ttq.grantConsent(); ttq.enableCookie(); } catch (e) { /* ignore */ } ttq.page(); }(window, document, 'ttq'); }
+  ttqLoad();
   window.SHConsent = {
     state: get,
     open: function () { var b = document.getElementById('consent'); if (b) b.remove(); banner(); },
@@ -119,7 +125,7 @@
     signup: function (uid) {
       // same event name + id as the server's Conversions API event so OpenAI dedupes them
       if (uid && adsOk() && window.oaiq) window.oaiq('measure', 'trial_started', { type: 'plan_enrollment' }, { event_id: 'trial_u' + uid });
-      if (adsOk()) { window.uetq = window.uetq || []; window.uetq.push('event', 'sign_up', {}); }
+      if (adsOk()) { window.uetq = window.uetq || []; window.uetq.push('event', 'sign_up', {}); if (window.ttq) window.ttq.track('CompleteRegistration'); }
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }
   };

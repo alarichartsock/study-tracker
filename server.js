@@ -94,9 +94,9 @@ function createApp(opts = {}) {
   }
   // first-touch attribution + browser language, saved once when an account is created (email or OAuth).
   // Sources: the sign-up body (localStorage copy), else the sh_ft cookie set on the very first page load.
-  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
+  const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'ttclid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
   function cleanAttr(x) { const a = {}; if (!x || typeof x !== 'object') return a;
-    for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
+    for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' || k === 'ttclid' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
     if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing; return a; }
   const cleanLang = l => { const s = String(l || '').split(',')[0].split(';')[0].trim(); return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/.test(s) ? s.slice(0, 35) : ''; };
   function saveSignupMeta(u, req, j) { let changed = false;
