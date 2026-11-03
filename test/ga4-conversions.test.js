@@ -113,7 +113,7 @@ test('TikTok pixel: loads and tracks CompleteRegistration only with ad consent; 
   d.S.signup(5); assert.equal(d.S.adsOk(), false); assert.match(d.ls.shFirstTouch, /"ttclid":"tt1"/); assert.equal(d.win.ttq, undefined, 'no pixel without consent');
   const g = consentSandbox({ adsConsent: 'granted' }, { href: 'https://studyhertz.com/?ttclid=tt1' });
   g.S.signup(5); assert.ok(g.S.adsOk());
-  const q = Array.from(g.win.ttq).map(a => a[0]); assert.deepEqual(q.filter(n => n === 'page' || n === 'track'), ['page', 'track']); assert.equal(Array.from(g.win.ttq).find(a => a[0] === 'track')[1], 'CompleteRegistration');
+  const q = Array.from(g.win.ttq).map(a => a[0]); assert.deepEqual(q.filter(n => n === 'page' || n === 'track'), ['page', 'track']); const tr = Array.from(g.win.ttq).find(a => a[0] === 'track'); assert.equal(tr[1], 'CompleteRegistration'); assert.equal(tr[3].event_id, 'reg_u5');
   assert.ok(g.win.ttq._i.DBKKRPBC77U0QLCJSAV0);
   g.S.choose('denied'); assert.ok(Array.from(g.win.ttq).some(a => a[0] === 'revokeConsent'));
 });

@@ -125,7 +125,7 @@
     signup: function (uid) {
       // same event name + id as the server's Conversions API event so OpenAI dedupes them
       if (uid && adsOk() && window.oaiq) window.oaiq('measure', 'trial_started', { type: 'plan_enrollment' }, { event_id: 'trial_u' + uid });
-      if (adsOk()) { window.uetq = window.uetq || []; window.uetq.push('event', 'sign_up', {}); if (window.ttq) window.ttq.track('CompleteRegistration'); }
+      if (adsOk()) { window.uetq = window.uetq || []; window.uetq.push('event', 'sign_up', {}); if (window.ttq) window.ttq.track('CompleteRegistration', {}, uid ? { event_id: 'reg_u' + uid } : {}); }
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }
   };

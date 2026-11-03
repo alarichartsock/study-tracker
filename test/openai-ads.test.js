@@ -54,3 +54,20 @@ test('usage source labels ChatGPT ads', () => {
   const lib = require('../lib/openai-ads'); assert.equal(lib.create({}).enabled, false);
   assert.equal(lib.create(OENV).build({ id: 'o1', type: 'order_created', url: 'https://x.com/', amount: 10000, currency: 'usd' }).data.type, 'contents');
 });
+
+test('TikTok Events API: CompleteRegistration once with consent (ttclid, hashed email/external_id, shared event_id), Subscribe on payment, off without token', async t => {
+  const sent = []; const app = await start({ ttEnv: { TIKTOK_EVENTS_API_TOKEN: 'tt_secret_x' }, ttFetch: async (url, o) => { sent.push({ url, tok: o.headers['Access-Token'], body: JSON.parse(o.body) }); return { ok: true, status: 200, json: async () => ({ code: 0 }) }; } }); t.after(app.close);
+  const own = app.client(), c = app.client(); await reg(own, 'owner');
+  await c('/api/register', 'POST', { email: 'Tik@Example.com', username: 'tik', password: 'pass-12345', agree: true, birthYear: 1990, ft: { ttclid: 'ttc1', landing: '/' } }); await wait(30);
+  assert.equal(sent.length, 0, 'no consent, nothing sent');
+  await c('/api/ads-consent', 'POST', { ok: true }); await wait(50); await c('/api/ads-consent', 'POST', { ok: true }); await wait(30);
+  assert.equal(sent.length, 1); assert.equal(sent[0].url, 'https://business-api.tiktok.com/open_api/v1.3/event/track/'); assert.equal(sent[0].tok, 'tt_secret_x');
+  const b = sent[0].body, e = b.data[0]; assert.equal(b.event_source, 'web'); assert.equal(b.event_source_id, 'DBKKRPBC77U0QLCJSAV0');
+  assert.equal(e.event, 'CompleteRegistration'); assert.equal(e.event_id, 'reg_u2'); assert.equal(e.user.ttclid, 'ttc1');
+  assert.equal(e.user.email, require('crypto').createHash('sha256').update('tik@example.com').digest('hex')); assert.match(e.user.external_id, /^[0-9a-f]{64}$/);
+  await app.hook(done({ uid: '2', plan: 'monthly' })); await wait(50);
+  assert.equal(sent.length, 2); const s = sent[1].body.data[0]; assert.equal(s.event, 'Subscribe'); assert.equal(s.event_id, 'cs_9'); assert.equal(s.properties.value, 4.99); assert.equal(s.properties.currency, 'USD');
+  const logs = []; const lib = require('../lib/tiktok-ads'); assert.equal(lib.create({}).enabled, false);
+  const bad = lib.create({ TIKTOK_EVENTS_API_TOKEN: 'tok_hidden' }, { fetch: async () => ({ ok: false, status: 401, json: async () => ({ code: 40001, message: 'bad' }) }), log: m => logs.push(m) });
+  assert.equal((await bad.send([{ id: 'x', event: 'Subscribe', url: 'https://x/' }])).sent, false); assert.match(logs[0], /^tiktok-ads: HTTP 401/); assert.ok(!logs[0].includes('tok_hidden'));
+});
