@@ -116,7 +116,10 @@ function createApp(opts = {}) {
       .then(r => { if (r.sent) { u.oai = { ...(u.oai || {}), reg: new Date().toISOString(), ...(oai.validateOnly ? { validateOnly: true } : {}) }; store.save(); } }).finally(() => oaiPending.delete(u.id)); }
   function oaiPurchase(u, c) { if (!oai.enabled || !u || !u.adsOk || !c || !c.txn) return Promise.resolve(false);
     const a = u.attribution || {};
-    return oai.send([{ id: c.txn, type: c.plan === 'lifetime' ? 'order_created' : 'subscription_created', at: Date.now(), url: SITE + '/', oppref: a.oppref, uid: u.id, plan: c.plan, amount: Math.round((Number(c.value) || 0) * 100), currency: c.currency || 'USD' }]).then(r => r.sent); }
+    const b = { id: c.txn, at: Date.now(), url: SITE + '/', oppref: a.oppref, uid: u.id, plan: c.plan, amount: Math.round((Number(c.value) || 0) * 100), currency: c.currency || 'USD' };
+    return oai.send([{ ...b, type: 'order_created' }, ...(c.plan === 'lifetime' ? [] : [{ ...b, type: 'subscription_created' }])]).then(r => r.sent); } // order_created id = checkout session, shared with the browser pixel
+  function oaiCheckout(u, sid, plan) { if (!oai.enabled || !u || !u.adsOk || !sid) return; const a = u.attribution || {};
+    oai.send([{ id: 'ic_' + sid, type: 'checkout_started', at: Date.now(), url: SITE + '/', oppref: a.oppref, uid: u.id, plan, amount: Math.round((Number((billing.PLANS[plan] || billing.PLANS.monthly).amount) || 0) * 100), currency: 'USD' }]).catch(() => {}); }
   // TikTok Events API, same rules: ad-cookie consent only, once per account; event_id matches the browser ttq event for dedup
   const tt = tiktokAds.create(opts.ttEnv || process.env, { fetch: opts.ttFetch });
   const ttPending = new Set();
@@ -505,13 +508,13 @@ function createApp(opts = {}) {
             const cs = await stripe('POST', '/checkout/sessions', { mode: 'payment', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices.lifetime, quantity: 1 }],
               success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, payment_intent_data: { metadata: { uid: String(user.id), plan } },
               integration_identifier: 'studyhertz-lifetime-qhxmzpta' });
-            ttCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id }); }
+            ttCheckout(user, cs.id, plan); oaiCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id }); }
           if (st0.subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
           const customer = await ensureCustomer(user), base = baseUrl(req);
           const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
             success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, subscription_data: { metadata: { uid: String(user.id) } },
             integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
-          ttCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id });
+          ttCheckout(user, cs.id, plan); oaiCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id });
         } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }
       }
       if (M !== 'GET' && !READONLY_OK.has(p) && !p.startsWith('/api/admin/') && !bstat(user).active)

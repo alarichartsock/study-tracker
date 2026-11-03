@@ -48,6 +48,11 @@
     if (typeof v === 'number' && isFinite(v)) o[k] = v; else if (typeof v === 'boolean') o[k] = v; else if (typeof v === 'string' && v.indexOf('@') < 0 && v.length <= 120) o[k] = v; }); return o; }
   function ttProps(plan, value, cur) { plan = PLAN[plan] ? plan : 'monthly'; var v = Number(value); if (!isFinite(v) || v <= 0) v = PLAN[plan][1];
     return { value: v, currency: String(cur || 'USD').toUpperCase(), content_type: 'product', content_id: 'studyhertz_' + plan, contents: [{ content_id: 'studyhertz_' + plan, content_name: 'StudyHertz ' + PLAN[plan][0], price: v, quantity: 1 }] }; }
+  // ChatGPT Ads funnel (oaiq exists only after ad consent); amounts in minor units; event_id shared with the Conversions API
+  function oaiData(plan, value, cur) { plan = PLAN[plan] ? plan : 'monthly'; var v = Number(value); if (!isFinite(v) || v <= 0) v = PLAN[plan][1]; var a = Math.round(v * 100);
+    return { type: 'contents', amount: a, currency: String(cur || 'USD').toUpperCase(), contents: [{ id: 'studyhertz_' + plan, name: 'StudyHertz ' + PLAN[plan][0], content_type: 'plan', quantity: 1, amount: a }] }; }
+  function oai(name, data, id) { try { if (adsOk() && window.oaiq) window.oaiq('measure', name, data, id ? { event_id: id } : undefined); } catch (e) { /* ignore */ } }
+  function oaiPage() { oai('page_viewed', { type: 'contents', contents: [{ id: location.pathname || '/', name: document.title || 'StudyHertz', content_type: 'page' }] }); }
   function tt(name, props, id) { try { if (adsOk() && window.ttq) window.ttq.track(name, props, id ? { event_id: id } : {}); } catch (e) { /* ignore */ } }
   var seen = {}, cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; (document.head || document.documentElement).appendChild(s);
@@ -78,7 +83,7 @@
   var OAI_PIXEL = '6c4bWecroRtsmDwv84sBjF', oaiLoaded = false;
   function oaiLoad() { if (oaiLoaded || !adsOk()) return; oaiLoaded = true;
     (function (w, d, s, u) { if (w.oaiq) return; var q = function () { q.q.push(arguments); }; q.q = []; w.oaiq = q; var js = d.createElement(s); js.async = true; js.src = u; (d.head || d.documentElement).appendChild(js); })(window, document, 'script', 'https://bzrcdn.openai.com/sdk/oaiq.min.js');
-    window.oaiq('consent', true); window.oaiq('init', { pixelId: OAI_PIXEL }); }
+    window.oaiq('consent', true); window.oaiq('init', { pixelId: OAI_PIXEL }); oaiPage(); }
   oaiLoad();
   // Microsoft Ads UET tag (standard template, ti 97280021), loaded only after ad-cookie consent
   var UET_TI = '97280021', uetLoaded = false;
@@ -118,17 +123,17 @@
     },
     // GA4 view_item_list (once per page + list) and select_item (plan click), with items arrays
     viewList: function (list, plans) { var key = 'v_' + list; if (seen[key]) return; seen[key] = 1; var ev = firstParams({ item_list_id: list, item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: (plans || ['monthly', 'yearly', 'lifetime']).map(planItem) });
-      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); tt('ViewContent', { content_type: 'product', content_id: 'studyhertz_pricing', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { content_id: 'studyhertz_' + p, price: PLAN[p][1], quantity: 1 }; }) }); },
-    selectItem: function (plan, list) { var ev = firstParams({ item_list_id: list || 'pricing', item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: [planItem(plan)] }); GA(function (id) { ev.send_to = id; gtag('event', 'select_item', ev); }); tt('AddToCart', ttProps(plan)); },
+      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); oai('contents_viewed', { type: 'contents', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { id: 'studyhertz_' + p, name: 'StudyHertz ' + PLAN[p][0], content_type: 'plan', quantity: 1, amount: Math.round(PLAN[p][1] * 100) }; }) }); tt('ViewContent', { content_type: 'product', content_id: 'studyhertz_pricing', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { content_id: 'studyhertz_' + p, price: PLAN[p][1], quantity: 1 }; }) }); },
+    selectItem: function (plan, list) { var ev = firstParams({ item_list_id: list || 'pricing', item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: [planItem(plan)] }); GA(function (id) { ev.send_to = id; gtag('event', 'select_item', ev); }); tt('AddToCart', ttProps(plan)); oai('items_added', oaiData(plan)); },
     // signed-in identity: opaque internal id (never username/email) + user properties
     identify: function (uid, props) { if (!uid || seen.idf === uid) return; seen.idf = uid; var up = {}; Object.keys(props || {}).forEach(function (k) { if (typeof props[k] === 'string' && props[k].length <= 36 && props[k].indexOf('@') < 0) up[k] = props[k]; });
       GA(function (id) { gtag('config', id, { user_id: 'u' + String(uid), send_page_view: false }); gtag('set', 'user_properties', up); }); },
     adsOk: adsOk,
     // TikTok standard events (pixel exists only after ad consent); event_id shared with the server Events API for dedup
-    ttPage: function () { if (adsOk() && window.ttq) window.ttq.page(); },
-    ttCheckout: function (plan, value, sid) { if (adsOk() && window.ttq && sid) window.ttq.track('InitiateCheckout', ttProps(plan, value), { event_id: 'ic_' + sid }); },
-    ttPurchase: function (cv) { if (!adsOk() || !window.ttq || !cv || !cv.txn) return; var k = 'shTtPurchase_' + cv.txn; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { /* ignore */ }
-      window.ttq.track('Purchase', ttProps(cv.plan, cv.value, cv.currency), { event_id: cv.txn }); },
+    ttPage: function () { if (adsOk() && window.ttq) window.ttq.page(); oaiPage(); },
+    ttCheckout: function (plan, value, sid) { if (!sid) return; if (adsOk() && window.ttq) window.ttq.track('InitiateCheckout', ttProps(plan, value), { event_id: 'ic_' + sid }); oai('checkout_started', oaiData(plan, value), 'ic_' + sid); },
+    ttPurchase: function (cv) { if (!adsOk() || !(window.ttq || window.oaiq) || !cv || !cv.txn) return; var k = 'shTtPurchase_' + cv.txn; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { /* ignore */ }
+      if (window.ttq) window.ttq.track('Purchase', ttProps(cv.plan, cv.value, cv.currency), { event_id: cv.txn }); oai('order_created', oaiData(cv.plan, cv.value, cv.currency), cv.txn); },
     firstTouch: function () { return first && Object.keys(first).length ? first : null; },
     signup: function (uid) {
       // same event name + id as the server's Conversions API event so OpenAI dedupes them

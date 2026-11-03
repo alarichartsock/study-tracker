@@ -36,7 +36,8 @@ test('ChatGPT ad signup: oppref stored unmodified, source ChatGPT ad, registrati
   await c('/api/attribution', 'POST', { oppref: OPP, ads: true }); await c('/api/ads-consent', 'POST', { ok: true }); await wait(50);
   assert.equal(sent.length, 1, 'sent once');
   await app.hook(done({ uid: '2', plan: 'monthly' })); await wait(50);
-  assert.equal(sent.length, 2); const s = sent[1].body.events[0]; assert.equal(s.type, 'subscription_created'); assert.equal(s.id, 'cs_9'); assert.deepEqual(s.data, { type: 'plan_enrollment', plan_id: 'monthly', amount: 499, currency: 'USD' }); assert.equal(s.oppref, OPP);
+  assert.equal(sent.length, 2); const [o, s] = sent[1].body.events; assert.equal(o.type, 'order_created'); assert.equal(o.id, 'cs_9'); assert.equal(o.data.type, 'contents'); assert.equal(o.data.amount, 499); assert.equal(o.data.contents[0].id, 'studyhertz_monthly'); assert.equal(o.oppref, OPP);
+  assert.equal(s.type, 'subscription_created'); assert.equal(s.id, 'cs_9'); assert.deepEqual(s.data, { type: 'plan_enrollment', plan_id: 'monthly', amount: 499, currency: 'USD' }); assert.equal(s.oppref, OPP);
 });
 
 test('no consent: nothing sent until the user accepts ad cookies; not configured: nothing sent', async t => {
@@ -73,4 +74,12 @@ test('TikTok Events API: CompleteRegistration once with consent (ttclid, hashed 
   const logs = []; const lib = require('../lib/tiktok-ads'); assert.equal(lib.create({}).enabled, false);
   const bad = lib.create({ TIKTOK_EVENTS_API_TOKEN: 'tok_hidden' }, { fetch: async () => ({ ok: false, status: 401, json: async () => ({ code: 40001, message: 'bad' }) }), log: m => logs.push(m) });
   assert.equal((await bad.send([{ id: 'x', event: 'Subscribe', url: 'https://x/' }])).sent, false); assert.match(logs[0], /^tiktok-ads: HTTP 401/); assert.ok(!logs[0].includes('tok_hidden'));
+});
+
+test('ChatGPT Ads checkout_started sent server-side with event id ic_<session> (consent only)', async t => {
+  const sent = []; const app = await start({ oaiEnv: OENV, oaiFetch: async (url, o) => { sent.push(JSON.parse(o.body)); return { ok: true, status: 200 }; } }); t.after(app.close);
+  const own = app.client(), c = app.client(); await reg(own, 'owner');
+  await c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', username: 'gpt', password: 'pass-12345', agree: true, birthYear: 1990, ads: true, ft: { oppref: 'op1' } }); await wait(50);
+  await c('/api/billing/checkout', 'POST', { plan: 'yearly' }); await wait(50);
+  const e = sent.map(b => b.events).flat().find(x => x.type === 'checkout_started'); assert.ok(e); assert.equal(e.id, 'ic_cs_9'); assert.equal(e.data.type, 'contents'); assert.equal(e.data.amount, 3900); assert.equal(e.data.currency, 'USD'); assert.equal(e.oppref, 'op1');
 });

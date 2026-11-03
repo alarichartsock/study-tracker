@@ -128,3 +128,14 @@ test('TikTok standard events: ViewContent, AddToCart, InitiateCheckout, Purchase
   const tr = n => Array.from(g.win.ttq).find(a => a[0] === 'track' && a[1] === n);
   assert.equal(tr('Purchase')[3].event_id, 'cs_1'); assert.equal(tr('Purchase')[2].content_id, 'studyhertz_yearly'); assert.equal(tr('Purchase')[2].currency, 'USD'); assert.equal(tr('InitiateCheckout')[3].event_id, 'ic_cs_1');
 });
+
+test('ChatGPT pixel funnel: page_viewed, contents_viewed, items_added, checkout_started, order_created (once, shared ids); none without consent', async () => {
+  const run = S => { S.viewList('pricing'); S.selectItem('yearly', 'pricing'); S.ttCheckout('yearly', 39, 'cs_1'); S.ttPurchase({ txn: 'cs_1', value: 39, currency: 'usd', plan: 'yearly' }); S.ttPurchase({ txn: 'cs_1', value: 39, plan: 'yearly' }); S.ttPage(); };
+  const d = consentSandbox({ adsConsent: 'denied' }); run(d.S); assert.equal(d.win.oaiq, undefined);
+  const g = consentSandbox({ adsConsent: 'granted' }); run(g.S);
+  const m = g.win.oaiq.q.map(a => Array.from(a)).filter(a => a[0] === 'measure'), n = m.map(a => a[1]);
+  assert.equal(n.filter(x => x === 'page_viewed').length, 2); for (const e of ['contents_viewed', 'items_added', 'checkout_started', 'order_created']) assert.ok(n.includes(e), e);
+  assert.equal(n.filter(x => x === 'order_created').length, 1);
+  const f = e => m.find(a => a[1] === e); assert.equal(f('order_created')[3].event_id, 'cs_1'); assert.equal(f('order_created')[2].amount, 3900); assert.equal(f('order_created')[2].currency, 'USD'); assert.equal(f('checkout_started')[3].event_id, 'ic_cs_1');
+});
+
