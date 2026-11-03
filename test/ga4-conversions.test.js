@@ -113,7 +113,7 @@ test('TikTok pixel: loads and tracks CompleteRegistration only with ad consent; 
   d.S.signup(5); assert.equal(d.S.adsOk(), false); assert.match(d.ls.shFirstTouch, /"ttclid":"tt1"/); assert.equal(d.win.ttq, undefined, 'no pixel without consent');
   const g = consentSandbox({ adsConsent: 'granted' }, { href: 'https://studyhertz.com/?ttclid=tt1' });
   g.S.signup(5); assert.ok(g.S.adsOk());
-  const q = Array.from(g.win.ttq).map(a => a[0]); assert.deepEqual(q.filter(n => n === 'page' || n === 'track'), ['page', 'track']); const tr = Array.from(g.win.ttq).find(a => a[0] === 'track'); assert.equal(tr[1], 'CompleteRegistration'); assert.equal(tr[3].event_id, 'reg_u5');
+  const q = Array.from(g.win.ttq).map(a => a[0]); assert.deepEqual(Array.from(g.win.ttq).filter(a => a[0] === 'page' || a[0] === 'track').map(a => a[0] === 'track' ? a[1] : 'page'), ['page', 'ViewContent', 'CompleteRegistration']); const tr = Array.from(g.win.ttq).find(a => a[0] === 'track' && a[1] === 'CompleteRegistration'); assert.equal(tr[1], 'CompleteRegistration'); assert.equal(tr[3].event_id, 'reg_u5');
   assert.ok(g.win.ttq._i.DBKKRPBC77U0QLCJSAV0);
   g.S.choose('denied'); assert.ok(Array.from(g.win.ttq).some(a => a[0] === 'revokeConsent'));
 });
@@ -137,5 +137,16 @@ test('ChatGPT pixel funnel: page_viewed, contents_viewed, items_added, checkout_
   assert.equal(n.filter(x => x === 'page_viewed').length, 2); for (const e of ['contents_viewed', 'items_added', 'checkout_started', 'order_created']) assert.ok(n.includes(e), e);
   assert.equal(n.filter(x => x === 'order_created').length, 1);
   const f = e => m.find(a => a[1] === e); assert.equal(f('order_created')[3].event_id, 'cs_1'); assert.equal(f('order_created')[2].amount, 3900); assert.equal(f('order_created')[2].currency, 'USD'); assert.equal(f('checkout_started')[3].event_id, 'ic_cs_1');
+});
+
+test('TikTok ViewContent fires on every page view (landing + SPA routes) with content_id/content_name/value/currency and a shared event_id', async () => {
+  const g = consentSandbox({ adsConsent: 'granted' });
+  const vc = () => Array.from(g.win.ttq).filter(a => a[0] === 'track' && a[1] === 'ViewContent');
+  assert.equal(vc().length, 1, 'landing view'); const [, , p, o] = vc()[0];
+  assert.equal(p.content_id, 'page_home'); assert.equal(p.content_type, 'product'); assert.ok(p.content_name); assert.equal(p.currency, 'USD'); assert.equal(p.value, 0); assert.equal(p.contents[0].content_id, 'page_home'); assert.match(o.event_id, /^vc_[a-z0-9]+$/);
+  g.S.ttPage(); assert.equal(vc().length, 1, 'same path not repeated');
+  g.win.location.pathname = '/pricing'; g.S.ttPage(); assert.equal(vc().length, 2); assert.equal(vc()[1][2].content_id, 'page_pricing');
+  g.S.viewList('pricing'); const pr = vc()[2][2]; assert.equal(pr.content_id, 'studyhertz_pricing'); assert.equal(pr.value, 4.99); assert.equal(pr.currency, 'USD'); assert.ok(pr.contents[0].content_name);
+  const d = consentSandbox({ adsConsent: 'denied' }); d.S.ttPage(); d.S.viewList('pricing'); assert.equal(d.win.ttq, undefined);
 });
 

@@ -53,6 +53,13 @@
     return { type: 'contents', amount: a, currency: String(cur || 'USD').toUpperCase(), contents: [{ id: 'studyhertz_' + plan, name: 'StudyHertz ' + PLAN[plan][0], content_type: 'plan', quantity: 1, amount: a }] }; }
   function oai(name, data, id) { try { if (adsOk() && window.oaiq) window.oaiq('measure', name, data, id ? { event_id: id } : undefined); } catch (e) { /* ignore */ } }
   function oaiPage() { oai('page_viewed', { type: 'contents', contents: [{ id: location.pathname || '/', name: document.title || 'StudyHertz', content_type: 'page' }] }); }
+  // ViewContent once per page view (landing, public pages, app routes) with content_id/content_name/value/currency; mirrored server-side with the same event_id
+  var lastView = '';
+  function ttView() { try { if (!adsOk() || !window.ttq) return; var path = location.pathname || '/', key = path + '|' + (window.SH_VIEW || ''); if (key === lastView) return; lastView = key;
+    var id = 'page' + (path === '/' ? '_home' : path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 60), name = String(document.title || 'StudyHertz').slice(0, 80), eid = 'vc_' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    window.ttq.track('ViewContent', { content_type: 'product', content_id: id, content_name: name, currency: 'USD', value: 0, contents: [{ content_id: id, content_name: name, quantity: 1, price: 0 }] }, { event_id: eid });
+    fetch('/api/tt/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', keepalive: true, body: JSON.stringify({ id: eid, path: path, title: name, consent: true, ttclid: (attr && attr.ttclid) || (first && first.ttclid) || undefined }) }).catch(function () {});
+    } catch (e) { /* ignore */ } }
   function tt(name, props, id) { try { if (adsOk() && window.ttq) window.ttq.track(name, props, id ? { event_id: id } : {}); } catch (e) { /* ignore */ } }
   var seen = {}, cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; (document.head || document.documentElement).appendChild(s);
@@ -95,7 +102,7 @@
   var TTQ_ID = 'DBKKRPBC77U0QLCJSAV0', ttqLoaded = false;
   function ttqLoad() { if (ttqLoaded || !adsOk()) return; ttqLoaded = true;
     !function (w, d, t) { w.TiktokAnalyticsObject = t; var ttq = w[t] = w[t] || []; ttq.methods = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent']; ttq.setAndDefer = function (t, e) { t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); }; }; for (var i = 0; i < ttq.methods.length; i++) ttq.setAndDefer(ttq, ttq.methods[i]); ttq.instance = function (t) { for (var e = ttq._i[t] || [], n = 0; n < ttq.methods.length; n++) ttq.setAndDefer(e, ttq.methods[n]); return e; }; ttq.load = function (e, n) { var r = 'https://analytics.tiktok.com/i18n/pixel/events.js'; ttq._i = ttq._i || {}, ttq._i[e] = [], ttq._i[e]._u = r, ttq._t = ttq._t || {}, ttq._t[e] = +new Date, ttq._o = ttq._o || {}, ttq._o[e] = n || {}; n = d.createElement('script'); n.type = 'text/javascript', n.async = !0, n.src = r + '?sdkid=' + e + '&lib=' + t; e = d.getElementsByTagName && d.getElementsByTagName('script')[0]; if (e && e.parentNode) e.parentNode.insertBefore(n, e); else (d.head || d.documentElement).appendChild(n); };
-      ttq.load(TTQ_ID); try { ttq.grantConsent(); ttq.enableCookie(); } catch (e) { /* ignore */ } ttq.page(); }(window, document, 'ttq'); }
+      ttq.load(TTQ_ID); try { ttq.grantConsent(); ttq.enableCookie(); } catch (e) { /* ignore */ } ttq.page(); }(window, document, 'ttq'); ttView(); }
   ttqLoad();
   window.SHConsent = {
     state: get,
@@ -123,14 +130,14 @@
     },
     // GA4 view_item_list (once per page + list) and select_item (plan click), with items arrays
     viewList: function (list, plans) { var key = 'v_' + list; if (seen[key]) return; seen[key] = 1; var ev = firstParams({ item_list_id: list, item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: (plans || ['monthly', 'yearly', 'lifetime']).map(planItem) });
-      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); oai('contents_viewed', { type: 'contents', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { id: 'studyhertz_' + p, name: 'StudyHertz ' + PLAN[p][0], content_type: 'plan', quantity: 1, amount: Math.round(PLAN[p][1] * 100) }; }) }); tt('ViewContent', { content_type: 'product', content_id: 'studyhertz_pricing', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { content_id: 'studyhertz_' + p, price: PLAN[p][1], quantity: 1 }; }) }); },
+      GA(function (id) { ev.send_to = id; gtag('event', 'view_item_list', ev); }); oai('contents_viewed', { type: 'contents', contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { id: 'studyhertz_' + p, name: 'StudyHertz ' + PLAN[p][0], content_type: 'plan', quantity: 1, amount: Math.round(PLAN[p][1] * 100) }; }) }); tt('ViewContent', { content_type: 'product', content_id: 'studyhertz_pricing', content_name: 'StudyHertz plans', currency: 'USD', value: PLAN.monthly[1], contents: (plans || ['monthly', 'yearly', 'lifetime']).map(function (p) { return { content_id: 'studyhertz_' + p, content_name: 'StudyHertz ' + PLAN[p][0], price: PLAN[p][1], quantity: 1 }; }) }); },
     selectItem: function (plan, list) { var ev = firstParams({ item_list_id: list || 'pricing', item_list_name: list === 'paywall' ? 'Paywall' : 'Pricing', items: [planItem(plan)] }); GA(function (id) { ev.send_to = id; gtag('event', 'select_item', ev); }); tt('AddToCart', ttProps(plan)); oai('items_added', oaiData(plan)); },
     // signed-in identity: opaque internal id (never username/email) + user properties
     identify: function (uid, props) { if (!uid || seen.idf === uid) return; seen.idf = uid; var up = {}; Object.keys(props || {}).forEach(function (k) { if (typeof props[k] === 'string' && props[k].length <= 36 && props[k].indexOf('@') < 0) up[k] = props[k]; });
       GA(function (id) { gtag('config', id, { user_id: 'u' + String(uid), send_page_view: false }); gtag('set', 'user_properties', up); }); },
     adsOk: adsOk,
     // TikTok standard events (pixel exists only after ad consent); event_id shared with the server Events API for dedup
-    ttPage: function () { if (adsOk() && window.ttq) window.ttq.page(); oaiPage(); },
+    ttPage: function () { if (adsOk() && window.ttq) { window.ttq.page(); ttView(); } oaiPage(); },
     ttCheckout: function (plan, value, sid) { if (!sid) return; if (adsOk() && window.ttq) window.ttq.track('InitiateCheckout', ttProps(plan, value), { event_id: 'ic_' + sid }); oai('checkout_started', oaiData(plan, value), 'ic_' + sid); },
     ttPurchase: function (cv) { if (!adsOk() || !(window.ttq || window.oaiq) || !cv || !cv.txn) return; var k = 'shTtPurchase_' + cv.txn; try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) { /* ignore */ }
       if (window.ttq) window.ttq.track('Purchase', ttProps(cv.plan, cv.value, cv.currency), { event_id: cv.txn }); oai('order_created', oaiData(cv.plan, cv.value, cv.currency), cv.txn); },

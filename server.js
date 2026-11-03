@@ -134,6 +134,10 @@ function createApp(opts = {}) {
     return tt.send([{ ...base, id: c.txn, event: 'Purchase' }, ...(c.plan === 'lifetime' ? [] : [{ ...base, id: 'sub_' + c.txn, event: 'Subscribe' }])]).then(r => r.sent); }
   function ttCheckout(u, sid, plan) { if (!tt.enabled || !u || !u.adsOk || !sid) return; const a = u.attribution || {};
     tt.send([{ id: 'ic_' + sid, event: 'InitiateCheckout', url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email, plan, value: Number((billing.PLANS[plan] || billing.PLANS.monthly).amount) || 0, currency: 'USD' }]).catch(() => {}); }
+  const ttViews = new Set(), ttHits = new Map();
+  function ttRate(ip) { const now = Date.now(), h = ttHits.get(ip) || { t: now, n: 0 }; if (now - h.t > 6e4) { h.t = now; h.n = 0; } h.n++; ttHits.set(ip, h); if (ttHits.size > 5000) ttHits.clear(); return h.n <= 30; }
+  function ttViewProps(path, title) { const id = 'page' + (path === '/' ? '_home' : path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 60);
+    return { content_type: 'product', content_id: id, content_name: title || 'StudyHertz', currency: 'USD', value: 0, contents: [{ content_id: id, content_name: title || 'StudyHertz', quantity: 1, price: 0 }] }; }
   function recordConsent(u, method, req) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
@@ -423,6 +427,13 @@ function createApp(opts = {}) {
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.plansFor(bcfg) } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
+      // TikTok ViewContent mirror (browser sends only after ad-cookie consent); event_id shared with the pixel for dedup
+      if (p === '/api/tt/view' && M === 'POST') { const id = String(j.id || ''), path = String(j.path || '/');
+        if (j.consent !== true || (user && !user.adsOk) || !/^vc_[a-z0-9]{6,40}$/.test(id) || !path.startsWith('/') || path.length > 100 || ttViews.has(id) || !ttRate(clientIp(req))) return send(res, 200, { ok: false });
+        if (ttViews.size > 5000) ttViews.clear(); ttViews.add(id);
+        const a = (user && user.attribution) || {}, ttclid = typeof j.ttclid === 'string' && /^[\w.\-]{1,500}$/.test(j.ttclid) ? j.ttclid : a.ttclid;
+        tt.send([{ id, event: 'ViewContent', url: SITE + path, ttclid, uid: user && user.id, email: user && user.email, ip: clientIp(req), ua: req.headers['user-agent'], props: ttViewProps(path, String(j.title || '').slice(0, 80)) }]).catch(() => {});
+        return send(res, 200, { ok: true }); }
       if (p === '/api/aff/click' && M === 'POST') { const c = aff.click(String(j.code || '').toUpperCase(), clientIp(req));
         return c ? send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': c.cookie }) : send(res, 200, { ok: false }); }
       if (p === '/api/register' && M === 'POST') {

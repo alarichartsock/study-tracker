@@ -83,3 +83,15 @@ test('ChatGPT Ads checkout_started sent server-side with event id ic_<session> (
   await c('/api/billing/checkout', 'POST', { plan: 'yearly' }); await wait(50);
   const e = sent.map(b => b.events).flat().find(x => x.type === 'checkout_started'); assert.ok(e); assert.equal(e.id, 'ic_cs_9'); assert.equal(e.data.type, 'contents'); assert.equal(e.data.amount, 3900); assert.equal(e.data.currency, 'USD'); assert.equal(e.oppref, 'op1');
 });
+
+test('TikTok server ViewContent: consent required, shared event_id, once per id, validated input', async t => {
+  const sent = []; const app = await start({ ttEnv: { TIKTOK_EVENTS_API_TOKEN: 'tt_secret_x' }, ttFetch: async (url, o) => { sent.push(JSON.parse(o.body)); return { ok: true, status: 200, json: async () => ({ code: 0 }) }; } }); t.after(app.close);
+  const c = app.client();
+  assert.equal((await c('/api/tt/view', 'POST', { id: 'vc_abc123def', path: '/' })).body.ok, false, 'no consent flag');
+  assert.equal((await c('/api/tt/view', 'POST', { id: 'bad id', path: '/', consent: true })).body.ok, false);
+  assert.equal((await c('/api/tt/view', 'POST', { id: 'vc_abc123def', path: '/pricing', title: 'Pricing', consent: true, ttclid: 'tc9' })).body.ok, true);
+  assert.equal((await c('/api/tt/view', 'POST', { id: 'vc_abc123def', path: '/pricing', consent: true })).body.ok, false, 'once per id');
+  await wait(50); assert.equal(sent.length, 1); const e = sent[0].data[0];
+  assert.equal(e.event, 'ViewContent'); assert.equal(e.event_id, 'vc_abc123def'); assert.equal(e.properties.content_id, 'page_pricing'); assert.equal(e.properties.content_name, 'Pricing'); assert.equal(e.user.ttclid, 'tc9'); assert.match(e.page.url, /\/pricing$/);
+});
+
