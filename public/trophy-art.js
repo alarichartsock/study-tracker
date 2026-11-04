@@ -301,6 +301,22 @@
     // Clockwork: a gear wheel with a smaller one; the gears turn with the cursor; tap spins them
     g30: (p = 1) => { const rot = ax() * 30 + 360 * E(p) * (p < 1 ? 1 : 0), G = (cx, cy, r, n, a0, cls) => pth(Array.from({ length: n * 4 }, (_, i) => onRim(cx, cy, 4, r + (i % 4 < 2 ? 1.6 : 0), a0 + i * 90 / n)), cls);
       return cyl(-3, -1, 0, 8, 4, 1) + G(-3, -1, 8, 12, rot, 'hl') + ell(-3, -1, 4, 2.4, 'l') + cyl(9, 7, 0, 4.4, 4, 1) + G(9, 7, 4.4, 8, -rot * 1.8 + 11, 'tp') + ell(9, 7, 4, 1.2, 'l'); },
+    // ---- Medals ----
+    // Podium: three steps with a medal on top; the step nearest the cursor rises; tap pops them up in turn
+    bronze: (p = 1) => { const st = [[-12, 6], [-4, 10], [4, 4]], k = nearest(st.map(([x, h]) => [x + 4, 0, h])); let s = '';
+      st.forEach(([x, h], i) => { s += box(x, -4, 0, 8, 8, h + (i === k ? 2 * AIM.s : 0) + 2 * B(sq(p, i, 3, .5)), i === 1 ? 'hl' : ''); }); return s + digits('1', -.6, 4.05, 3, 3.6, 'y', 'l a'); },
+    // Golden Day: a medal hanging from its ribbon; it swings toward the cursor; tap spins it on the ribbon
+    gold: (p = 1) => { const sw = ax() * 3, sp = p < 1 ? Math.cos(2 * Math.PI * E(p)) : 1, [X, Y] = S(sw, 0, 9);
+      return line([[-4, 0, 26], [sw, 0, 14]], 'l w') + line([[4, 0, 26], [sw, 0, 14]], 'l w') + '<ellipse class="hl" cx="' + X + '" cy="' + Y + '" rx="' + f(Math.max(.6, 6.4 * Math.abs(sp))) + '" ry="6.4"/>' + '<ellipse class="l a" cx="' + X + '" cy="' + Y + '" rx="' + f(Math.max(.3, 4.2 * Math.abs(sp))) + '" ry="4.2"/>' + star(sw, 0, 9, 2 * Math.max(.2, Math.abs(sp)), 'l a'); },
+    // Platinum Day: a cut gem on a stand; the facet nearest the cursor catches the light; tap sparkles it
+    plat: (p = 1) => { const top = [0, 1, 2, 3, 4, 5].map(i => onRim(0, 0, 14, 6, i * 60 + 30)), k = nearest(top.map(q => [q[0], q[1], 11])); let s = cyl(0, 0, 0, 7, 2) + line([[0, 0, 2], [0, 0, 4]], 'l');
+      s += hull([...top, [0, 0, 4], ...top.map(([x, y]) => [x * .6, y * .6, 16.5])], 'tp'); top.forEach((q, i) => { s += line([q, [0, 0, 4]], i === k && AIM.s > .3 ? 'l a w' : 'l d'); });
+      s += pth(top.map(([x, y]) => [x * .6, y * .6, 16.5]), 'hl'); return s + (p < 1 ? [0, 1, 2].map(i => star(-6 + i * 6, 0, 22 + 2 * i % 3, 2 * B(sq(p, i, 3, .5)) + .01, 'l a')).join('') : ''); },
+    // Gold Hoard: a stack of gold coins; the top coin slides toward the cursor; tap drops the coins onto the stack
+    gold23: (p = 1) => { let s = ''; for (let i = 0; i < 6; i++) { const t = p >= 1 ? 1 : E(sq(p, i, 6, .4)), dx = (i === 5 ? ax() * 3 : 0), z = i * 2.2 + (1 - t) * 10; s += cyl(dx + (i % 2) * .6, 0, z, 7, 2.2, 0).replace('<ellipse class="tp"', '<ellipse class="hl"'); }
+      return cyl(10, 6, 0, 3.6, 1.6) + cyl(-10, 5, 0, 3.6, 1.6) + s; },
+    // Full Set: bronze, silver and gold medals in a row; the medal nearest the cursor lifts; tap raises them in turn
+    medalset: (p = 1) => { const xs = [-9, 0, 9], k = nearest(xs.map(x => [x, 0, 10])); return plate(28, 10, 1.5) + xs.map((x, i) => { const z = 10 + (i === k ? 2 * AIM.s : 0) + 3 * B(sq(p, i, 3, .5)); return line([[x - 2, 0, 1.5], [x, 0, z - 3]], 'l') + line([[x + 2, 0, 1.5], [x, 0, z - 3]], 'l') + sdisc(x, 0, z, 4, 'hl') + sdisc(x, 0, z, 2.4 + i * .3, 'l a') + (i === 2 ? star(x, 0, z, 1.4, 'l a') : ''); }).join(''); },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';

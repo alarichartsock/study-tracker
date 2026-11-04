@@ -113,7 +113,7 @@ test('Launch Pad trophy animations are one-shot, launch-only and reduced-motion 
 test('Launch Pad trophy art: one isometric hairline svg per trophy, served and cached', () => {
   const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
   global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
-  const AN = require('../lib/analytics.js'), A = AN.achievements({ sessions: [], settings: { goals: { dailyMin: 60 } }, subjectMeta: {} }, 0), DONE = ['launch', 'time', 'streaks', 'intensity', 'focus', 'goals'];
+  const AN = require('../lib/analytics.js'), A = AN.achievements({ sessions: [], settings: { goals: { dailyMin: 60 } }, subjectMeta: {} }, 0), DONE = ['launch', 'time', 'streaks', 'intensity', 'focus', 'goals', 'medals'];
   for (const x of A.global.filter(x => DONE.includes(x.cat))) assert.ok(T.has(x), x.id + ' has line art');
   for (const k of ['h1', 'h10', 'h50', 'h100', 'h250', 'n10', 'n50', 'n100']) assert.equal(T.key('subject:bio:' + k), DONE.includes('personal') ? 'p-' + k : T.key('subject:bio:' + k));
   for (const id of T.ids) assert.match(T.svg(id), /^<svg class="ta" viewBox="6 5 52 52"/);
