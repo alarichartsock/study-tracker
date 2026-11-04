@@ -109,3 +109,11 @@ test('Launch Pad trophy animations are one-shot, launch-only and reduced-motion 
   assert.match(css, /@keyframes t-trace/); assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.t-line,\.t-sheen/);
   assert.ok(!/\.t-lp[^{]*\{[^}]*animation:[^}]*infinite/.test(css), 'no idle loops');
 });
+
+test('Launch Pad trophy art: one isometric hairline svg per trophy, served and cached', () => {
+  const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+  global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
+  assert.deepEqual(T.ids.sort(), ['explore', 'first', 'month1', 'onboard', 'subjgoal', 'timer1', 'tinker', 'week1']);
+  for (const id of T.ids) assert.match(T.svg(id), /^<svg class="ta" viewBox="6 5 52 52"/);
+  assert.match(P('index.html'), /trophy-art\.js/); assert.match(P('sw.js'), /'\/trophy-art\.js'/); assert.match(P('app.js'), /TrophyArt\.has\(x\.id\)/);
+});

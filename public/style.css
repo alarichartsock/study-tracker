@@ -691,3 +691,20 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .tring .t-comet-svg .g-comet{transition:opacity .6s var(--ease)}
 .running .tring .t-comet-svg .g-comet{opacity:1}
 .tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
+/* Trophy art (trophy-art.js): isometric hairline drawings. One 1.15px round stroke; faces painted with the card colour hide what's behind;
+   tops carry a faint accent tint. Earned: accent. Locked: muted, lighter, accent details dashed. */
+.t-art{color:var(--muted)}.trophy.on .t-art,.t-art.on{color:var(--acc)}
+.t-art .ta{width:84px;height:84px;display:block;overflow:visible}.t-art.big .ta{width:168px;height:168px}
+.ta path,.ta ellipse{fill:var(--card2);stroke:currentColor;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round}
+.ta .tp{fill:color-mix(in srgb,currentColor 7%,var(--card2))}.ta .hl{fill:color-mix(in srgb,currentColor 13%,var(--card2))}
+.ta .l{fill:none}.ta .d{opacity:.45}.ta .dd{stroke-dasharray:.03 .025}.ta .w{stroke-width:1}.t-art.big .ta *{stroke-width:.55}
+.trophy:not(.on) .t-art .ta{opacity:.75}.trophy:not(.on) .ta .a{stroke-dasharray:.03 .03}.trophy:not(.on) .ta .tp,.trophy:not(.on) .ta .hl{fill:var(--card2)}
+.trophy.t-lp:not(.on){opacity:.6}
+/* first view of an earned card: the drawing traces its own strokes once */
+.t-lp.on:not(.t-shown):not(.t-play) .ta>*{stroke-dashoffset:1;stroke-dasharray:1}
+.t-play.on .ta>*:not(.dd){stroke-dasharray:1;animation:ta-draw 1.2s var(--ease) .1s both}
+.t-play.on .ta>.dd{animation:ta-fade .6s var(--ease) 1s both}
+@keyframes ta-draw{from{stroke-dashoffset:1;fill-opacity:0}70%{fill-opacity:0}to{stroke-dashoffset:0;fill-opacity:1}}
+@keyframes ta-fade{from{opacity:0}}
+#dlg:has(.t-art) .t3d-hint{display:none}
+@media (prefers-reduced-motion:reduce){.t-play.on .ta>*{animation:none!important}.t-lp.on .ta>*{stroke-dashoffset:0!important}}
