@@ -807,3 +807,6 @@ html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
 @media(max-width:699px){html[data-now="l"]{--nz:1.12}html[data-now="m"]{--nz:.95}
   html[data-now="l"] .now-card:not(.min){left:0;right:0;width:auto;border-radius:16px 16px 0 0;bottom:calc(72px + env(safe-area-inset-bottom));border-left:0;border-right:0}
   html[data-now="l"] .now-card:not(.min) .now-body{flex:1}html[data-now="l"] .now-card:not(.min){flex-direction:row;flex-wrap:wrap;align-items:center}}
+/* The drawing's SVG is redrawn every frame while hovered; keep its nodes out of hit-testing so a press never starts on a node that is
+   replaced before release (which made the browser drop the click). The stable .t-art box receives every press. */
+.t-art .ta,.t-art .ta *{pointer-events:none}

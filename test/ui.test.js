@@ -129,7 +129,7 @@ test('trophy drawings are interactive: lean, one action per trophy, keyboard, po
   delete require.cache[require.resolve('../public/trophy-art.js')]; global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
   for (const id of T.ids) { assert.ok(T.DUR[id] > 0); if (id !== 'tinker') assert.notEqual(T.inner(id, 0.4), T.inner(id, 1), id + ' action changes the drawing'); assert.equal(T.inner(id, 1), T.inner(id), id + ' rests at p=1'); }
   assert.notEqual(T.inner('first', 1, { yaw: 12 }), T.inner('first', 1)); assert.notEqual(T.inner('tinker', 1, { turn: 45 }), T.inner('tinker', 1));
-  assert.match(js, /const TAI = /); assert.match(js, /ACT\.taPlay = b => TAI\.play\(b\)/); assert.match(js, /closest\('\.t-art\[data-act\]'\) && \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
+  assert.match(js, /const TAI = /); assert.match(js, /ACT\.taPlay = b => TAI\.play\(b\)/); assert.match(js, /const dragOk = el => el\.dataset\.tid === 'tinker'/); assert.match(js, /d\.onclick = e => \{ if \(e\.target !== d\) return;/); assert.doesNotMatch(js, /data-act="taPlay"/);
   assert.match(js, /if \(still\(\)\) return draw\(el, 1\)/);
 });
 
