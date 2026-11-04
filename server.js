@@ -718,6 +718,7 @@ function createApp(opts = {}) {
         if (j.timezone !== undefined) { if (!stats.TZ.valid(j.timezone)) return send(res, 400, { error: 'unknown time zone' }); s.timezone = j.timezone; }
         if (j.dayStartHour !== undefined) s.dayStartHour = Math.round(numIn(j.dayStartHour, 0, 6));
         if (Array.isArray(j.quickDurations)) s.quickDurations = j.quickDurations.slice(0, 6).map(x => Math.round(numIn(x, 1, 600)));
+        if (j.nowSize !== undefined) { if (!['s', 'm', 'l'].includes(j.nowSize)) return send(res, 400, { error: 'nowSize must be s, m or l' }); s.nowSize = j.nowSize; }
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }
         if (j.background !== undefined) { if (!j.background || typeof j.background !== 'object' || Array.isArray(j.background)) return send(res, 400, { error: 'background must be an object' });
           try { s.background = mix.cleanBackground(j.background, s.background); } catch (e) { return send(res, 400, { error: e.message }); } }

@@ -181,3 +181,9 @@ test('now-studying card: off-timer only, reuses timer actions (stop flow, shared
   assert.equal((js.match(/\/api\/timer\/discard/g) || []).length, 1); assert.match(js, /e\.key === 'shTimerPing'/); assert.match(js, /localStorage\.nowMin/);
   assert.match(js, /role', 'region'\); el\.setAttribute\('aria-label', 'Session in progress'\)/); assert.match(css, /@media\(max-width:699px\)\{\.now-card\{right:12px;bottom:calc\(88px/);
 });
+test('ui: trophy hover uses a static hit box + debounced sheen; session card size setting', () => {
+  const fs = require('fs'), path = require('path'), js = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), css = fs.readFileSync(path.join(__dirname, '../public/style.css'), 'utf8');
+  assert.match(js, /<div class="t-face">/); assert.match(js, /now - \(el\._shT \|\| 0\) < 600/); assert.match(css, /\.trophy\.t-lp:hover>\.t-face/);
+  assert.match(js, /const lean = \(\) => \{\};/); assert.doesNotMatch(js, /dataset\.yaw = Math/); assert.doesNotMatch(css, /\.trophy[^{]*\{[^}]*rotate[XY]/); assert.doesNotMatch(css, /\.t-art \.ta\{transform:perspective/);
+  assert.match(js, /ACT\.nowSize = /); assert.match(css, /html\[data-now="l"\]\{--nz:1\.3\}/);
+});

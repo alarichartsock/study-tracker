@@ -709,7 +709,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 #dlg:has(.t-art) .t3d-hint{display:none}
 @media (prefers-reduced-motion:reduce){.t-play.on .ta>*{animation:none!important}.t-lp.on .ta>*{stroke-dashoffset:0!important}}
 /* Trophy drawings lean toward the pointer and ease back; the popup drawing can be dragged to turn */
-.t-art .ta{transform:perspective(260px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg));transition:transform .6s var(--ease);will-change:transform}
+.t-art .ta{transform:none}
 .t-art.ta-lean .ta{transition:transform .18s ease-out}
 .t-art[data-act]{cursor:pointer;border-radius:12px;outline-offset:2px}.t-art[data-act]:focus-visible{outline:1.5px solid var(--acc)}
 .t-art.big{cursor:grab;touch-action:pan-y;user-select:none}.t-art.big:active{cursor:grabbing}.t-art[data-tid=tinker][data-act]{touch-action:pan-y}
@@ -724,7 +724,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 [data-anim="1"] .ta>*,[data-anim="0"] .ta>*{animation:none!important;stroke-dashoffset:0!important}[data-anim="1"] .t-play.t-new .t-ic,[data-anim="0"] .t-play.t-new .t-ic{animation:none}
 [data-anim="1"] .t-art .ta,[data-anim="0"] .t-art .ta{transform:none!important}
 [data-anim="0"] .goal-ring .ring-fg,[data-anim="0"] .t-lp .t-prog i{transition:none!important;animation:none!important}
-[data-anim="3"] .t-art .ta{transform:perspective(220px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg)) translate(var(--px,0px),var(--py,0px))}
+.t-art .ta{transform:none}
 
 /* In-app logo mark: solid accent-gradient tile (like the original), wave in --logo-ink (white or near-black by contrast, see logoInk()) */
 :root{--acc-b:color-mix(in srgb,var(--acc) 62%,#2fd3b4);--logo-ink:#fff}
@@ -756,7 +756,7 @@ html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
 @media (hover:hover){
   .trophy.t-lp:hover,.trophy.t-lp:focus-visible{border-color:color-mix(in srgb,var(--acc) 55%,var(--line))}
   html:not([data-anim="0"]) .trophy.t-lp:hover,html:not([data-anim="0"]) .trophy.t-lp:focus-visible{transform:translateY(-2px)}
-  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:hover,html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:focus-visible{transform:perspective(700px) translateY(-4px) rotateX(var(--cy,0deg)) rotateY(var(--cx,0deg));box-shadow:0 12px 28px -10px rgba(20,30,60,.28)}
+  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:hover,html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:focus-visible{transform:translateY(-2px);box-shadow:0 12px 28px -10px rgba(20,30,60,.28)}
   html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp.on:hover,html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp.on:focus-visible{box-shadow:0 12px 28px -10px rgba(20,30,60,.28),0 0 0 1px color-mix(in srgb,var(--acc) 35%,transparent),0 0 22px -4px color-mix(in srgb,var(--acc) 38%,transparent)}
   html:not([data-anim="0"]) .trophy.t-lp:not(.on):hover{transform:translateY(-2px)}
   .trophy.t-lp:hover{transition-duration:.25s}
@@ -781,3 +781,29 @@ html[data-anim="0"] .now-card{animation:none}
 .now-btns{display:flex;gap:6px;align-items:center}.now-btns .btn{padding:6px 10px;font-size:13px}.now-btns .now-x{margin-left:auto}
 .now-pill{display:flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;border-radius:999px;background:none;border:0;color:inherit;cursor:pointer}.now-pill .now-ring{width:28px;height:28px}.now-pill .now-t{font-size:14px}
 @media(max-width:699px){.now-card{right:12px;bottom:calc(88px + env(safe-area-inset-bottom))}}
+
+/* Launch Pad hover fix: the outer .trophy.t-lp is a static, invisible hit box; .t-face carries the card look and all hover motion */
+.trophy.t-lp{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;border-radius:0!important;overflow:visible!important;transform:none!important;transition:none!important;isolation:auto}
+.t-lp>.t-face{position:relative;overflow:hidden;isolation:isolate;height:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 16px;text-align:center;transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
+.t-lp.on>.t-face{border-color:color-mix(in srgb,var(--acc) 60%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 25%,transparent),var(--shadow)}
+.t-face>b{font-size:15px;display:block;margin-top:4px}.t-face>.muted.small{font-size:13.5px;line-height:1.35}
+@media (hover:hover){
+  .trophy.t-lp:hover>.t-face{border-color:color-mix(in srgb,var(--acc) 55%,var(--line))}
+  html:not([data-anim="0"]) .trophy.t-lp:hover>.t-face{transform:translateY(-2px)}
+  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp.on:hover>.t-face{transform:translateY(-2px);box-shadow:0 12px 28px -10px rgba(20,30,60,.28),0 0 0 1px color-mix(in srgb,var(--acc) 35%,transparent),0 0 22px -4px color-mix(in srgb,var(--acc) 38%,transparent)}
+  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:not(.on):hover>.t-face{transform:translateY(-2px);box-shadow:0 10px 22px -12px rgba(20,30,60,.22)}
+}
+.trophy.t-lp:focus-visible{box-shadow:none!important}.trophy.t-lp:focus-visible>.t-face{border-color:color-mix(in srgb,var(--acc) 55%,var(--line));box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 40%,transparent)}
+
+/* Session card sizes (Settings > Session card size; default Medium). --nz scales the whole card */
+html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
+.now-card{width:min(calc(300px * var(--nz)),calc(100vw - 24px));padding:calc(12px * var(--nz)) calc(14px * var(--nz));gap:calc(10px * var(--nz))}
+.now-card .now-body>.now-ring{width:calc(40px * var(--nz));height:calc(40px * var(--nz))}
+.now-card .now-s{font-size:calc(14px * var(--nz));font-weight:600}
+.now-card .now-body .now-t{font-size:calc(28px * var(--nz));font-weight:700;line-height:1.1}
+.now-btns .btn{padding:calc(7px * var(--nz)) calc(12px * var(--nz));font-size:calc(14px * var(--nz))}
+.now-card.min{width:auto;padding:4px}
+.now-pill{padding:4px calc(14px * var(--nz)) 4px 4px;gap:8px}.now-pill .now-ring{width:calc(28px * var(--nz));height:calc(28px * var(--nz))}.now-pill .now-t{font-size:calc(18px * var(--nz));font-weight:700}
+@media(max-width:699px){html[data-now="l"]{--nz:1.12}html[data-now="m"]{--nz:.95}
+  html[data-now="l"] .now-card:not(.min){left:0;right:0;width:auto;border-radius:16px 16px 0 0;bottom:calc(72px + env(safe-area-inset-bottom));border-left:0;border-right:0}
+  html[data-now="l"] .now-card:not(.min) .now-body{flex:1}html[data-now="l"] .now-card:not(.min){flex-direction:row;flex-wrap:wrap;align-items:center}}

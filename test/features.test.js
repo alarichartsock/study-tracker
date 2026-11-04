@@ -181,3 +181,9 @@ test('settings: background mode/window/motion are validated and persisted', asyn
   assert.deepEqual((await c('/api/state')).body.settings.background, { mode: 'subject', window: 'month', motion: false });
   assert.equal((await c('/mix.js')).status, 200);
 });
+test('settings: session card size (nowSize) validates and persists', async t => {
+  const app = await start(); t.after(app.close); const { user } = app;
+  assert.equal((await user('/api/settings', 'POST', { nowSize: 'xl' })).status, 400);
+  assert.equal((await user('/api/settings', 'POST', { nowSize: 'l' })).status, 200);
+  assert.equal((await user('/api/state')).body.settings.nowSize, 'l');
+});
