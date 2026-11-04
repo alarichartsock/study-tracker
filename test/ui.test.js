@@ -251,3 +251,10 @@ test('trophy cards: every line-art card gets its visible .t-face, and the sheen 
   assert.match(css, /\.t-lp>\.t-face\{[^}]*background:var\(--card\);border:1px solid var\(--line\)/);
   assert.match(css, /@keyframes t-sheen\{[^}]*\}[^@]*100%\{transform:translateX\(110%\);opacity:0\}/);
 });
+
+test('whole-app accent follows the selected subject colour (clamped), falling back to the Settings accent', () => {
+  const app = pub('app.js');
+  assert.match(app, /const a = \(S && sel && S\.subjectMeta\[sel\]\?\.color && color\(sel\)\) \|\| S\?\.settings\.accent,/);
+  assert.match(app, /ACT\.pick = [^\n]*sel = localStorage\.subject = b\.dataset\.s;[^\n]*applyAccent\(\);/);
+  assert.match(app, /async function load\(\) \{[^\n]*applyAccent\(\);/);
+});
