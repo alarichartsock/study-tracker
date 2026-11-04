@@ -810,3 +810,6 @@ html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
 /* The drawing's SVG is redrawn every frame while hovered; keep its nodes out of hit-testing so a press never starts on a node that is
    replaced before release (which made the browser drop the click). The stable .t-art box receives every press. */
 .t-art .ta,.t-art .ta *{pointer-events:none}
+/* Anchor buttons (<a class="btn">) take the button text colour in every link state, both themes, instead of the browser's link blue/purple.
+   Zero specificity, so .btn.primary / .btn.danger / .btn.ghost colours still win. */
+:where(a.btn,a.btn:link,a.btn:visited,a.btn:hover,a.btn:focus,a.btn:focus-visible,a.btn:active){color:var(--text);text-decoration:none}
