@@ -59,7 +59,7 @@ test('empty / header-only input', () => {
 test('sessionsToCSV round-trips through csvToSessions', () => {
   const s = [{ subject: 'CARS, hard', note: 'said "hi"', start: L(2026, 10, 20, 9), end: L(2026, 10, 20, 10) }];
   const out = c.sessionsToCSV(s);
-  assert.match(out, /^date,start,end,duration_min,subject,note\n/); assert.match(out, /"CARS, hard"/);
+  assert.match(out, /^date,start,end,duration_min,subject,note,start_local,end_local,timezone\n/); assert.match(out, /"CARS, hard"/);
   const back = c.csvToSessions(out);
   assert.equal(back.sessions[0].subject, 'CARS, hard'); assert.equal(back.sessions[0].note, 'said "hi"'); assert.equal(back.sessions[0].start, s[0].start);
 });

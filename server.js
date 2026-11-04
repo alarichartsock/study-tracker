@@ -29,7 +29,7 @@ const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
-const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
+const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -50,7 +50,7 @@ const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
 // days on which the daily goal was met (weekend goal honored)
-function goalDaysMet(ud, h = 0) { const g = (ud.settings && ud.settings.goals) || {}, by = stats.computeStats(ud.sessions || [], { dayStartHour: h }).byDay;
+function goalDaysMet(ud, h = stats.ctxOf(ud.settings)) { const g = (ud.settings && ud.settings.goals) || {}, by = stats.computeStats(ud.sessions || [], { dayStartHour: h }).byDay;
   return Object.keys(by).filter(k => { const gs = stats.goalFor(stats.keyToDate(k), g); return gs > 0 && by[k] >= gs; }).length; }
 function createApp(opts = {}) {
   // DATA_DIR (e.g. a mounted disk) holds data.db and approved reports; defaults to the repo folder for local installs.
@@ -456,7 +456,7 @@ function createApp(opts = {}) {
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
         if (emailTaken(em)) return send(res, 409, { error: EMAIL_TAKEN });
         let tpl = null; if (j.template !== undefined) { try { tpl = TEMPLATES.resolve(j.template, j.subjects, j.activities); } catch (e) { return send(res, 400, { error: e.message }); } }
-        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; if (tpl) applyTemplate(store.data(nu.id), j); store.save();
+        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; if (tpl) applyTemplate(store.data(nu.id), j); if (stats.TZ.valid(j.timezone)) store.data(nu.id).settings.timezone = j.timezone; store.save();
         recordConsent(nu, 'password', req); saveSignupMeta(nu, req, j); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
         return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
@@ -470,7 +470,7 @@ function createApp(opts = {}) {
         const ip = clientIp(req); if (regLimiter.blocked(ip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(ip);
         if (j.template !== undefined) { try { TEMPLATES.resolve(j.template, j.subjects, j.activities); } catch (e) { return send(res, 400, { error: e.message }); } }
         let r; try { r = oauthAccount(pe.id, { create: true }); } catch (e) { return send(res, 403, { error: e.message }); }
-        pendingSignups.delete(t); if (r.created && j.template !== undefined) { applyTemplate(store.data(r.u.id), j); store.save(); } recordConsent(r.u, 'oauth:' + pe.id.provider, req); if (r.created) saveSignupMeta(r.u, req, j); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
+        pendingSignups.delete(t); if (r.created) { if (j.template !== undefined) applyTemplate(store.data(r.u.id), j); if (stats.TZ.valid(j.timezone)) store.data(r.u.id).settings.timezone = j.timezone; store.save(); } recordConsent(r.u, 'oauth:' + pe.id.provider, req); if (r.created) saveSignupMeta(r.u, req, j); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
         return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0', ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/login' && M === 'POST') {
@@ -543,7 +543,7 @@ function createApp(opts = {}) {
         return send(res, 402, { error: 'Your free trial has ended. Subscribe to keep tracking. Your data is safe and you can still view and export it.', paywall: true });
 
       // ---- authenticated, per-user data ----
-      const ud = store.data(user.id), save = () => store.save(), h = +ud.settings.dayStartHour || 0;
+      const ud = store.data(user.id), save = () => store.save(), h = stats.ctxOf(ud.settings);
       if (p === '/api/password' && M === 'POST') {
         if (!(await auth.verifyPassword(j.current || '', user.salt, user.hash))) return send(res, 401, { error: 'Current password is wrong' });
         if (!auth.validPassword(j.password)) return send(res, 400, { error: 'Password must be at least 8 characters' });
@@ -566,7 +566,7 @@ function createApp(opts = {}) {
         return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h) });
       }
       const achFull = () => { const A = analytics.achievements(ud, h);
-        const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, +d.settings.dayStartHour || 0]; })); // aggregate counts only
+        const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, stats.ctxOf(d.settings)]; })); // aggregate counts only
         for (const x of A.global) { const n = E.counts[x.id] || 0; x.earnedBy = { count: n, users: E.users, pct: E.users ? Math.round(n / E.users * 100) : 0 }; }
         return A; };
       if (p === '/api/achievements') return send(res, 200, achFull());
@@ -579,7 +579,7 @@ function createApp(opts = {}) {
         if (k === 'onboarded') fl.onboarded = 1; else if (k.startsWith('view:') && analytics.VIEW_KEYS.includes(k.slice(5))) { fl.views ||= []; if (!fl.views.includes(k.slice(5))) fl.views.push(k.slice(5)); }
         else { res.log.err = 'unknown flag: ' + k.replace(/[^\w:.-]/g, '').slice(0, 40); return send(res, 400, { error: 'unknown flag' }); }
         save(); return send(res, 200, { ok: true }); }
-      if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
+      if (p === '/api/export.csv') return send(res, 200, csv.sessionsToCSV(ud.sessions, h.tz), 'text/csv; charset=utf-8', { 'Content-Disposition': 'attachment; filename="mcat-sessions.csv"' });
       if (p === '/api/export.json') { const { active, ...data } = maskedState(ud); void active;
         return send(res, 200, { app: 'mcat-tracker', exported: new Date().toISOString(), user: user.username, data }, 'application/json', { 'Content-Disposition': 'attachment; filename="mcat-tracker-export.json"' }); }
       // Imports are historic data: snapshot achievements/goal days first, then mark everything newly earned as already
@@ -598,7 +598,7 @@ function createApp(opts = {}) {
       }
       if (p === '/api/import' && M === 'POST') {
         if (typeof j.csv !== 'string') return send(res, 400, { error: 'csv (string) required' });
-        const r = csv.csvToSessions(j.csv, j.map), before = importSnap();
+        const r = csv.csvToSessions(j.csv, j.map, undefined, h.tz), before = importSnap();
         for (const s of r.sessions) { ensureSubject(ud, s.subject); ud.sessions.push({ id: ud.nextId++, ...s, source: 'import' }); }
         const sum = importDone(before); save(); return send(res, 200, { added: r.sessions.length, skipped: r.skipped, columns: r.columns, summary: sum });
       }
@@ -688,6 +688,7 @@ function createApp(opts = {}) {
         if (j.medals) for (const k of ['bronze', 'silver', 'gold', 'platinum']) if (j.medals[k] !== undefined) s.medals[k] = Math.round(numIn(j.medals[k], 0, 1440));
         if (j.pomodoro) { const pm = j.pomodoro; for (const [k, lo, hi] of [['focusMin', 1, 240], ['shortMin', 1, 60], ['longMin', 1, 120], ['cycles', 1, 12]]) if (pm[k] !== undefined) s.pomodoro[k] = Math.round(numIn(pm[k], lo, hi));
           if (pm.autoStart !== undefined) s.pomodoro.autoStart = !!pm.autoStart; }
+        if (j.timezone !== undefined) { if (!stats.TZ.valid(j.timezone)) return send(res, 400, { error: 'unknown time zone' }); s.timezone = j.timezone; }
         if (j.dayStartHour !== undefined) s.dayStartHour = Math.round(numIn(j.dayStartHour, 0, 6));
         if (Array.isArray(j.quickDurations)) s.quickDurations = j.quickDurations.slice(0, 6).map(x => Math.round(numIn(x, 1, 600)));
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }

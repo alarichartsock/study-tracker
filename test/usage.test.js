@@ -13,7 +13,7 @@ test('touch records lastSeen and one entry per day, capped', () => {
 });
 test('perUser computes hours, windows, streaks, goals, features, plan', () => {
   const u = { id: 2, username: 'a', created: new Date(2026, 9, 1).toISOString(), attribution: { utm_source: 'ig', utm_medium: 'paid' }, signupLang: 'en-US', activeDays: ['2026-10-29'] };
-  const ud = { sessions: [sess(0, 60), sess(1, 30, 'Bio', 'manual'), sess(2, 90), sess(20, 120, 'Bio')], exams: [{}], settings: { goals: { dailyMin: 60 }, lang: 'es' }, subjectMeta: { CARS: { weeklyGoalMin: 300 } }, flags: { tinker: 1 } };
+  const ud = { sessions: [sess(0, 60), sess(1, 30, 'Bio', 'manual'), sess(2, 90), sess(20, 120, 'Bio')], exams: [{}], settings: { goals: { dailyMin: 60 }, lang: 'es', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, subjectMeta: { CARS: { weeklyGoalMin: 300 } }, flags: { tinker: 1 } };
   const r = usage.perUser(u, ud, { now: NOW, bstat: () => ({ enabled: true, trial: true, trialEnds: '2026-11-01T00:00:00Z', trialDaysLeft: 2 }), achievements: () => ({ global: [{ earned: true }, { earned: false }], personal: [{ earned: true }] }) });
   assert.equal(r.sessions, 4); assert.equal(r.hours, 5); assert.equal(r.hours7, 3); assert.equal(r.hours30, 5); assert.equal(r.avgSessionMin, 75);
   assert.equal(r.days7, 3); assert.equal(r.days30, 4); assert.equal(r.streak, 3); assert.equal(r.bestStreak, 3);

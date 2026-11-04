@@ -4,12 +4,18 @@
   const MODES = ['auto', 'subject', 'accent', 'static'], WINDOWS = ['day', 'week', 'month', 'all'], MAX = 5;
   const secs = s => Math.max(0, (new Date(s.end) - new Date(s.start)) / 1000 - (+s.breakSec || 0));
   // Start of the current day/week(Mon)/month (or the epoch for 'all'), honouring the "day starts at hour" setting.
-  function windowStart(win, now = new Date(), h = 0) { if (win === 'all') return new Date(0); const d = new Date(+now - h * 3600e3); d.setHours(0, 0, 0, 0);
+  const TZL = typeof module === 'object' && module.exports ? require('./tz.js') : root.TZ;
+  // With an IANA zone, day/week/month boundaries are midnights in that zone (DST-safe); else the device zone.
+  function windowStart(win, now = new Date(), h = 0, tz = null) { if (win === 'all') return new Date(0);
+    if (tz && TZL && TZL.valid(tz)) { const [y, m, dd] = TZL.key(now, tz, h).split('-').map(Number), c = new Date(Date.UTC(y, m - 1, dd));
+      if (win === 'week') c.setUTCDate(c.getUTCDate() - ((c.getUTCDay() + 6) % 7)); else if (win === 'month') c.setUTCDate(1);
+      return new Date(+TZL.toUtc(c.toISOString().slice(0, 10), '00:00', tz) + h * 3600e3); }
+    const d = new Date(+now - h * 3600e3); d.setHours(0, 0, 0, 0);
     if (win === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); else if (win === 'month') d.setDate(1);
     return new Date(+d + h * 3600e3); }
   // Share of study time per subject in the window. At most MAX parts; the rest is folded into the biggest.
-  function studyMix(sessions, { win = 'week', now = new Date(), h = 0, max = MAX } = {}) {
-    const from = +windowStart(win, now, h), to = +now, by = {};
+  function studyMix(sessions, { win = 'week', now = new Date(), h = 0, tz = null, max = MAX } = {}) {
+    const from = +windowStart(win, now, h, tz), to = +now, by = {};
     for (const s of sessions || []) { const t = +new Date(s.start); if (!(t >= from && t <= to)) continue; const v = secs(s); if (v > 0) by[s.subject] = (by[s.subject] || 0) + v; }
     const list = Object.entries(by).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)), total = list.reduce((t, x) => t + x[1], 0);
     let others = 0; if (list.length > max) { others = list.slice(max).reduce((t, x) => t + x[1], 0); list.length = max; list[0] = [list[0][0], list[0][1] + others]; }

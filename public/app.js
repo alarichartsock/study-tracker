@@ -11,7 +11,11 @@ const tip = (t, focus = true) => ' data-tip="' + esc(t) + '" aria-label="' + esc
 const pad = n => String(n).padStart(2, '0');
 const DAY = 864e5;
 const dk = d => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const dayKey = d => dk(+new Date(d) - (S ? +S.settings.dayStartHour || 0 : 0) * 3600e3);
+// Time zone: every instant -> day/hour/wall-clock conversion uses the user's zone (Settings), not the device's.
+// Calendar dates (k2d/addD/dk on them) are plain dates and stay zone-free. Unset = America/Los_Angeles, like the server.
+const utz = () => S ? (TZ.valid(S.settings.timezone) ? S.settings.timezone : TZ.DEFAULT) : (TZ.guess() || TZ.DEFAULT);
+const ik = t => TZ.key(t, utz()), wallHM = t => { const p = TZ.parts(t, utz()); return pad(p.h) + ':' + pad(p.mi); }, wallToUtc = (k, hm) => TZ.toUtc(k, hm, utz());
+const dayKey = d => TZ.key(d, utz(), S ? +S.settings.dayStartHour || 0 : 0);
 const k2d = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 const addD = (d, n) => { d = new Date(d); d.setDate(d.getDate() + n); return d; };
 const dur = s => Math.max(0, (new Date(s.end) - new Date(s.start)) / 1000 - (+s.breakSec || 0));
@@ -22,9 +26,10 @@ const tickT = s => { const m = Math.round(s / 60); return !m ? '0' : m % 60 ? fm
 const yGrid = (ticks, top, pos) => ticks.map(t => `<span class="yg" style="bottom:${pos(t / top)}"><i>${tickT(t)}</i></span>`).join('');
 const fmtClock = s => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
 const LOC = () => (window.SHI18N && SHI18N.lang) || undefined;
-const fmtTime = d => new Date(d).toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' });
-const fmtDate = (d, o = { month: 'short', day: 'numeric' }) => new Date(d).toLocaleDateString(LOC(), o);
-const daysUntil = k => Math.round((k2d(k) - k2d(dk(new Date()))) / DAY);
+const fmtTime = d => new Date(d).toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit', timeZone: utz() });
+const fmtDate = (d, o = { month: 'short', day: 'numeric' }) => new Date(d).toLocaleDateString(LOC(), o); // calendar dates (k2d)
+const fmtInst = (t, o = { month: 'short', day: 'numeric' }) => new Date(t).toLocaleDateString(LOC(), { ...o, timeZone: utz() }); // instants
+const daysUntil = k => Math.round((k2d(k) - k2d(ik(Date.now()))) / DAY);
 const MEDAL_ORDER = ['platinum', 'gold', 'silver', 'bronze'];
 const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDAL_ORDER) if (t[m] && sec >= t[m] * 60) return m; return null; };
 
@@ -34,7 +39,7 @@ document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND));
 let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
 const UI = { mode: localStorage.timerMode || 'stopwatch', target: +localStorage.countdownMin || 25, pomo: JSON.parse(localStorage.pomo || 'null'), selected: new Set(), layout: localStorage.sessLayout || 'list',
-  range: localStorage.statsRange || '30d', calMonth: dk(new Date()).slice(0, 7), taskView: 'inbox' };
+  range: localStorage.statsRange || '30d', calMonth: ik(Date.now()).slice(0, 7), taskView: 'inbox' };
 
 async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: body !== undefined ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
@@ -110,7 +115,9 @@ function syncAgree() { $('aSubmit').disabled = false; if (authMode !== 'login' &
 const tplLines = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
 function tplFill() { const t = TEMPLATES.get($('aTpl').value) || TEMPLATES.LIST[0]; $('aSubj').value = t.subjects.join('\n'); $('aActs').value = t.activities.join('\n'); $('aSubj').placeholder = 'e.g. Algebra'; if (t.id === 'custom') $('aTplMore').open = true; }
 $('aTpl').innerHTML = TEMPLATES.LIST.map(t => `<option value="${t.id}">${t.name}</option>`).join(''); $('aTpl').onchange = tplFill; tplFill();
-const tplBody = () => ({ template: $('aTpl').value, subjects: tplLines('aSubj'), activities: tplLines('aActs') });
+const tzOpts = cur => { const l = TZ.list(); if (cur && !l.includes(cur)) l.unshift(cur); return l.map(z => `<option value="${z}"${z === cur ? ' selected' : ''}>${z.replace(/_/g, ' ')}</option>`).join(''); };
+$('aTz').innerHTML = tzOpts(TZ.guess() || TZ.DEFAULT);
+const tplBody = () => ({ template: $('aTpl').value, subjects: tplLines('aSubj'), activities: tplLines('aActs'), timezone: $('aTz').value });
 $('aAgree').onchange = syncAgree; $('aBirth').oninput = syncAgree;
 // blocking re-acceptance when the Terms version changes
 function termsGate(t) {
@@ -173,8 +180,8 @@ function billingCard() {
   const b = BILL; if (!b.enabled) return ''; const sub = b.subscription || {};
   let body;
   if (b.exempt) body = `<p class="muted small">${b.exempt === 'admin' ? 'Admin account: no subscription needed.' : b.exempt === 'comp' ? 'Your account has complimentary access.' : 'Thanks for being an early user: your account has free access for life.'}</p>`;
-  else if (b.lifetime) body = `<p class="muted small">Lifetime access${b.lifetimeSince ? ' since ' + new Date(b.lifetimeSince).toLocaleDateString(LOC()) : ''}. It never expires. Thank you!${sub.status && sub.cancelAtPeriodEnd && sub.currentPeriodEnd && sub.status !== 'canceled' ? ' Your old ' + (sub.plan === 'yearly' ? 'yearly' : 'monthly') + ' plan stops renewing on ' + new Date(sub.currentPeriodEnd).toLocaleDateString(LOC()) + '.' : ''}</p>${sub.status ? '<div class="row"><button class="btn" data-act="billPortal">Billing history</button></div>' : ''}`;
-  else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + new Date(sub.currentPeriodEnd).toLocaleDateString() : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button>${hasLifetime() ? '<button class="btn primary" data-act="subscribe" data-plan="lifetime">Switch to Lifetime $100</button>' : ''}</div>${hasLifetime() ? '<p class="muted small">Lifetime is a one-time $100 payment. Your current plan then stops renewing at the end of its paid period (no refund).</p>' : ''}`;
+  else if (b.lifetime) body = `<p class="muted small">Lifetime access${b.lifetimeSince ? ' since ' + fmtInst(b.lifetimeSince, {}) : ''}. It never expires. Thank you!${sub.status && sub.cancelAtPeriodEnd && sub.currentPeriodEnd && sub.status !== 'canceled' ? ' Your old ' + (sub.plan === 'yearly' ? 'yearly' : 'monthly') + ' plan stops renewing on ' + fmtInst(sub.currentPeriodEnd, {}) + '.' : ''}</p>${sub.status ? '<div class="row"><button class="btn" data-act="billPortal">Billing history</button></div>' : ''}`;
+  else if (b.subscribed) body = `<p class="muted small">${sub.plan === 'yearly' ? 'Yearly' : 'Monthly'} plan ${esc(sub.status)}${sub.currentPeriodEnd ? (sub.cancelAtPeriodEnd ? ' · ends ' : ' · renews ') + fmtInst(sub.currentPeriodEnd, {}) : ''}</p><div class="row"><button class="btn" data-act="billPortal">Manage subscription</button>${hasLifetime() ? '<button class="btn primary" data-act="subscribe" data-plan="lifetime">Switch to Lifetime $100</button>' : ''}</div>${hasLifetime() ? '<p class="muted small">Lifetime is a one-time $100 payment. Your current plan then stops renewing at the end of its paid period (no refund).</p>' : ''}`;
   else body = `<p class="muted small">${b.readOnly ? 'Your free trial has ended; your account is read-only.' : `${b.trialDaysLeft} day${b.trialDaysLeft === 1 ? '' : 's'} left in your free trial.`}</p><div class="row"><button class="btn primary" data-act="subscribe" data-plan="monthly">${PRICE.monthly}</button><button class="btn primary" data-act="subscribe" data-plan="yearly">${PRICE.yearly}</button>${hasLifetime() ? `<button class="btn primary" data-act="subscribe" data-plan="lifetime">${PRICE.lifetime}</button>` : ''}${sub.status ? '<button class="btn" data-act="billPortal">Billing history</button>' : ''}</div>`;
   return `<div class="card"><h3>Subscription</h3>${body}</div>`;
 }
@@ -244,7 +251,11 @@ function go(v) { if ((v === 'users' || v === 'logev' || v === 'loglive') && !(ME
   render(); if (!(v === 'users' && UI.usersBack)) window.scrollTo(0, 0); }
 const tplOf = () => TEMPLATES.get(S && S.template) || TEMPLATES.get('mcat'), isMcat = () => tplOf().id === 'mcat';
 function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'); if (b) b.classList.toggle('hid', !isMcat()); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); syncTplNav(); }
+// Accounts from before per-user time zones: adopt this browser's zone once (server uses America/Los_Angeles until then).
+let tzFilling = false;
+function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
+  api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
+async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); syncTplNav(); tzBackfill(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -435,7 +446,7 @@ AFTER.sess = () => renderList();
 function renderList() {
   const list = filtered(); $('histSum').textContent = `${list.length} sessions · ${fmtH(list.reduce((a, s) => a + dur(s), 0))}`;
   let html = '';
-  if (UI.layout === 'table') html = `<div class="card scroll"><table class="tbl"><tr><th></th><th>Date</th><th>Time</th><th>Subject</th><th>Activity</th><th class="num">Duration</th><th class="num">Break</th><th>Focus</th><th>Note</th></tr>${list.slice(0, 1000).map(s => `<tr><td><input type="checkbox" class="chk" data-act="selOne" data-id="${s.id}" ${UI.selected.has(s.id) ? 'checked' : ''}></td><td class="nowrap"><a href="#" class="link" data-act="edit" data-id="${s.id}">${fmtDate(s.start, { month: 'short', day: 'numeric', year: '2-digit' })}</a></td><td class="nowrap">${fmtTime(s.start)}–${fmtTime(s.end)}</td><td><span class="dot" style="background:${color(s.subject)}"></span> ${esc(s.subject)}</td><td>${esc(s.activity)}</td><td class="num">${fmtH(dur(s))}</td><td class="num">${s.breakSec ? fmtH(s.breakSec) : ''}</td><td>${s.focus ? '★'.repeat(s.focus) : ''}</td><td>${esc(s.note)}</td></tr>`).join('')}</table></div>`;
+  if (UI.layout === 'table') html = `<div class="card scroll"><table class="tbl"><tr><th></th><th>Date</th><th>Time</th><th>Subject</th><th>Activity</th><th class="num">Duration</th><th class="num">Break</th><th>Focus</th><th>Note</th></tr>${list.slice(0, 1000).map(s => `<tr><td><input type="checkbox" class="chk" data-act="selOne" data-id="${s.id}" ${UI.selected.has(s.id) ? 'checked' : ''}></td><td class="nowrap"><a href="#" class="link" data-act="edit" data-id="${s.id}">${fmtInst(s.start, { month: 'short', day: 'numeric', year: '2-digit' })}</a></td><td class="nowrap">${fmtTime(s.start)}–${fmtTime(s.end)}</td><td><span class="dot" style="background:${color(s.subject)}"></span> ${esc(s.subject)}</td><td>${esc(s.activity)}</td><td class="num">${fmtH(dur(s))}</td><td class="num">${s.breakSec ? fmtH(s.breakSec) : ''}</td><td>${s.focus ? '★'.repeat(s.focus) : ''}</td><td>${esc(s.note)}</td></tr>`).join('')}</table></div>`;
   else { let last = ''; for (const s of list.slice(0, 500)) { const k = dayKey(s.start); if (k !== last) { last = k; const tot = list.filter(x => dayKey(x.start) === k).reduce((a, x) => a + dur(x), 0), m = medalOf(tot); html += `<div class="day"><span>${fmtDate(k2d(k), { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}</span><span>${m ? `<span class="medal m-${m}"></span> ` : ''}${fmtH(tot)}</span></div>`; } html += itemHTML(s, true); } }
   $('histList').innerHTML = html || '<p class="muted">No sessions match.</p>';
   $('bulk').innerHTML = UI.selected.size ? `<div class="bulkbar"><b>${UI.selected.size} selected</b><select id="bSubj">${opt(S.subjects, '', 'Set subject…')}</select><select id="bAct">${opt(S.activities, '', 'Set activity…')}</select><button class="btn" data-act="bulkUpd">Apply</button><button class="btn danger" data-act="bulkDel">Delete</button><button class="btn" data-act="selNone">Clear</button></div>` : '';
@@ -452,9 +463,9 @@ ACT.bulkDel = async () => { if (!confirm(`Delete ${UI.selected.size} sessions?`)
 function undoToast(msg, removed) { toast(msg, 'Undo', async () => { await api('/api/sessions/bulk', 'POST', { action: 'restore', sessions: removed }); toast('Restored'); refresh(); }); }
 function openAdd() {
   if (!S) return; editSession(null); const f = $('dlgForm'); if (!f.durm) return;
-  const sync = () => { const e = new Date(f.date.value + 'T' + f.end.value), a = new Date(e - Math.max(1, +f.durm.value || 0) * 6e4); f.start.value = a.toTimeString().slice(0, 5); };
+  const sync = () => { const e = wallToUtc(f.date.value, f.end.value), a = new Date(e - Math.max(1, +f.durm.value || 0) * 6e4); f.start.value = wallHM(a); };
   f.durm.oninput = sync; f.end.oninput = sync;
-  f.start.oninput = () => { const a = new Date(f.date.value + 'T' + f.start.value), b = new Date(f.date.value + 'T' + f.end.value); if (b <= a) b.setDate(b.getDate() + 1); f.durm.value = Math.round((b - a) / 6e4); };
+  f.start.oninput = () => { const a = wallToUtc(f.date.value, f.start.value); let b = wallToUtc(f.date.value, f.end.value); if (b <= a) b = wallToUtc(dk(addD(k2d(f.date.value), 1)), f.end.value); f.durm.value = Math.round((b - a) / 6e4); };
 }
 ACT.add = () => openAdd();
 $('addBtn').onclick = () => openAdd();
@@ -464,8 +475,8 @@ function editSession(s, preset = {}) {
   const st = s ? new Date(s.start) : preset.start || new Date(Date.now() - 3600e3), en = s ? new Date(s.end) : preset.end || new Date(), q = S.settings.quickDurations;
   dialog(`<h3>${s ? 'Edit session' : 'Add session'}</h3>
     <div class="row"><div><label>Subject</label><select name="subject">${opt(S.subjects, s ? s.subject : sel)}</select></div><div><label>Activity</label><select name="activity">${opt(S.activities, s ? s.activity || '' : localStorage.activity || '', '—')}</select></div></div>
-    <label>Date</label><input type="date" name="date" value="${dk(st)}" required>
-    <div class="row"><div><label>Start</label><input type="time" name="start" value="${st.toTimeString().slice(0, 5)}" required></div><div><label>End</label><input type="time" name="end" value="${en.toTimeString().slice(0, 5)}" required></div><div><label>Break (min)</label><input type="number" name="brk" min="0" value="${s ? Math.round((s.breakSec || 0) / 60) : 0}"></div></div>
+    <label>Date</label><input type="date" name="date" value="${ik(st)}" required>
+    <div class="row"><div><label>Start</label><input type="time" name="start" value="${wallHM(st)}" required></div><div><label>End</label><input type="time" name="end" value="${wallHM(en)}" required></div><div><label>Break (min)</label><input type="number" name="brk" min="0" value="${s ? Math.round((s.breakSec || 0) / 60) : 0}"></div></div>
     ${!s ? `<div class="row"><div><label>Duration (min)</label><input type="number" name="durm" min="1" value="${Math.max(1, Math.round((en - st) / 6e4))}"></div></div>` : ''}
     ${!s ? `<div class="row wrap gap small">Quick (ending now): ${q.map(m => `<button type="button" class="chip" data-dact="quick" data-m="${m}">${m}m</button>`).join('')}</div>` : ''}
     <label>Note</label><input name="note" value="${esc(s?.note || '')}">
@@ -473,12 +484,12 @@ function editSession(s, preset = {}) {
     <div class="row">${s ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}${!s ? '<button type="button" class="link" data-dact="toTimer">Start timer instead</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
   async (v, f) => {
     if (v === 'del') { const r = await api('/api/sessions/' + s.id, 'DELETE'); await refresh(); return undoToast('Session deleted', [r.removed]); }
-    const a = new Date(f.date.value + 'T' + f.start.value), b = new Date(f.date.value + 'T' + f.end.value); if (b <= a) b.setDate(b.getDate() + 1);
+    const a = wallToUtc(f.date.value, f.start.value); let b = wallToUtc(f.date.value, f.end.value); if (b <= a) b = wallToUtc(dk(addD(k2d(f.date.value), 1)), f.end.value);
     const body = { subject: f.subject.value, activity: f.activity.value, note: f.note.value, start: a.toISOString(), end: b.toISOString(), breakSec: (+f.brk.value || 0) * 60, focus: +f.focus.value || null, progress: +f.progress.value || null };
     if (!s) localStorage.activity = body.activity; await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); if (!s) track('study_session_log', { duration_min: Math.round(dur(body) / 60), subject: subjParam(body.subject), source: 'manual' }); toast('Saved'); refresh(); checkAchievements();
   });
 }
-dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), st = new Date(+e - b.dataset.m * 60e3); f.date.value = dk(st); f.start.value = st.toTimeString().slice(0, 5); f.end.value = e.toTimeString().slice(0, 5); };
+dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), st = new Date(+e - b.dataset.m * 60e3); f.date.value = ik(st); f.start.value = wallHM(st); f.end.value = wallHM(e); };
 dialog.acts.toTimer = () => { $('dlg').close('cancel'); go('timer'); };
 const _quick = dialog.acts.quick; dialog.acts.quick = b => { _quick(b); const f = $('dlgForm'); if (f.durm) f.durm.value = b.dataset.m; };
 
@@ -499,7 +510,7 @@ VIEWS.cal = () => {
 let calChanged = false;
 let calPending = null;
 dialog.acts.calTk = b => { const row = b.closest('.todo-it'); row?.classList.toggle('done', b.checked); calChanged = true; calPending = Promise.all([calPending, api('/api/tasks/' + b.dataset.id, 'PUT', { done: b.checked })]).catch(e => toast(e.message)); };
-ACT.calNav = b => { const d = +b.dataset.d; if (!d) UI.calMonth = dk(new Date()).slice(0, 7); else { const [y, m] = UI.calMonth.split('-').map(Number); UI.calMonth = dk(new Date(y, m - 1 + d, 1)).slice(0, 7); } render(); };
+ACT.calNav = b => { const d = +b.dataset.d; if (!d) UI.calMonth = ik(Date.now()).slice(0, 7); else { const [y, m] = UI.calMonth.split('-').map(Number); UI.calMonth = dk(new Date(y, m - 1 + d, 1)).slice(0, 7); } render(); };
 ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventListener('close', () => { if (calChanged) Promise.resolve(calPending).then(refresh); }, { once: true })); const k = b.dataset.k, list = S.sessions.filter(s => dayKey(s.start) === k).sort((a, c) => a.start.localeCompare(c.start));
   dialog(`<h3>${fmtDate(k2d(k), { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
     <label>Planned study time (hours), overrides the daily goal for this day</label><input type="number" name="plan" min="0" max="24" step="0.25" value="${S.plan[k] != null ? S.plan[k] / 60 : ''}" placeholder="default ${fmtH(ST.goals.day.goal)}">
@@ -509,7 +520,7 @@ ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventLi
       <div class="cal-add"><input name="tdText" placeholder="Add a to-do for this day..." maxlength="200" aria-label="New to-do"><select name="tdSubj" aria-label="Subject">${opt(S.subjects, '', 'Subject')}</select><button class="btn primary" value="addTodo">+ Add to-do</button></div></div>
     <div class="row"><button class="btn" value="addPast">+ Add session</button><span class="sp"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save plan</button></div>`,
   async (v, f) => { if (v === 'addTodo') { const t = f.tdText.value.trim(); if (t) { await api('/api/tasks', 'POST', { title: t, due: k, subject: f.tdSubj.value }); track('todo_created', { source: 'calendar' }); toast('To-do added'); } await refresh(); return ACT.calDay(b); }
-    if (v === 'addPast') { const d = k2d(k); d.setHours(9); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
+    if (v === 'addPast') { const d = wallToUtc(k, '09:00'); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
     await api('/api/plan', 'POST', { date: k, minutes: f.plan.value === '' ? null : Math.round(+f.plan.value * 60) }); refresh(); }); };
 
 // ================= STATS / DATA ROOM =================
@@ -738,7 +749,7 @@ async function refRewards() { const r = await api('/api/referral').catch(() => n
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = document.documentElement.dataset.theme, rf = await api('/api/referral').catch(() => null);
   const af = await api('/api/affiliates/me').catch(() => null);
-  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
+  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button></div>
     <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
@@ -1022,6 +1033,7 @@ ACT.tplSwitch = b => { const t = TEMPLATES.get(b.dataset.t); if (!t || t.id === 
   dialog(`<h3>Switch to ${esc(t.name)}?</h3><p class="muted small">New subjects</p><p>${t.subjects.length ? t.subjects.map(esc).join(', ') : 'None yet. Add your own in Settings.'}</p><p class="muted small">Subjects and activities you have logged time on are kept. Past sessions are not changed.</p><div class="row"><span class="sp"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok">Switch</button></div>`,
     async () => { await api('/api/template', 'POST', { template: t.id }); track('template_switch', { template: t.id }); refresh(); }); };
 ACT.actRename = b => { const a = b.dataset.a, n = prompt('Rename activity (past sessions are renamed too)', a); if (n && n.trim() && n.trim() !== a) api('/api/activities', 'PUT', { name: a, rename: n.trim() }).then(refresh).catch(e => toast(e.message)); };
+ACT.saveTz = async b => { const z = b.dataset.z || $('sTz').value; await api('/api/settings', 'POST', { timezone: z }); track('timezone_set', { timezone: z }); toast('Saved'); refresh(); };
 ACT.addAct = async () => { const n = $('newAct').value.trim(); if (n) { await api('/api/activities', 'POST', { name: n }); refresh(); } };
 ACT.actDel = async b => { await api('/api/activities', 'DELETE', { name: b.dataset.a }); refresh(); };
 function achNotifRow() { const sec = window.isSecureContext, has = 'Notification' in window, perm = has ? Notification.permission : 'unsupported';
@@ -1035,8 +1047,8 @@ function achNotifRow() { const sec = window.isSecureContext, has = 'Notification
 ACT.achNotif = b => { localStorage.achNotif = b.checked ? 'on' : 'off'; render(); };
 ACT.notifPerm = async () => { if (!('Notification' in window)) return toast('Notifications are not supported in this browser'); if (!window.isSecureContext) return toast('Notifications need HTTPS (see README: Tailscale HTTPS)'); await Notification.requestPermission(); render(); };
 ACT.saveRem = () => { localStorage.remindAt = $('remT').value; toast($('remT').value ? 'Reminder set' : 'Reminder off'); };
-function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.active) return; const now = new Date(), [h, m] = t.split(':').map(Number);
-  if (now.getHours() * 60 + now.getMinutes() < h * 60 + m || localStorage.remindedOn === dk(now) || ST.today > 0) return; localStorage.remindedOn = dk(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
+function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.active) return; const now = new Date(), [h, m] = t.split(':').map(Number), np = TZ.parts(now, utz());
+  if (np.h * 60 + np.mi < h * 60 + m || localStorage.remindedOn === ik(now) || ST.today > 0) return; localStorage.remindedOn = ik(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
 ACT.saveBusy = async () => { await api('/api/settings', 'POST', { busyIp: $('sBip').value, busyToken: $('sBtok').value }); toast('Busy Bar saved'); refresh(); };
 ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); toast(r.ok ? 'Sent! Check your Busy Bar.' : 'Could not reach the Busy Bar'); };
 ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund, and lifetime access isn't refundable. This can't be undone.</p>
@@ -1160,7 +1172,7 @@ addEventListener('resize', () => { if (document.querySelector('.ach-cats')) achI
 // ---------- study-mix wallpaper ----------
 const WIN_LBL = { day: 'today', week: 'this week', month: 'this month', all: 'across all time' }, WIN_CHIP = { day: 'your day', week: 'your week', month: 'your month', all: 'all time' };
 const bgSet = () => ({ mode: 'auto', window: 'week', motion: true, ...(S?.settings.background || {}) });
-function currentMix() { const b = bgSet(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: +S?.settings.dayStartHour || 0 }); }
+function currentMix() { const b = bgSet(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: +S?.settings.dayStartHour || 0, tz: utz() }); }
 function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.StudyMix) return; const b = bgSet(), dots = [...wp.children];
   let list = [];
   if (b.mode === 'auto') list = StudyMix.blobs(currentMix().parts, color);

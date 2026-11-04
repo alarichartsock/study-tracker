@@ -36,7 +36,8 @@ test('pace & forecast', () => {
   assert.equal(a.pace(0, 3600, '2026-11-01', '2026-11-10', now).daysLeft, 10);
 });
 test('goalProgress: weekend goal, weekly/monthly/term, per-subject, planned day', () => {
-  const ud = blankUserData(); ud.settings.goals = { dailyMin: 300, weekendDailyMin: 120, weeklyMin: 1200, monthlyMin: 5000, termMin: 20000 };
+  const ud = blankUserData(); ud.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; // test dates are process-local
+  ud.settings.goals = { dailyMin: 300, weekendDailyMin: 120, weeklyMin: 1200, monthlyMin: 5000, termMin: 20000 };
   ud.settings.term = { start: '2026-09-01', end: '2026-12-31' }; ud.subjectMeta = { CARS: { weeklyGoalMin: 300 } };
   ud.sessions = [S(10, 22, 9, 60), S(10, 20, 9, 60, 'Bio/Biochem')];
   const sat = a.goalProgress(ud, new Date(2026, 9, 24, 12)); assert.equal(sat.day.goal, 120 * 60);

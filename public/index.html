@@ -98,6 +98,7 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
     <input id="aEmail" class="reg-only" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="Email" aria-label="Email" maxlength="254">
     <input id="aPass" type="password" autocomplete="current-password" placeholder="Password" minlength="8" required>
     <input id="aBirth" class="reg-only" inputmode="numeric" maxlength="4" autocomplete="bday-year" placeholder="Birth year (YYYY)" aria-label="Birth year">
+    <div class="tpl-pick reg-only"><label for="aTz">Time zone</label><select id="aTz" aria-label="Time zone"></select></div>
     <div class="tpl-pick reg-only" id="aTplBox"><label for="aTpl">What are you studying for?</label><select id="aTpl" aria-label="Study template"></select>
       <details id="aTplMore"><summary>Customize subjects and activities</summary><label for="aSubj">Subjects (one per line)</label><textarea id="aSubj" rows="4" maxlength="2000"></textarea><label for="aActs">Activities (one per line)</label><textarea id="aActs" rows="4" maxlength="2000"></textarea><p class="muted small">You can change these any time in Settings.</p></details></div>
     <label class="agree reg-only"><input type="checkbox" id="aAgree"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and acknowledge the <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
@@ -121,5 +122,5 @@ document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(pre
 
 <dialog id="dlg"><form method="dialog" class="dlg" id="dlgForm"></form></dialog>
 <div id="toast" class="glass"><span id="toastMsg"></span><button class="link" id="toastAct"></button></div>
-<script src="/mix.js"></script><script src="/mcat.js"></script><script src="/templates.js"></script><script src="/trophy-spec.js"></script><script src="/trophy-tier.js"></script><script src="/app.js"></script><script src="/consent.js"></script>
+<script src="/tz.js"></script><script src="/mix.js"></script><script src="/mcat.js"></script><script src="/templates.js"></script><script src="/trophy-spec.js"></script><script src="/trophy-tier.js"></script><script src="/app.js"></script><script src="/consent.js"></script>
 </body></html>
