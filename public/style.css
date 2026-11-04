@@ -623,3 +623,6 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .lt-days{margin-top:10px}.lt-days summary{cursor:pointer;font-weight:600;margin:4px 0}
 .log-pager{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 8px}.log-pager .pg-nums{display:flex;flex-wrap:wrap;gap:4px;align-items:center}.log-pager .btn{min-width:34px}.log-pager .btn[disabled]{opacity:.45;cursor:default}.log-pager .pg-gap{padding:0 2px;color:var(--muted)}.log-pager select{padding:2px 4px;margin-left:4px}.log-pager .pg-size{white-space:nowrap;display:inline-flex;align-items:center}
 @media (max-width:600px){.log-pager .pg-far{display:none}.log-pager .pg-info{order:9;flex-basis:100%}.log-pager .pg-size{order:8}.log-pager .sp{display:none}}
+
+.tpl-pick{display:flex;flex-direction:column;gap:6px;text-align:left}.tpl-pick label{font-size:13px;color:var(--muted)}.tpl-pick textarea{width:100%;resize:vertical;font:inherit}.tpl-pick summary{cursor:pointer;font-size:13px;color:var(--acc)}.tpl-pick details[open]{display:flex;flex-direction:column;gap:6px}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.tpl-grid .chip.on{outline:2px solid var(--acc)}

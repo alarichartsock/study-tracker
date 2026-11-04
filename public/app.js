@@ -106,6 +106,11 @@ async function boot() {
 }
 // clickwrap: account creation stays disabled until the box is checked and a birth year is entered
 function syncAgree() { $('aSubmit').disabled = false; if (authMode !== 'login' && $('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())) $('aErr').textContent = ''; }
+// exam template picker (signup): fills the editable subject/activity lists; Custom starts empty
+const tplLines = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
+function tplFill() { const t = TEMPLATES.get($('aTpl').value) || TEMPLATES.LIST[0]; $('aSubj').value = t.subjects.join('\n'); $('aActs').value = t.activities.join('\n'); $('aSubj').placeholder = 'e.g. Algebra'; if (t.id === 'custom') $('aTplMore').open = true; }
+$('aTpl').innerHTML = TEMPLATES.LIST.map(t => `<option value="${t.id}">${t.name}</option>`).join(''); $('aTpl').onchange = tplFill; tplFill();
+const tplBody = () => ({ template: $('aTpl').value, subjects: tplLines('aSubj'), activities: tplLines('aActs') });
 $('aAgree').onchange = syncAgree; $('aBirth').oninput = syncAgree;
 // blocking re-acceptance when the Terms version changes
 function termsGate(t) {
@@ -212,9 +217,9 @@ $('aBack').onclick = () => { landingDone = false; authMode = 'login'; showAuth()
 $('aToggle').onclick = e => { e.preventDefault(); authMode = authMode === 'login' ? 'register' : 'login'; showAuth(); };
 $('authForm').onsubmit = async e => {
   e.preventDefault(); $('aErr').textContent = '';
-  if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (authMode !== 'oauth' && !EMAIL_RE.test($('aEmail').value.trim())) { $('aErr').textContent = 'Enter a valid email address'; $('aEmail').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
+  if (authMode !== 'login') { if (!/^\d{4}$/.test($('aBirth').value.trim())) { $('aErr').textContent = 'Enter your birth year (YYYY).'; $('aBirth').focus(); return; } if (authMode !== 'oauth' && !EMAIL_RE.test($('aEmail').value.trim())) { $('aErr').textContent = 'Enter a valid email address'; $('aEmail').focus(); return; } if (!tplLines('aSubj').length) { $('aErr').textContent = 'Add at least one subject'; $('aTplMore').open = true; $('aSubj').focus(); return; } if (!$('aAgree').checked) { $('aErr').textContent = 'Please check the box to agree to the Terms and Privacy Policy.'; $('aAgree').focus(); return; } }
   try { const cred = { username: $('aUser').value.trim(), password: $('aPass').value }, legal = { agree: $('aAgree').checked, birthYear: Number($('aBirth').value.trim()) };
-    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ref: refCode(), ...signupMeta() } : { ...cred, email: $('aEmail').value.trim(), ...legal, ref: refCode(), ...signupMeta() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(r.user?.id); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'google') : 'email'; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: r.trialDays || 30 }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'email' }); sessionStorage.shOauth = ''; boot(); }
+    const r = await api(authMode === 'login' ? '/api/login' : authMode === 'oauth' ? '/api/oauth/complete' : '/api/register', 'POST', authMode === 'login' ? cred : authMode === 'oauth' ? { ...legal, ...tplBody(), ref: refCode(), ...signupMeta() } : { ...cred, email: $('aEmail').value.trim(), ...legal, ...tplBody(), ref: refCode(), ...signupMeta() }); $('aPass').value = ''; if (r.onboarding) { localStorage.onboard = '1'; window.SHConsent?.signup(r.user?.id); const m = authMode === 'oauth' ? (sessionStorage.shOauth || 'google') : 'email'; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: r.trialDays || 30 }); if (r.referral) track('referral_signup', { method: m }); localStorage.removeItem('shRef'); } else if (authMode === 'login') track('login', { method: 'email' }); sessionStorage.shOauth = ''; boot(); }
   catch (err) { $('aErr').textContent = err.message; }
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
@@ -237,7 +242,9 @@ function go(v) { if ((v === 'users' || v === 'logev' || v === 'loglive') && !(ME
   if (v === 'loglive' && location.hash !== '#/admin/live') history.replaceState(history.state, '', '#/admin/live');
   if (v !== 'logev' && v !== 'loglive' && /^#\/admin\/(logs\/|live)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
   render(); if (!(v === 'users' && UI.usersBack)) window.scrollTo(0, 0); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); }
+const tplOf = () => TEMPLATES.get(S && S.template) || TEMPLATES.get('mcat'), isMcat = () => tplOf().id === 'mcat';
+function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'); if (b) b.classList.toggle('hid', !isMcat()); }
+async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); syncTplNav(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -299,7 +306,7 @@ function tick() {
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
   $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
-  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : 'MCAT Tracker';
+  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : 'StudyHertz';
 }
 setInterval(() => { tick(); checkReminder(); }, 1000);
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
@@ -373,7 +380,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
     ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
-  ${pxHomeCard()}
+  ${isMcat() ? pxHomeCard() : ''}
   ${todoCard()}
   <div class="grid2">
     <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
@@ -529,7 +536,7 @@ VIEWS.stats = async () => {
   const subjects = Object.keys(c.bySubject), acts = Object.keys(c.matrix.activitySubject), weeks = [...new Set(Object.values(c.matrix.subjectWeek).flatMap(Object.keys))].sort().slice(-12);
   const cell = v => v ? `<td class="num" style="background:color-mix(in srgb,var(--acc) ${Math.round(Math.min(70, v / Math.max(1, c.total) * 300))}%,transparent)">${fmtH(v)}</td>` : '<td class="num muted">–</td>';
   const range = c.from ? `${fmtDate(k2d(c.from), { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(k2d(c.to), { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No data yet';
-  return `${mixChip()}${(S.practice || []).length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(S.practice).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(S.practice).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  return `${mixChip()}${isMcat() && (S.practice || []).length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(S.practice).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(S.practice).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <select data-chg="sSubj" style="width:auto">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
     ${UI.range === 'custom' ? `<div class="row"><input type="date" value="${from}" data-chg="cRange" data-k="cFrom"><input type="date" value="${to}" data-chg="cRange" data-k="cTo"></div>` : ''}
     <p class="muted small" style="margin:8px 0 0">${range}${R.previous ? ` · previous period: ${fmtH(R.previous.total)} ${chg == null ? '' : `<b style="color:${chg >= 0 ? 'var(--ok)' : 'var(--danger)'}">${chg >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(chg * 100))}%</b>`}` : ''}</p></div>
@@ -567,7 +574,7 @@ ACT.taskView = b => { UI.taskView = b.dataset.v; render(); };
 ACT.taskAdd = async () => { const t = $('nTask').value.trim(); if (!t) return; await api('/api/tasks', 'POST', { title: t, due: $('nDue').value, priority: $('nPri').value, subject: $('nTS').value }); track('todo_created', { source: 'plan' }); refresh(); };
 ACT.taskDel = async b => { await api('/api/tasks/' + b.dataset.id, 'DELETE'); refresh(); };
 ACT.examEdit = b => { const e = b.dataset.id ? S.exams.find(x => x.id === +b.dataset.id) : null;
-  dialog(`<h3>${e ? 'Edit exam' : 'Add exam'}</h3><label>Name</label><input name="name" value="${esc(e?.name || 'MCAT')}" required><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ''}" required></div><div><label>Score (472\u2013528)</label><input type="number" name="grade" min="472" max="528" step="1" inputmode="numeric" value="${e ? e.grade ?? '' : 500}"></div></div><label>Notes</label><input name="notes" value="${esc(e?.notes || '')}">
+  dialog(`<h3>${e ? 'Edit exam' : 'Add exam'}</h3><label>Name</label><input name="name" value="${esc(e?.name || tplOf().exam)}" required><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ''}" required></div><div><label>${tplOf().score ? 'Score (' + tplOf().score[0] + '\u2013' + tplOf().score[1] + ')' : 'Score'}</label><input type="number" name="grade" min="${TEMPLATES.scoreRange(tplOf().id)[0]}" max="${TEMPLATES.scoreRange(tplOf().id)[1]}" step="1" inputmode="numeric" value="${e ? e.grade ?? '' : isMcat() ? 500 : ''}"></div></div><label>Notes</label><input name="notes" value="${esc(e?.notes || '')}">
     <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
   async (v, f) => { if (v === 'del') await api('/api/exams/' + e.id, 'DELETE'); else { await api(e ? '/api/exams/' + e.id : '/api/exams', e ? 'PUT' : 'POST', { name: f.name.value, date: f.date.value, grade: f.grade.value, notes: f.notes.value }); if (!e) track('exam_created', { is_mcat: /mcat/i.test(f.name.value) }); } refresh(); }); };
 
@@ -735,13 +742,14 @@ VIEWS.set = async () => {
     <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
-    <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="MCAT prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
+    <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveGoals">Save goals</button></div></div>
+  <div class="card"><h3>Study template</h3><p>Current template: <b>${esc(tplOf().name)}</b></p><p class="muted small">Switching sets that test's subjects and activities. Ones you have logged time on are kept, and past sessions never change.</p><div class="tpl-grid">${TEMPLATES.LIST.map(t => `<button class="chip ${t.id === tplOf().id ? 'on' : ''}" style="--c:var(--acc)" data-act="tplSwitch" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div></div>
   <div class="card"><h3>Subjects</h3>${S.subjects.map(n => { const m = S.subjectMeta[n] || {}; return `<div class="subj-row" data-subj="${esc(n)}"><input type="color" value="${m.color || '#868e96'}" style="width:40px;padding:2px" data-chg="subjColor"><span>${esc(n)}</span>
       <input type="number" min="0" placeholder="weekly goal h" value="${m.weeklyGoalMin ? m.weeklyGoalMin / 60 : ''}" style="width:120px" data-chg="subjGoal" title="Weekly goal (hours)"><button class="icon" data-act="subjRename" title="Rename">✎</button><button class="icon" data-act="subjDel" title="Remove">✕</button></div>`; }).join('')}
     <div class="row"><input id="newSubj" placeholder="Add custom subject"><button class="btn" data-act="addSubj">Add</button></div></div>
-  <div class="card"><h3>Activities (study types)</h3><div class="row wrap gap">${S.activities.map(a => `<span class="pill">${esc(a)} <button class="link" data-act="actDel" data-a="${esc(a)}">✕</button></span>`).join('')}</div>
-    <div class="row"><input id="newAct" placeholder="e.g. UWorld, Anki, AAMC section bank"><button class="btn" data-act="addAct">Add</button></div></div>
+  <div class="card"><h3>Activities (study types)</h3><div class="row wrap gap">${S.activities.map(a => `<span class="pill">${esc(a)} <button class="link" data-act="actRename" data-a="${esc(a)}" title="Rename">✎</button> <button class="link" data-act="actDel" data-a="${esc(a)}">✕</button></span>`).join('')}</div>
+    <div class="row"><input id="newAct" placeholder="${isMcat() ? 'e.g. UWorld, Anki, AAMC section bank' : 'e.g. Q-bank, flashcards, timed section'}"><button class="btn" data-act="addAct">Add</button></div></div>
   <div class="card"><h3>Timer</h3><div class="grid3"><div><label>Focus (min)</label><input type="number" id="pF" value="${pm.focusMin}"></div><div><label>Short break (min)</label><input type="number" id="pS" value="${pm.shortMin}"></div><div><label>Long break (min)</label><input type="number" id="pL" value="${pm.longMin}"></div><div><label>Cycles before long break</label><input type="number" id="pC" value="${pm.cycles}"></div><div><label>Quick durations (min, comma)</label><input id="qD" value="${s.quickDurations.join(', ')}"></div><div><label>&nbsp;</label><label class="switch"><input type="checkbox" id="pA" ${pm.autoStart ? 'checked' : ''}> Auto-start next focus</label></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveTimer">Save timer</button></div></div>
   <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label><span class="medal m-${m}"></span> ${m} (h/day)</label><input type="number" step="0.25" min="0" id="md_${m}" value="${md[m] / 60}"></div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
@@ -1010,6 +1018,10 @@ ACT.subjGoal = async b => { if (+b.value > 0) track('goal_created', { goal_type:
 ACT.subjRename = async b => { const n = subjOf(b), nn = prompt('Rename subject (past sessions are renamed too):', n); if (nn && nn.trim() && nn !== n) { await api('/api/subjects', 'PUT', { name: n, rename: nn.trim() }); if (sel === n) sel = nn.trim(); refresh(); } };
 ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); refresh(); } };
 ACT.addSubj = async () => { const n = $('newSubj').value.trim(); if (n) { await api('/api/subjects', 'POST', { name: n }); refresh(); } };
+ACT.tplSwitch = b => { const t = TEMPLATES.get(b.dataset.t); if (!t || t.id === tplOf().id) return;
+  dialog(`<h3>Switch to ${esc(t.name)}?</h3><p class="muted small">New subjects</p><p>${t.subjects.length ? t.subjects.map(esc).join(', ') : 'None yet. Add your own in Settings.'}</p><p class="muted small">Subjects and activities you have logged time on are kept. Past sessions are not changed.</p><div class="row"><span class="sp"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok">Switch</button></div>`,
+    async () => { await api('/api/template', 'POST', { template: t.id }); track('template_switch', { template: t.id }); refresh(); }); };
+ACT.actRename = b => { const a = b.dataset.a, n = prompt('Rename activity (past sessions are renamed too)', a); if (n && n.trim() && n.trim() !== a) api('/api/activities', 'PUT', { name: a, rename: n.trim() }).then(refresh).catch(e => toast(e.message)); };
 ACT.addAct = async () => { const n = $('newAct').value.trim(); if (n) { await api('/api/activities', 'POST', { name: n }); refresh(); } };
 ACT.actDel = async b => { await api('/api/activities', 'DELETE', { name: b.dataset.a }); refresh(); };
 function achNotifRow() { const sec = window.isSecureContext, has = 'Notification' in window, perm = has ? Notification.permission : 'unsupported';
@@ -1065,17 +1077,19 @@ const TOUR = [
   { v: 'timer', sel: '.mode-tabs', t: 'Timer modes', b: 'Stopwatch for open-ended study, Pomodoro for focus/break cycles, or Countdown for a fixed block. Fullscreen hides everything else.' },
   { v: 'timer', sel: '.chips', t: 'Subjects and colors', b: 'Pick what you are studying before you start. Each subject has its own color, which tints the accent and the background while you work.' },
   { v: 'dash', sel: 'card:Goals', t: 'Dashboard: goals', b: 'Daily, weekly, monthly and term goals with rings and pace, so you can see at a glance whether you are on track.' },
-  { v: 'dash', sel: 'card:MCAT practice exams', t: 'Dashboard: MCAT card', b: 'Your latest practice-exam score and percentile, with a shortcut to log a new full-length.' },
+  { mcat: true, v: 'dash', sel: 'card:MCAT practice exams', t: 'Dashboard: MCAT card', b: 'Your latest practice-exam score and percentile, with a shortcut to log a new full-length.' },
   { v: 'dash', sel: '.todo-card', t: 'Dashboard: to-dos', b: 'Add and check off to-dos right here; the card grows with your list.' },
   { v: 'stats', sel: '.cum-wrap', alt: '.hcols', t: 'Stats and charts', b: 'Totals, records, weekday and time-of-day charts, and your study "share price". Hover or tap any bar or line for exact numbers.' },
   { v: 'stats', sel: '.mix-chip', t: 'Background gradient', b: 'This chip shows the subject mix behind the background gradient. Tap it to see how it is calculated.' },
-  { v: 'mcat', sel: 'card:Practice exams', t: 'MCAT practice exams', b: 'Log full-length scores by section and watch your total and percentiles trend toward your goal.' },
+  { mcat: true, v: 'mcat', sel: 'card:Practice exams', t: 'MCAT practice exams', b: 'Log full-length scores by section and watch your total and percentiles trend toward your goal.' },
   { v: 'plan', sel: 'card:Exams', t: 'Exams & to-dos', b: 'Upcoming exams with countdowns, plus a full to-do and study-plan list with due dates and priorities.' },
   { v: 'cal', sel: '.calgrid', t: 'Calendar', b: 'Each day shows study time and to-dos. Tap a day to plan hours, add a to-do, or log a past session.' },
   { v: 'trophy', sel: '.ach-cats', t: 'Trophies', b: 'Earn 3D trophies for streaks, totals, focus and more. Browse by category, and tap any trophy to spin it.' },
   { v: 'set', sel: 'card:Appearance', sm: '.t3dq', t: 'Make it yours', b: 'Theme, accent color and 3D trophy quality live in Settings, along with background options, goals, subjects and notifications.' },
   { setup: true, t: 'Optional: set your targets', b: 'Add a weekly goal and your MCAT date now, or skip and do it later in Settings.' }
 ];
+// Non-MCAT templates skip the MCAT practice-exam steps and ask for their own test date.
+const tourSteps = () => isMcat() ? TOUR : TOUR.filter(s => !s.mcat).map(s => s.setup ? { ...s, b: 'Add a weekly goal and your test date now, or skip and do it later in Settings.' } : s);
 let tourS = null;
 const tourSleep = ms => new Promise(r => setTimeout(r, ms));
 function tourFind(sel) { if (!sel) return null; if (sel.startsWith('card:')) { const k = sel.slice(5); return [...document.querySelectorAll('#main .card')].find(c => (c.querySelector('h3')?.textContent || '').trim().startsWith(k)) || null; } return document.querySelector(sel); }
@@ -1084,13 +1098,13 @@ async function tour() { if (tourS || !ME) return; document.querySelectorAll('.ac
   el.innerHTML = '<div class="tour-hole none"></div><div class="tour-card" tabindex="-1"></div>'; document.body.appendChild(el);
   tourS = { i: 0, back: view, el, tgt: null }; el.addEventListener('click', tourClick); document.addEventListener('keydown', tourKey); addEventListener('resize', tourPlace); addEventListener('scroll', tourPlace, true); addEventListener('scrollend', tourPlace, true);
   await tourShow(0); }
-async function tourShow(i) { const s = TOUR[i], S0 = tourS; if (!S0) return; S0.i = i; S0.el.classList.add('busy');
+async function tourShow(i) { const s = tourSteps()[i], S0 = tourS; if (!S0) return; S0.i = i; S0.el.classList.add('busy');
   if (s.v && view !== s.v) go(s.v);
   const sel = s.sm && innerWidth < 600 && innerHeight < 720 ? s.sm : s.sel; let tgt = null; for (let k = 0; k < 30 && sel; k++) { tgt = tourFind(sel) || (s.alt && tourFind(s.alt)); if (tgt) break; await tourSleep(100); }
   if (tourS !== S0) return; if (tgt) { const bh = reduceMotion() ? 'auto' : 'smooth'; if (innerWidth < 600 && getComputedStyle(tgt).position !== 'fixed') window.scrollBy({ top: tgt.getBoundingClientRect().top - 72, behavior: bh }); else tgt.scrollIntoView({ block: 'center', behavior: bh }); await tourSleep(reduceMotion() ? 50 : 450); }
-  S0.tgt = tgt; const last = i === TOUR.length - 1, c = S0.el.querySelector('.tour-card'), g = S.settings.goals || {}, mc = (S.exams || []).find(e => /mcat/i.test(e.name) && e.grade == null);
-  c.innerHTML = '<div class="tour-dots" aria-hidden="true">' + TOUR.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('') + '</div><small class="muted">Step ' + (i + 1) + ' of ' + TOUR.length + '</small><h4>' + esc(s.t) + '</h4><p>' + esc(s.b) + '</p>' +
-    (s.setup ? '<div class="tour-setup"><label>Weekly goal (hours)</label><input type="number" min="0" step="0.5" id="tourWk" value="' + (g.weeklyMin ? g.weeklyMin / 60 : '') + '" placeholder="e.g. 25"><label>MCAT test date</label><input type="date" id="tourMcat" value="' + (mc ? mc.date : '') + '"></div>' : '') +
+  S0.tgt = tgt; const last = i === tourSteps().length - 1, c = S0.el.querySelector('.tour-card'), g = S.settings.goals || {}, mc = (S.exams || []).find(e => (isMcat() ? /mcat/i.test(e.name) : e.name === tplOf().exam) && e.grade == null);
+  c.innerHTML = '<div class="tour-dots" aria-hidden="true">' + tourSteps().map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('') + '</div><small class="muted">Step ' + (i + 1) + ' of ' + tourSteps().length + '</small><h4>' + esc(s.t) + '</h4><p>' + esc(s.b) + '</p>' +
+    (s.setup ? '<div class="tour-setup"><label>Weekly goal (hours)</label><input type="number" min="0" step="0.5" id="tourWk" value="' + (g.weeklyMin ? g.weeklyMin / 60 : '') + '" placeholder="e.g. 25"><label>' + (isMcat() ? 'MCAT test date' : 'Test date') + '</label><input type="date" id="tourMcat" value="' + (mc ? mc.date : '') + '"></div>' : '') +
     '<div class="row tour-btns"><button class="btn link" data-tour="skip">' + (s.setup ? 'Skip setup' : 'Skip tour') + '</button><span class="sp"></span>' + (i ? '<button class="btn" data-tour="back">Back</button>' : '') + '<button class="btn primary" data-tour="next">' + (s.setup ? 'Save & finish' : last ? 'Finish' : i ? 'Next' : 'Start tour') + '</button></div>';
   tourPlace(); setTimeout(tourPlace, 300); setTimeout(tourPlace, 900); if (S0.el.classList.contains('init')) { void S0.el.offsetWidth; S0.el.classList.remove('init'); } S0.el.classList.remove('busy'); c.focus({ preventScroll: true }); }
 function tourPlace() { if (!tourS) return; const { el, tgt } = tourS, h = el.querySelector('.tour-hole'), c = el.querySelector('.tour-card'), vw = document.documentElement.clientWidth, vh = innerHeight, m = 12;
@@ -1111,12 +1125,12 @@ async function tourEnd(saveSetup) { const S0 = tourS; if (!S0) return; tourS = n
   if (saveSetup) { const wk = $('tourWk')?.value, d = $('tourMcat')?.value;
     track('tour_complete', { set_weekly_goal: wk !== '' && wk != null, set_mcat_date: !!d });
     try { if (wk !== '' && wk != null && +wk >= 0) { await api('/api/settings', 'POST', { goals: { weeklyMin: Math.round(+wk * 60) } }); track('goal_created', { goal_type: 'weekly_onboarding' }); }
-      if (d) { const mc = (S.exams || []).find(e => /mcat/i.test(e.name) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : 'MCAT', date: d }); } } catch (e) { toast(e.message); } }
+      if (d) { const mc = (S.exams || []).find(e => (isMcat() ? /mcat/i.test(e.name) : e.name === tplOf().exam) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : tplOf().exam, date: d }); } } catch (e) { toast(e.message); } }
   S0.el.classList.add('out'); setTimeout(() => S0.el.remove(), reduceMotion() ? 0 : 200);
   document.removeEventListener('keydown', tourKey); removeEventListener('resize', tourPlace); removeEventListener('scroll', tourPlace, true); removeEventListener('scrollend', tourPlace, true);
   api('/api/flags', 'POST', { key: 'onboarded' }).catch(() => {}); await refresh().catch(() => {}); go(S0.back || 'timer'); }
-function tourClick(e) { const b = e.target.closest('[data-tour]'); if (!b || !tourS || tourS.el.classList.contains('busy')) return; const a = b.dataset.tour, i = tourS.i, s = TOUR[i];
-  if (a === 'skip') tourEnd(false); else if (a === 'back') tourShow(Math.max(0, i - 1)); else if (s.setup || i === TOUR.length - 1) tourEnd(!!s.setup); else tourShow(i + 1); }
+function tourClick(e) { const b = e.target.closest('[data-tour]'); if (!b || !tourS || tourS.el.classList.contains('busy')) return; const a = b.dataset.tour, i = tourS.i, s = tourSteps()[i];
+  if (a === 'skip') tourEnd(false); else if (a === 'back') tourShow(Math.max(0, i - 1)); else if (s.setup || i === tourSteps().length - 1) tourEnd(!!s.setup); else tourShow(i + 1); }
 function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDefault(); tourEnd(false); } else if (e.key === 'ArrowRight' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=next]') }); else if (e.key === 'ArrowLeft' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=back]') || document.body }); }
 
 // ---------- periodic refresh ----------

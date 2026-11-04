@@ -5,7 +5,7 @@ const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require(
 const reqlog = require('./lib/reqlog'), usage = require('./lib/usage'), reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
-const { Store, PALETTE } = require('./lib/store');
+const { Store, PALETTE, TEMPLATES } = require('./lib/store');
 const oauthLib = require('./lib/oauth');
 const billing = require('./lib/billing');
 
@@ -29,7 +29,7 @@ const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
-const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
+const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -349,6 +349,15 @@ function createApp(opts = {}) {
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
     return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
+  // Exam templates: set a user's study template. On a fresh account the lists are replaced; on a switch, subjects and
+  // activities that past sessions/tasks still use are kept (appended) so no history is orphaned. Sessions never change.
+  const applyTemplate = (ud, j, { keepUsed = false } = {}) => { const r = TEMPLATES.resolve(j.template, j.subjects, j.activities);
+    let subs = r.subjects, acts = r.activities;
+    if (keepUsed) { const has = (l, n) => l.some(x => x.toLowerCase() === String(n).toLowerCase());
+      for (const n of ud.subjects) if ((ud.sessions.some(x => x.subject === n) || ud.tasks.some(x => x.subject === n)) && !has(subs, n)) subs = [...subs, n];
+      for (const n of ud.activities) if (ud.sessions.some(x => x.activity === n) && !has(acts, n)) acts = [...acts, n]; }
+    const meta = {}; subs.forEach((n, i) => { meta[n] = ud.subjectMeta[n] || { color: PALETTE[i % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; });
+    ud.template = r.id; ud.subjects = subs; ud.subjectMeta = meta; ud.activities = acts; return ud; };
   const ensureActivity = (ud, name) => { if (name && !ud.activities.includes(name)) ud.activities.push(name); };
   const cleanSession = j => {
     const st = new Date(j.start), en = new Date(j.end);
@@ -370,8 +379,8 @@ function createApp(opts = {}) {
   }
   // Exams are MCAT sittings: one combined score (472-528). Legacy subject/weight fields are no longer written or used,
   // but are left in place on existing records (PUT merges), so no data is lost.
-  const cleanExam = (j, old) => { const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
-    let grade = old.grade ?? null; if (j.grade !== undefined) { if (j.grade === '' || j.grade === null) grade = null; else { const g = Number(j.grade); if (!Number.isInteger(g) || g < 472 || g > 528) throw new Error('score must be a whole number from 472 to 528'); grade = g; } }
+  const cleanExam = (j, old, ud) => { const [lo, hi] = TEMPLATES.scoreRange(ud && ud.template); const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
+    let grade = old.grade ?? null; if (j.grade !== undefined) { if (j.grade === '' || j.grade === null) grade = null; else { const g = Number(j.grade); if (!Number.isInteger(g) || g < lo || g > hi) throw new Error(`score must be a whole number from ${lo} to ${hi}`); grade = g; } }
     return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade }; };
   const cleanTask = (j, old) => { const due = j.due !== undefined ? j.due : old.due; if (due && !isDateKey(due)) throw new Error('due must be YYYY-MM-DD');
     const done = j.done !== undefined ? !!j.done : !!old.done;
@@ -446,7 +455,8 @@ function createApp(opts = {}) {
         const em = normEmail(j.email); if (!em) return send(res, 400, { error: 'Email is required' }); if (!validEmail(em)) return send(res, 400, { error: EMAIL_BAD });
         if (store.findUser(j.username)) return send(res, 409, { error: 'Username taken' });
         if (emailTaken(em)) return send(res, 409, { error: EMAIL_TAKEN });
-        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; store.save();
+        let tpl = null; if (j.template !== undefined) { try { tpl = TEMPLATES.resolve(j.template, j.subjects, j.activities); } catch (e) { return send(res, 400, { error: e.message }); } }
+        const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; if (tpl) applyTemplate(store.data(nu.id), j); store.save();
         recordConsent(nu, 'password', req); saveSignupMeta(nu, req, j); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
         return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
@@ -458,8 +468,9 @@ function createApp(opts = {}) {
         if (j.agree !== true) return send(res, 400, { error: 'Please agree to the Terms of Service and Privacy Policy' });
         if (!ageOk(j.birthYear)) { pendingSignups.delete(t); return send(res, 403, { error: AGE_BLOCK }, 'application/json', { 'Set-Cookie': 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0' }); }
         const ip = clientIp(req); if (regLimiter.blocked(ip)) return send(res, 429, { error: 'Too many sign-up attempts. Try again later.' }); regLimiter.fail(ip);
+        if (j.template !== undefined) { try { TEMPLATES.resolve(j.template, j.subjects, j.activities); } catch (e) { return send(res, 400, { error: e.message }); } }
         let r; try { r = oauthAccount(pe.id, { create: true }); } catch (e) { return send(res, 403, { error: e.message }); }
-        pendingSignups.delete(t); recordConsent(r.u, 'oauth:' + pe.id.provider, req); if (r.created) saveSignupMeta(r.u, req, j); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
+        pendingSignups.delete(t); if (r.created && j.template !== undefined) { applyTemplate(store.data(r.u.id), j); store.save(); } recordConsent(r.u, 'oauth:' + pe.id.provider, req); if (r.created) saveSignupMeta(r.u, req, j); const affd = r.created ? aff.attribute(r.u, auth.parseCookies(req.headers.cookie).sh_aff, ip, emailsOf(r.u)) : null; const referred = !affd && r.created && j.ref ? applyReferral(r.u, j.ref) : false;
         return send(res, 200, { user: publicUser(r.u), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(r.u.id), 'ps=; Path=/api/oauth; HttpOnly; Max-Age=0', ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/login' && M === 'POST') {
@@ -581,7 +592,7 @@ function createApp(opts = {}) {
         const d = (j.data || j); const key = s => `${s.start}|${s.end}|${s.subject}`, have = new Set(ud.sessions.map(key)); let added = 0, skipped = 0;
         for (const s of Array.isArray(d.sessions) ? d.sessions : []) { let c; try { c = cleanSession(s); } catch { skipped++; continue; } if (have.has(key(c))) { skipped++; continue; }
           ensureSubject(ud, c.subject); ensureActivity(ud, c.activity); ud.sessions.push({ id: ud.nextId++, ...c, ...(s.extUid ? { extUid: str(s.extUid, 210) } : {}) }); have.add(key(c)); added++; }
-        for (const e of Array.isArray(d.exams) ? d.exams : []) { try { let x; try { x = cleanExam(e, {}); } catch { x = cleanExam({ ...e, grade: null }, {}); } ud.exams.push({ id: ud.nextId++, ...x }); } catch { /* skip */ } }
+        for (const e of Array.isArray(d.exams) ? d.exams : []) { try { let x; try { x = cleanExam(e, {}, ud); } catch { x = cleanExam({ ...e, grade: null }, {}, ud); } ud.exams.push({ id: ud.nextId++, ...x }); } catch { /* skip */ } }
         for (const t of Array.isArray(d.tasks) ? d.tasks : []) { try { ud.tasks.push({ id: ud.nextId++, ...cleanTask(t, {}) }); } catch { /* skip */ } }
         const sum = importDone(before); save(); return send(res, 200, { added, skipped, summary: sum });
       }
@@ -650,11 +661,15 @@ function createApp(opts = {}) {
         save(); return send(res, 200, { subjects: ud.subjects, subjectMeta: ud.subjectMeta });
       }
       if (p === '/api/activities' && M === 'POST') { ensureActivity(ud, str(j.name, 60)); save(); return send(res, 200, ud.activities); }
+      if (p === '/api/activities' && M === 'PUT') { const name = str(j.name, 60), nn = str(j.rename, 60); const i = ud.activities.indexOf(name); if (i < 0) return send(res, 404, { error: 'unknown activity' });
+        if (nn && nn !== name) { if (ud.activities.includes(nn)) return send(res, 409, { error: 'activity exists' }); ud.activities[i] = nn; ud.sessions.forEach(x => { if (x.activity === name) x.activity = nn; }); if (ud.active?.activity === name) ud.active.activity = nn; }
+        save(); return send(res, 200, ud.activities); }
+      if (p === '/api/template' && M === 'POST') { try { applyTemplate(ud, j, { keepUsed: true }); } catch (e) { return send(res, 400, { error: e.message }); } save(); return send(res, 200, { template: ud.template, subjects: ud.subjects, activities: ud.activities }); }
       if (p === '/api/activities' && M === 'DELETE') { ud.activities = ud.activities.filter(a => a !== j.name); save(); return send(res, 200, ud.activities); }
       // ---- planning ----
       if (p === '/api/plan' && M === 'POST') { if (!isDateKey(j.date)) return send(res, 400, { error: 'date required' });
         if (j.minutes === null || j.minutes === '') delete ud.plan[j.date]; else ud.plan[j.date] = Math.round(numIn(j.minutes, 0, 1440)); save(); return send(res, 200, ud.plan); }
-      const r1 = crud(ud, 'exams', p, M, j, cleanExam, res); if (r1 !== false) return r1;
+      const r1 = crud(ud, 'exams', p, M, j, (a, b) => cleanExam(a, b, ud), res); if (r1 !== false) return r1;
       // ---- MCAT practice exams ----
       if (p === '/api/practice' || p.startsWith('/api/practice/')) ud.practice ||= [];
       const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' ? crud(ud, 'practice', p, M, j, MCAT.cleanPractice, res) : false; if (r3 !== false) return r3;
