@@ -97,3 +97,9 @@ test('admin Users rows filter Logs to that user with a removable chip; Details b
   assert.match(js, /ACT\.usrLogs = b => \{[^]*?UI\.logF\.uid = id/); assert.match(js, /User: ' \+ esc\(/); assert.match(js, /ACT\.logUserClear = /);
   assert.match(js, /\$\('logsTop'\)\?\.scrollIntoView/);
 });
+test('dashboard goal rings animate quietly and respect reduced motion', () => {
+  const js = pub('app.js'), css = pub('style.css');
+  assert.match(js, /const GA = /); assert.match(js, /AFTER\.dash = \(\) => \{ GA\.play\(\);/); assert.match(js, /prefers-reduced-motion: reduce/);
+  assert.match(css, /\.goal-ring \.ring-fg\{transition:stroke-dashoffset/); assert.match(css, /html\.tab-hidden \.g-comet\{animation-play-state:paused\}/);
+  assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{[^\n]*\.g-comet\{animation:none/);
+});

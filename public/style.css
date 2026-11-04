@@ -653,3 +653,16 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 /* Scores page: test tabs (template test + custom tests) scroll sideways instead of clipping on phones */
 .px-tests .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none;flex:0 1 auto}.px-tests .tabs::-webkit-scrollbar{display:none}.px-tests .tabs button{white-space:nowrap;flex:0 0 auto}
 @media(max-width:699px){.px-tests{flex-direction:column;align-items:stretch}.px-tests .sp{display:none}.px-tests>.btn{align-self:flex-end}}
+/* Goal rings: quiet load-in, a hairline comet while timing, a drawn check on completion */
+.goal-ring .ring-fg{transition:stroke-dashoffset .9s var(--ease) var(--gd,0ms)}
+.g-comet{transform-origin:100px 100px;animation:g-orbit 9s linear infinite;opacity:0;animation-fill-mode:both}
+.g-comet circle{fill:none;stroke:var(--acc);stroke-width:1.5;stroke-linecap:round;opacity:.85}
+[data-run] .g-comet{opacity:1;transition:opacity .6s var(--ease)}
+@keyframes g-orbit{to{transform:rotate(360deg)}}
+.g-check{position:absolute;right:6%;top:6%;width:22%;height:22%;opacity:0;transform:scale(.8);transition:opacity .4s var(--ease),transform .4s var(--ease)}
+.g-check path{fill:none;stroke:var(--ok);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:22;stroke-dashoffset:0}
+[data-done] .g-check{opacity:1;transform:none}
+.g-new .g-check{transition-delay:calc(var(--gd,0ms) + .75s)}.g-new .g-check path{animation:g-draw .5s var(--ease) calc(var(--gd,0ms) + .8s) both}
+@keyframes g-draw{from{stroke-dashoffset:22}}
+html.tab-hidden .g-comet{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.goal-ring .ring-fg,.g-check,[data-run] .g-comet{transition:none}.g-comet{animation:none;display:none}.g-new .g-check path{animation:none}}

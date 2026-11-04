@@ -62,6 +62,20 @@ function toast(msg, action, fn) {
 }
 const color = name => (S && S.subjectMeta[name] && S.subjectMeta[name].color) || '#868e96';
 const opt = (list, cur, blank) => (blank !== undefined ? `<option value="">${esc(blank)}</option>` : '') + list.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('');
+// Goal rings on the dashboard: ease from the last shown value (0 on first load) to the current one, count the % with it,
+// draw a check once a goal completes, and keep Today's ring live while a timer runs. Reduced motion: values jump, nothing moves.
+const GA = (() => { const last = new Map(), still = () => matchMedia('(prefers-reduced-motion: reduce)').matches, C = 2 * Math.PI * 84, clamp = v => Math.min(1, Math.max(0, v));
+  const set = (el, p) => { const fg = el.querySelector('.ring-fg'); if (fg) fg.style.strokeDashoffset = C * (1 - clamp(p)); };
+  const count = (el, a, b) => { const t = el.querySelector('.g-pct'); if (!t) return; if (still() || Math.round(a * 100) === Math.round(b * 100)) { t.textContent = Math.round(b * 100) + '%'; return; }
+    const t0 = performance.now(), D = 700, e = x => 1 - Math.pow(1 - x, 3); const f = now => { const k = Math.min(1, (now - t0) / D); if (!t.isConnected) return; t.textContent = Math.round((a + (b - a) * e(k)) * 100) + '%'; if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); };
+  return {
+    from: (k, p) => still() ? p : last.has(k) ? last.get(k) : 0,
+    play() { const els = [...document.querySelectorAll('.goal-ring[data-gk]')]; requestAnimationFrame(() => requestAnimationFrame(() => els.forEach((el, i) => { const k = el.dataset.gk, p = +el.dataset.p, a = still() ? p : last.has(k) ? last.get(k) : 0;
+      el.style.setProperty('--gd', i * 70 + 'ms'); set(el, p); count(el, a, p); if (p >= 1 && a < 1 && !still()) el.classList.add('g-new'); last.set(k, p); }))); },
+    live() { const g = UI.gaDay, el = document.querySelector('.goal-ring[data-gk="day"]'); if (!g || !el || !S.active) return; const d = g.done + live(), p = d / g.goal; if (Math.abs(p - +el.dataset.p) < 0.002) return;
+      const was = +el.dataset.p; el.dataset.p = p; set(el, p); const t = el.querySelector('.g-pct'); if (t) t.textContent = Math.round(p * 100) + '%'; const dt = el.querySelector('.g-done-t'); if (dt) dt.textContent = fmtH(d).length > 7 ? (d / 3600).toFixed(1) + 'h' : fmtH(d);
+      if (p >= 1 && was < 1) { el.dataset.done = ''; el.classList.add('g-new'); } last.set('day', p); } }; })();
+document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('tab-hidden', document.hidden));
 const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}"/>`; };
 const statCards = items => `<div class="grid4">${items.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
 
@@ -331,6 +345,7 @@ VIEWS.timer = () => {
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
 function tick() {
+  if (S && view === 'dash') GA.live();
   if (!S || view !== 'timer' || !$('clock')) return;
   const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
@@ -409,13 +424,14 @@ document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTA
 VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
   const ringH = sec => { const t = fmtH(sec), m = Math.round(sec / 60); if (sec >= 3600 && m % 60 === 0) return Math.round(m / 60) + 'h'; return t.length > 7 ? (sec / 3600).toFixed(sec >= 360000 ? 0 : 1) + 'h' : t; };
-  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + (g.goal ? Math.round(g.done / g.goal * 100) : 0) + "%)")}><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub"><span>${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
+  const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = key === 'day' && S.active && !S.active.paused, c = 2 * Math.PI * 84;
+    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle cx="100" cy="100" r="97" style="stroke-dasharray:22 ${2 * Math.PI * 97 - 22}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
   return `${statCards([[fmtH(ST.today + l), 'Today'], [fmtH(ST.week + l), 'This week'], [fmtH(ST.month + l), 'This month'], [`${ST.streak}d <small class="muted">best ${ST.bestStreak}d</small>`, 'Streak']])}
-  <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
-    ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
+  <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', (UI.gaDay = G.day.goal ? { done: G.day.done, goal: G.day.goal } : null) && { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings', 'day')}
+    ${goalTile('This week', G.week, paceTxt(G.week), 'week')}${goalTile('This month', G.month, paceTxt(G.month), 'month')}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term), 'term')}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
   ${isMcat() ? pxHomeCard() : gpxHomeCard()}
   ${todoCard()}
@@ -429,7 +445,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Study calendar</h3><div class="heat-scroll" id="heatS">${heatmap(ST.byDay)}</div>
     <div class="heat-key muted small">Less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> More · dots = medal days</div></div>`;
 };
-AFTER.dash = () => { const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
+AFTER.dash = () => { GA.play(); const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
 function stackChart() {
   const days = [...Array(14)].map((_, i) => addD(k2d(ST.todayKey), i - 13)), bd = ST.byDaySubject, subs = new Set();
   days.forEach(d => Object.keys(bd[dk(d)] || {}).forEach(s => subs.add(s)));
