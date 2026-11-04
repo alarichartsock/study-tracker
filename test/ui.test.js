@@ -197,3 +197,13 @@ test('Thirty Down: hover lifts the top page within the stack (never the flipped-
   for (const p of [.25, .5, .75]) assert.ok(inBox(T.inner('month1', p)), 'tap p=' + p);
   assert.equal(T.inner('month1', 1), T.inner('month1', 1, { aim: { x: 32, y: 20, s: 0 } })); assert.doesNotMatch(T.inner('month1', 1), /class="hl" d="M[^"]*"\/><path class="l w d"[^>]*\/>.*class="hl"/);
 });
+
+test('landing section links scroll in-page and deep links survive boot', () => {
+  const a = pub('app.js'), c = pub('style.css');
+  assert.match(a, /location\.pathname \+ \(ks \? '\?' \+ ks : ''\) \+ location\.hash/, 'query cleanup must keep the #hash');
+  assert.match(a, /closest\('#landing a\[href\^="#"\]'\)/);
+  assert.match(a, /prefers-reduced-motion: reduce\)'\)\.matches \? 'smooth' : 'auto'/);
+  assert.match(a, /history\.pushState\(null, '', u\)/);
+  assert.match(a, /showLanding && location\.hash\.length > 1\) requestAnimationFrame\(\(\) => landNav\(location\.hash, false\)\)/);
+  assert.match(c, /\.landing section\[id\]\{scroll-margin-top:/);
+});
