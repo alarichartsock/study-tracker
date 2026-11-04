@@ -231,3 +231,8 @@ test('trophy colours: site-wide drawings follow the selected subject (else accen
   const m = /\.ta \.tp\{fill:color-mix\(in srgb,currentColor (\d+)%[^}]*\}\.ta \.hl\{fill:color-mix\(in srgb,currentColor (\d+)%/.exec(c); assert.ok(m && +m[1] <= 5 && +m[2] <= 10, 'hairline look: faint tints only');
   assert.doesNotMatch(c, /\.ta[^{]*\{[^}]*fill:currentColor/);
 });
+
+test('every public script parses (guards against a stray line comment swallowing code)', () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), dir = path.join(__dirname, '..', 'public');
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.js'))) assert.doesNotThrow(() => new vm.Script(fs.readFileSync(path.join(dir, f), 'utf8'), { filename: f }), f);
+});
