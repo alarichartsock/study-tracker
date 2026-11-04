@@ -629,7 +629,7 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 
 .vh{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 /* hero: rotating test name. All words share one grid cell, so the box is always as wide as the longest word (no layout shift). */
-.rot{display:inline-grid;vertical-align:bottom;overflow:hidden;padding:0 .06em;margin:-.12em 0;line-height:1.2;color:var(--acc);text-align:center}
+.rot{display:inline-grid;vertical-align:bottom;overflow:hidden;padding:0 .06em;margin:-.12em 0;line-height:1.2;color:var(--acc);text-align:left}
 /* gradient text is applied per element: static words (.g) and each rotating word carry their own background-clip:text,
    so a hidden word (opacity 0 / visibility hidden / transformed) never shows through a parent's text clip */
 .rot-w{grid-area:1/1;transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .5s,visibility 0s .5s;opacity:0;visibility:hidden;transform:translateY(70%)}
@@ -641,3 +641,7 @@ body:has(#landing:not(.hid)){overflow-x:clip}
    offset by JS to the word's position, so the result looks like one continuous gradient and nothing outside the glyphs is painted. */
 .hero h1#heroH1.rotating{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--text)}
 .hero h1#heroH1.rotating .gw,.hero h1#heroH1.rotating .rot-w{background:linear-gradient(135deg,var(--text) 30%,var(--acc)) no-repeat;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+/* English headline: line 1 'Track every [word]' never wraps (the word box is as wide as USMLE); the font shrinks with the
+   column (cqi) so line 1 always fits, then an explicit <br> puts 'study hour' on line 2. Translations wrap naturally. */
+.hero-copy{container-type:inline-size;min-width:0}
+.hero h1#heroH1.h1-en{white-space:nowrap;font-size:min(clamp(38px,5.6vw,66px),10.8cqi)}
