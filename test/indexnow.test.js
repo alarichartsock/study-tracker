@@ -16,7 +16,7 @@ test('submit posts host, key, keyLocation and the sitemap URLs', async () => {
   let call; const s = await IN.submit(undefined, async (u, o) => { call = { u, o }; return { status: 202 }; });
   assert.equal(s, 202); assert.equal(call.u, 'https://api.indexnow.org/indexnow'); assert.equal(call.o.method, 'POST');
   const b = JSON.parse(call.o.body); assert.equal(b.host, 'studyhertz.com'); assert.equal(b.key, IN.KEY);
-  assert.equal(b.keyLocation, 'https://studyhertz.com/' + IN.KEY + '.txt'); assert.deepEqual(b.urlList, ['https://studyhertz.com/', ...['es', 'zh-cn', 'ko', 'hi', 'vi', 'fr'].map(p => 'https://studyhertz.com/' + p + '/'), 'https://studyhertz.com/pricing', 'https://studyhertz.com/terms', 'https://studyhertz.com/privacy', 'https://studyhertz.com/affiliates']);
+  assert.equal(b.keyLocation, 'https://studyhertz.com/' + IN.KEY + '.txt'); assert.deepEqual(b.urlList, ['https://studyhertz.com/', ...['es', 'zh-cn', 'ko', 'hi', 'vi', 'fr'].map(p => 'https://studyhertz.com/' + p + '/'), ...['mcat', 'lsat', 'gre', 'gmat', 'sat', 'act', 'usmle', 'dat'].map(p => 'https://studyhertz.com/' + p), 'https://studyhertz.com/pricing', 'https://studyhertz.com/terms', 'https://studyhertz.com/privacy', 'https://studyhertz.com/affiliates']);
 });
 
 test('onDeploy submits only changed routes in production, skips elsewhere, logs only the status', async () => {
@@ -28,7 +28,7 @@ test('onDeploy submits only changed routes in production, skips elsewhere, logs 
   assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 'dup');
   const f = path.join(dir, '.indexnow-hashes.json'), h = JSON.parse(fs.readFileSync(f, 'utf8')); h['/privacy'] = 'old'; fs.writeFileSync(f, JSON.stringify(h));
   assert.equal(await IN.onDeploy({ env, dir, fetchFn, log }), 200); assert.deepEqual(bodies[1].urlList, ['https://studyhertz.com/privacy']);
-  assert.equal(bodies.length, 2); assert.deepEqual(logs, ['IndexNow submit: 200 (11 URLs)', 'IndexNow submit: 200 (1 URLs)']);
+  assert.equal(bodies.length, 2); assert.deepEqual(logs, ['IndexNow submit: 200 (19 URLs)', 'IndexNow submit: 200 (1 URLs)']);
   h['/terms'] = 'old'; fs.writeFileSync(f, JSON.stringify(h));
   assert.equal(await IN.onDeploy({ env, dir, fetchFn: async () => { throw new Error('x'); }, log }), 'error');
   assert.equal(JSON.parse(fs.readFileSync(f, 'utf8'))['/terms'], 'old');
@@ -36,7 +36,7 @@ test('onDeploy submits only changed routes in production, skips elsewhere, logs 
 
 test('every <img> in the served HTML has an alt attribute', async t => {
   const app = await start(); t.after(app.close);
-  for (const p of ['/', '/pricing', '/terms', '/privacy', '/affiliates']) {
+  for (const p of ['/', '/lsat', '/pricing', '/terms', '/privacy', '/affiliates']) {
     const imgs = (await (await fetch(app.base + p)).text()).match(/<img\b[^>]*>/g) || [];
     for (const i of imgs) { assert.match(i, /\balt="/, p + ': ' + i); if (/\balt=""/.test(i)) assert.match(i, /aria-hidden="true"/, p + ' decorative img must be aria-hidden: ' + i); }
   }

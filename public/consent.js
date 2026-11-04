@@ -25,6 +25,7 @@
   function sget(st, k) { try { return JSON.parse(st.getItem(k) || 'null'); } catch (e) { return null; } }
   function sput(st, k, v) { try { st.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
   try { var lq = new URL(LANDING).searchParams, got = {}, any = false; AKEYS.forEach(function (k) { var v = lq.get(k); if (v && v.indexOf('@') < 0) { got[k] = v.slice(0, LONGK[k] ? 2000 : 100); any = true; } });
+    if (window.SH_EXAM) { got.landing_exam = window.SH_EXAM; any = true; } // per-test landing (/lsat, ?exam=)
     if (any) sput(sessionStorage, 'shAttr', got);
     // first touch: stored on the very first page load (even with no UTMs) so it survives the Google/Apple OAuth round trip, mirrored in a cookie the server reads at sign-up
     var ftc = (String(document.cookie || '').match(/(?:^|; )sh_ft=([^;]*)/) || [])[1], stored = sget(localStorage, 'shFirstTouch');
@@ -32,14 +33,14 @@
     if (!stored) { var lu = new URL(LANDING), ref = '', bad = /(^|\.)(accounts\.google\.com|appleid\.apple\.com|checkout\.stripe\.com|billing\.stripe\.com)$/;
       try { var ru = document.referrer ? new URL(document.referrer) : null; if (ru && ru.host !== location.host && !bad.test(ru.hostname)) ref = (ru.origin + ru.pathname).slice(0, 200); } catch (e) { /* ignore */ }
       var lq2 = AKEYS.filter(function (k) { return got[k] && !LONGK[k]; }).map(function (k) { return k + '=' + encodeURIComponent(got[k]); }).join('&'); var oauthBack = /[?&](welcome|complete_signup|oauth_error|code)=/.test(lu.search);
-      if (!oauthBack) { stored = { ...got, ts: new Date().toISOString().slice(0, 10) }; if (ref) stored.referrer = ref; stored.landing = (lu.pathname + (lq2 ? '?' + lq2 : '')).slice(0, 200); sput(localStorage, 'shFirstTouch', stored); } }
+      if (!oauthBack) { stored = { ...got, ts: new Date().toISOString().slice(0, 10) }; if (ref) stored.referrer = ref; stored.landing = (lu.pathname + (lq2 ? '?' + lq2 : '')).slice(0, 200); if (window.SH_EXAM) stored.landing_exam = window.SH_EXAM; sput(localStorage, 'shFirstTouch', stored); } }
     // a later ChatGPT ad click on a browser that already has a first touch: keep the newest OpenAI click id for conversions
     var ftDirty = false; if (stored && got.oppref && stored.oppref !== got.oppref) { stored.oppref = got.oppref; if (got.olref) stored.olref = got.olref; else delete stored.olref; sput(localStorage, 'shFirstTouch', stored); ftDirty = true; }
     if (stored && (!ftc || ftDirty)) try { document.cookie = 'sh_ft=' + encodeURIComponent(JSON.stringify(stored)) + '; Path=/; Max-Age=' + 90 * 86400 + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { /* ignore */ }
     attr = sget(sessionStorage, 'shAttr') || {}; } catch (e) { attr = {}; }
   if (attr.utm_source || attr.utm_medium || attr.utm_campaign) gtag('set', { campaign_source: attr.utm_source, campaign_medium: attr.utm_medium, campaign_name: attr.utm_campaign, campaign_term: attr.utm_term, campaign_content: attr.utm_content });
   var first = sget(localStorage, 'shFirstTouch') || {};
-  function firstParams(p) { if (first.utm_source) p.first_source = first.utm_source; if (first.utm_medium) p.first_medium = first.utm_medium; if (first.utm_campaign) p.first_campaign = first.utm_campaign; if (first.gclid) p.first_click = 'gclid'; else if (first.fbclid) p.first_click = 'fbclid'; else if (first.msclkid) p.first_click = 'msclkid'; else if (first.ttclid) p.first_click = 'ttclid'; return p; }
+  function firstParams(p) { if (first.utm_source) p.first_source = first.utm_source; if (first.utm_medium) p.first_medium = first.utm_medium; if (first.utm_campaign) p.first_campaign = first.utm_campaign; if (first.gclid) p.first_click = 'gclid'; else if (first.fbclid) p.first_click = 'fbclid'; else if (first.msclkid) p.first_click = 'msclkid'; else if (first.ttclid) p.first_click = 'ttclid'; var ex = first.landing_exam || attr.landing_exam || window.SH_EXAM; if (ex) p.landing_exam = ex; return p; }
   var GA = function (fn) { cfg().then(function (c) { try { if (c && c.gaId && typeof window.gtag === 'function') fn(c.gaId); } catch (e) { /* ignore */ } }); };
   var PLAN = { monthly: ['Monthly', 4.99], yearly: ['Yearly', 39], lifetime: ['Lifetime', 100] };
   function planItem(plan, i) { var x = PLAN[plan] || PLAN.monthly; return { item_id: 'studyhertz_' + (PLAN[plan] ? plan : 'monthly'), item_name: 'StudyHertz ' + x[0], item_category: 'subscription', item_list_id: 'pricing', item_list_name: 'Pricing', price: x[1], quantity: 1, index: i || 0 }; }
@@ -52,20 +53,21 @@
   function oaiData(plan, value, cur) { plan = PLAN[plan] ? plan : 'monthly'; var v = Number(value); if (!isFinite(v) || v <= 0) v = PLAN[plan][1]; var a = Math.round(v * 100);
     return { type: 'contents', amount: a, currency: String(cur || 'USD').toUpperCase(), contents: [{ id: 'studyhertz_' + plan, name: 'StudyHertz ' + PLAN[plan][0], content_type: 'plan', quantity: 1, amount: a }] }; }
   function oai(name, data, id) { try { if (adsOk() && window.oaiq) window.oaiq('measure', name, data, id ? { event_id: id } : undefined); } catch (e) { /* ignore */ } }
-  function oaiPage() { oai('page_viewed', { type: 'contents', contents: [{ id: location.pathname || '/', name: document.title || 'StudyHertz', content_type: 'page' }] }); }
+  function oaiPage() { oai('page_viewed', { type: 'contents', contents: [{ id: location.pathname || '/', name: document.title || 'StudyHertz', content_type: 'page' }] }); } // OpenAI has no category field: per-test pages are told apart by contents id (path) and name (title)
   // ViewContent once per page view (landing, public pages, app routes) with content_id/content_name/value/currency; mirrored server-side with the same event_id
   var lastView = '';
   function ttView() { try { if (!adsOk() || !window.ttq) return; var path = location.pathname || '/', key = path + '|' + (window.SH_VIEW || ''); if (key === lastView) return; lastView = key;
     var id = 'page' + (path === '/' ? '_home' : path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 60), name = String(document.title || 'StudyHertz').slice(0, 80), eid = 'vc_' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-    window.ttq.track('ViewContent', { content_type: 'product', content_id: id, content_name: name, currency: 'USD', value: 0, contents: [{ content_id: id, content_name: name, quantity: 1, price: 0 }] }, { event_id: eid });
-    fetch('/api/tt/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', keepalive: true, body: JSON.stringify({ id: eid, path: path, title: name, consent: true, ttclid: (attr && attr.ttclid) || (first && first.ttclid) || undefined }) }).catch(function () {});
+    var ttp = { content_type: 'product', content_id: id, content_name: name, currency: 'USD', value: 0, contents: [{ content_id: id, content_name: name, quantity: 1, price: 0 }] }; if (window.SH_EXAM) { ttp.content_category = 'exam_' + window.SH_EXAM; ttp.contents[0].content_category = ttp.content_category; }
+    window.ttq.track('ViewContent', ttp, { event_id: eid });
+    fetch('/api/tt/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', keepalive: true, body: JSON.stringify({ id: eid, path: path, title: name, exam: window.SH_EXAM || undefined, consent: true, ttclid: (attr && attr.ttclid) || (first && first.ttclid) || undefined }) }).catch(function () {});
     } catch (e) { /* ignore */ } }
   function tt(name, props, id) { try { if (adsOk() && window.ttq) window.ttq.track(name, props, id ? { event_id: id } : {}); } catch (e) { /* ignore */ } }
   var seen = {}, cfgP = null; function cfg() { return cfgP || (cfgP = fetch('/api/public-config').then(function (r) { return r.json(); }).catch(function () { return {}; })); }
   var s = document.createElement('script'); s.async = true; s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ADS_ID; (document.head || document.documentElement).appendChild(s);
   gtag('js', new Date()); gtag('config', ADS_ID);
   // GA4: page_views are sent manually (landing below, SPA routes from app.js), so the config sends none
-  cfg().then(function (c) { if (c && c.gaId) { gtag('config', c.gaId, { send_page_view: false }); gtag('event', 'page_view', { send_to: c.gaId, page_location: LANDING, page_path: location.pathname, page_title: document.title }); } });
+  cfg().then(function (c) { if (c && c.gaId) { gtag('config', c.gaId, { send_page_view: false }); gtag('event', 'page_view', firstParams({ send_to: c.gaId, page_location: LANDING, page_path: location.pathname, page_title: document.title })); } });
   function track(name, params) { try { if (typeof name !== 'string' || !/^[a-z_]{1,40}$/.test(name)) return;
       var p = clean(params); var CMAP = { utm_source: 'campaign_source', utm_medium: 'campaign_medium', utm_campaign: 'campaign_name', utm_term: 'campaign_term', utm_content: 'campaign_content' }; Object.keys(CMAP).forEach(function (k) { if (attr[k]) p[CMAP[k]] = attr[k]; }); firstParams(p);
       p = clean(p); cfg().then(function (c) { try { if (c && c.gaId && typeof window.gtag === 'function') { p.send_to = c.gaId; window.gtag('event', name, p); } } catch (e) { /* ignore */ } }); } catch (e) { /* never throw */ } }
@@ -145,7 +147,7 @@
     signup: function (uid) {
       // same event name + id as the server's Conversions API event so OpenAI dedupes them
       if (uid && adsOk() && window.oaiq) window.oaiq('measure', 'trial_started', { type: 'plan_enrollment' }, { event_id: 'trial_u' + uid });
-      if (adsOk()) { window.uetq = window.uetq || []; window.uetq.push('event', 'sign_up', {}); if (window.ttq) window.ttq.track('CompleteRegistration', {}, uid ? { event_id: 'reg_u' + uid } : {}); }
+      if (adsOk()) { window.uetq = window.uetq || []; var lx = first.landing_exam || window.SH_EXAM; window.uetq.push('event', 'sign_up', lx ? { event_category: 'signup', event_label: 'exam_' + lx } : {}); if (window.ttq) window.ttq.track('CompleteRegistration', lx ? { content_category: 'exam_' + lx } : {}, uid ? { event_id: 'reg_u' + uid } : {}); }
       cfg().then(function (c) { if (c && c.signupLabel) gtag('event', 'conversion', { send_to: ADS_ID + '/' + c.signupLabel }); });
     }
   };

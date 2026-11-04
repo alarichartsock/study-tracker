@@ -30,7 +30,8 @@ const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
-const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
+const EXAMS = require('./lib/exams');
+const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -99,7 +100,10 @@ function createApp(opts = {}) {
   const ATTR_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'msclkid', 'ttclid', 'oppref', 'olref', 'ts', 'referrer', 'landing'];
   function cleanAttr(x) { const a = {}; if (!x || typeof x !== 'object') return a;
     for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' || k === 'ttclid' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
-    if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing; return a; }
+    if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing;
+    // landing_exam: template id of the per-test landing (/lsat, ?exam=lsat); validated, else derived from the landing path
+    const le = EXAMS.idFor(x.landing_exam) || (a.landing ? EXAMS.idFor((/^\/([a-z]+)\/?(?:\?|$)/.exec(a.landing) || [])[1] || (/[?&]exam=([a-z0-9]+)/i.exec(a.landing) || [])[1]) : null);
+    if (le) a.landing_exam = le; else delete a.landing_exam; return a; }
   const cleanLang = l => { const s = String(l || '').split(',')[0].split(';')[0].trim(); return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/.test(s) ? s.slice(0, 35) : ''; };
   function saveSignupMeta(u, req, j) { let changed = false;
     if (!u.attribution) { let a = cleanAttr(j && j.ft); if (!Object.keys(a).length) { try { a = cleanAttr(JSON.parse(auth.parseCookies(req.headers.cookie).sh_ft || 'null')); } catch { a = {}; } }
@@ -110,9 +114,11 @@ function createApp(opts = {}) {
   // ChatGPT Ads conversions (Conversions API), only for people who accepted advertising cookies. Sent once per account.
   const oai = openaiAds.create(opts.oaiEnv || process.env, { fetch: opts.oaiFetch });
   const oaiPending = new Set();
+  // signup conversions point at the per-test landing page when there was one (OpenAI has no category field; source_url carries it)
+  const examUrl = a => { const s = EXAMS.slugFor(a && a.landing_exam); return SITE + '/' + (s || ''); };
   function oaiSignup(u) { if (!oai.enabled || !u || !u.adsOk || (u.oai && u.oai.reg) || oaiPending.has(u.id)) return;
     const at = Date.parse(u.created) || Date.now(); if (Date.now() - at > 6.5 * 864e5) return; // the API accepts events from the last 7 days
-    const a = u.attribution || {}, base = { at, url: SITE + '/', oppref: a.oppref, uid: u.id }; oaiPending.add(u.id);
+    const a = u.attribution || {}, base = { at, url: examUrl(a), oppref: a.oppref, uid: u.id }; oaiPending.add(u.id);
     oai.send([{ ...base, id: 'reg_u' + u.id, type: 'registration_completed' }, { ...base, id: 'trial_u' + u.id, type: 'trial_started', plan: 'trial' }])
       .then(r => { if (r.sent) { u.oai = { ...(u.oai || {}), reg: new Date().toISOString(), ...(oai.validateOnly ? { validateOnly: true } : {}) }; store.save(); } }).finally(() => oaiPending.delete(u.id)); }
   function oaiPurchase(u, c) { if (!oai.enabled || !u || !u.adsOk || !c || !c.txn) return Promise.resolve(false);
@@ -127,7 +133,7 @@ function createApp(opts = {}) {
   function ttSignup(u) { if (!tt.enabled || !u || !u.adsOk || (u.tt && u.tt.reg) || ttPending.has(u.id)) return;
     const at = Date.parse(u.created) || Date.now(); if (Date.now() - at > 6.5 * 864e5) return; // the API accepts events from the last 7 days
     const a = u.attribution || {}; ttPending.add(u.id);
-    tt.send([{ id: 'reg_u' + u.id, event: 'CompleteRegistration', at, url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email }])
+    tt.send([{ id: 'reg_u' + u.id, event: 'CompleteRegistration', at, url: examUrl(a), ttclid: a.ttclid, uid: u.id, email: u.email, ...(a.landing_exam ? { props: { content_category: 'exam_' + a.landing_exam } } : {}) }])
       .then(r => { if (r.sent) { u.tt = { ...(u.tt || {}), reg: new Date().toISOString() }; store.save(); } }).finally(() => ttPending.delete(u.id)); }
   function ttPurchase(u, c) { if (!tt.enabled || !u || !u.adsOk || !c || !c.txn) return Promise.resolve(false);
     const a = u.attribution || {};
@@ -137,8 +143,9 @@ function createApp(opts = {}) {
     tt.send([{ id: 'ic_' + sid, event: 'InitiateCheckout', url: SITE + '/', ttclid: a.ttclid, uid: u.id, email: u.email, plan, value: Number((billing.PLANS[plan] || billing.PLANS.monthly).amount) || 0, currency: 'USD' }]).catch(() => {}); }
   const ttViews = new Set(), ttHits = new Map();
   function ttRate(ip) { const now = Date.now(), h = ttHits.get(ip) || { t: now, n: 0 }; if (now - h.t > 6e4) { h.t = now; h.n = 0; } h.n++; ttHits.set(ip, h); if (ttHits.size > 5000) ttHits.clear(); return h.n <= 30; }
-  function ttViewProps(path, title) { const id = 'page' + (path === '/' ? '_home' : path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 60);
-    return { content_type: 'product', content_id: id, content_name: title || 'StudyHertz', currency: 'USD', value: 0, contents: [{ content_id: id, content_name: title || 'StudyHertz', quantity: 1, price: 0 }] }; }
+  function ttViewProps(path, title, exam) { const id = 'page' + (path === '/' ? '_home' : path.replace(/[^a-z0-9]+/gi, '_').toLowerCase()).slice(0, 60), cat = EXAMS.idFor(exam) || EXAMS.idFor(path.slice(1));
+    const p = { content_type: 'product', content_id: id, content_name: title || 'StudyHertz', currency: 'USD', value: 0, contents: [{ content_id: id, content_name: title || 'StudyHertz', quantity: 1, price: 0 }] };
+    if (cat) { p.content_category = 'exam_' + cat; p.contents[0].content_category = p.content_category; } return p; }
   function recordConsent(u, method, req) {
     store.sql.addConsent({ user_id: u.id, terms_version: LEGAL.terms, privacy_version: LEGAL.privacy, ts: new Date().toISOString(), method, ip: clientIp(req), ua: String(req.headers['user-agent'] || '').slice(0, 400), checkbox_text: LEGAL.checkbox });
     u.termsVersion = LEGAL.terms; u.privacyVersion = LEGAL.privacy; store.save();
@@ -393,6 +400,7 @@ function createApp(opts = {}) {
   function asset(p) {
     const f = path.join(PUBLIC, STATIC[p]), m = fs.statSync(f).mtimeMs, hit = SCACHE.get(p); if (hit && hit.m === m) return hit;
     let buf = fs.readFileSync(f); if (p === '/pricing') buf = Buffer.from(pricingHead(buf.toString('utf8')));
+    else if (EXAMS.EXAMS[p.slice(1)]) buf = Buffer.from(EXAMS.examHead(buf.toString('utf8'), p.slice(1), SITE)); // per-test landing (English only, so no hreflang set)
     else if (p === '/' || p === '/index.html' || i18n.ROUTES[p]) { const h = i18n.withAlternates(buf.toString('utf8'), SITE); buf = Buffer.from(i18n.ROUTES[p] ? i18n.localize(h, i18n.ROUTES[p], SITE) : h); }
     const type = MIME[path.extname(f)] || 'application/octet-stream', text = /text|javascript|json|svg|xml|manifest/.test(type) && buf.length > 860;
     const a = { m, buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 22) + '"',
@@ -442,7 +450,7 @@ function createApp(opts = {}) {
         if (j.consent !== true || (user && !user.adsOk) || !/^vc_[a-z0-9]{6,40}$/.test(id) || !path.startsWith('/') || path.length > 100 || ttViews.has(id) || !ttRate(clientIp(req))) return send(res, 200, { ok: false });
         if (ttViews.size > 5000) ttViews.clear(); ttViews.add(id);
         const a = (user && user.attribution) || {}, ttclid = typeof j.ttclid === 'string' && /^[\w.\-]{1,500}$/.test(j.ttclid) ? j.ttclid : a.ttclid;
-        tt.send([{ id, event: 'ViewContent', url: SITE + path, ttclid, uid: user && user.id, email: user && user.email, ip: clientIp(req), ua: req.headers['user-agent'], props: ttViewProps(path, String(j.title || '').slice(0, 80)) }]).catch(() => {});
+        tt.send([{ id, event: 'ViewContent', url: SITE + path, ttclid, uid: user && user.id, email: user && user.email, ip: clientIp(req), ua: req.headers['user-agent'], props: ttViewProps(path, String(j.title || '').slice(0, 80), j.exam) }]).catch(() => {});
         return send(res, 200, { ok: true }); }
       if (p === '/api/aff/click' && M === 'POST') { const c = aff.click(String(j.code || '').toUpperCase(), clientIp(req));
         return c ? send(res, 200, { ok: true }, 'application/json', { 'Set-Cookie': c.cookie }) : send(res, 200, { ok: false }); }
