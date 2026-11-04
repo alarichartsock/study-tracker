@@ -7,6 +7,7 @@ const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const PRACTICE = require('./public/practice.js');
 const { Store, PALETTE, TEMPLATES } = require('./lib/store');
+const SubjectColor = require('./public/color-clamp.js');
 const oauthLib = require('./lib/oauth');
 const billing = require('./lib/billing');
 
@@ -31,7 +32,7 @@ const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
 const EXAMS = require('./lib/exams');
-const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js', '/trophy-art.js': 'trophy-art.js',
+const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js', '/trophy-art.js': 'trophy-art.js', '/color-clamp.js': 'color-clamp.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -661,7 +662,7 @@ function createApp(opts = {}) {
       if (p === '/api/subjects' && M === 'PUT') { // update meta and/or rename (renames past sessions too)
         const name = str(j.name, 60); if (!ud.subjects.includes(name)) return send(res, 404, { error: 'unknown subject' });
         const meta = ud.subjectMeta[name] ||= {};
-        if (j.color !== undefined) { if (!COLOR.test(j.color)) return send(res, 400, { error: 'color must be #rrggbb' }); meta.color = j.color; }
+        if (j.color !== undefined) { if (!COLOR.test(j.color)) return send(res, 400, { error: 'color must be #rrggbb' }); meta.color = SubjectColor.color(j.color); } // nothing too light or too dark (>= 3:1 on both card themes)
         if (j.weeklyGoalMin !== undefined) meta.weeklyGoalMin = Math.round(numIn(j.weeklyGoalMin, 0, 10080));
         if (j.credits !== undefined) meta.credits = numIn(j.credits, 0, 100);
         const nn = str(j.rename, 60);

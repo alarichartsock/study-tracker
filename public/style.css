@@ -726,12 +726,44 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 [data-anim="0"] .goal-ring .ring-fg,[data-anim="0"] .t-lp .t-prog i{transition:none!important;animation:none!important}
 [data-anim="3"] .t-art .ta{transform:perspective(220px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg)) translate(var(--px,0px),var(--py,0px))}
 
-/* In-app logo mark: accent-derived hairline tile + wave (follows --acc live) */
-:root{--acc-b:color-mix(in oklch,var(--acc) 62%,#2fd3b4)}
+/* In-app logo mark: solid accent-gradient tile (like the original), wave in --logo-ink (white or near-black by contrast, see logoInk()) */
+:root{--acc-b:color-mix(in srgb,var(--acc) 62%,#2fd3b4);--logo-ink:#fff}
 .brand .sh-mark{width:24px;height:24px;flex:none;overflow:visible;display:block}
-.sh-tile{fill:color-mix(in srgb,var(--acc) 10%,transparent);stroke:url(#shMarkG);stroke-width:1.1;opacity:.9}
-.sh-wave{fill:none;stroke:url(#shMarkG);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-html:not([data-anim="0"]) .sh-tile,html:not([data-anim="0"]) .sh-wave{stroke-dasharray:1 1;animation:sh-draw .8s var(--ease) .15s both}
+.sh-tile{fill:url(#shMarkG);stroke:color-mix(in srgb,var(--logo-ink) 30%,transparent);stroke-width:1px;vector-effect:non-scaling-stroke}
+.sh-wave{fill:none;stroke:var(--logo-ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+html:not([data-anim="0"]) .sh-wave{stroke-dasharray:1 1;animation:sh-draw .8s var(--ease) .15s both}
 html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
 @keyframes sh-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
 @media (prefers-reduced-motion:reduce){.sh-tile,.sh-wave{animation:none!important;stroke-dasharray:none}}
+
+/* Trophy drawings: no default square focus box or tap flash; keyboard focus gets a soft rounded accent ring */
+.t-art,.trophy{-webkit-tap-highlight-color:transparent}.t-art{user-select:none;-webkit-user-select:none;border-radius:12px}
+.t-art:focus:not(:focus-visible),.trophy:focus:not(:focus-visible){outline:none}
+.t-art:focus-visible,.t-art[data-act]:focus-visible{outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 40%,transparent)}
+.trophy:focus-visible{outline:none;box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 40%,transparent)}
+
+/* Launch Pad cards: bigger, more legible drawings (124px; popup 260px), stroke kept ~1.4px on screen */
+.trophies:has(.t-lp){grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+@media(max-width:560px){.trophies:has(.t-lp){grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+.trophy.t-lp{padding:14px 14px 16px}.trophy.t-lp>b{font-size:15px;display:block;margin-top:4px}.trophy.t-lp>.muted.small{font-size:13.5px;line-height:1.35}
+.trophy .t-ic.t-art{height:128px}.t-art .ta{width:124px;height:124px}
+.ta path,.ta ellipse{stroke-width:.6}.ta .w{stroke-width:.9}.ta .a{stroke-width:.68}
+@media(max-width:560px){.trophy .t-ic.t-art{height:112px}.t-art .ta{width:108px;height:108px}.ta path,.ta ellipse{stroke-width:.66}}
+.t3d-host:has(.t-art){min-height:0}.t-ic.t-art.big{height:auto}.t-art.big .ta{width:min(280px,70vw);height:min(280px,70vw)}.t-art.big .ta *{stroke-width:.3}.t-art.big .ta .a{stroke-width:.34}.t-art.big .ta .w{stroke-width:.45}
+/* Card hover (pointer devices): lift with a softer, larger shadow, border tints toward the accent, slight tilt toward the cursor
+   (coordinated with the drawing's lean), faint glow on earned; ~200ms back. transform/box-shadow only, so neighbours never move. */
+.trophy.t-lp{transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
+@media (hover:hover){
+  .trophy.t-lp:hover,.trophy.t-lp:focus-visible{border-color:color-mix(in srgb,var(--acc) 55%,var(--line))}
+  html:not([data-anim="0"]) .trophy.t-lp:hover,html:not([data-anim="0"]) .trophy.t-lp:focus-visible{transform:translateY(-2px)}
+  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:hover,html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp:focus-visible{transform:perspective(700px) translateY(-4px) rotateX(var(--cy,0deg)) rotateY(var(--cx,0deg));box-shadow:0 12px 28px -10px rgba(20,30,60,.28)}
+  html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp.on:hover,html:not([data-anim="0"]):not([data-anim="1"]) .trophy.t-lp.on:focus-visible{box-shadow:0 12px 28px -10px rgba(20,30,60,.28),0 0 0 1px color-mix(in srgb,var(--acc) 35%,transparent),0 0 22px -4px color-mix(in srgb,var(--acc) 38%,transparent)}
+  html:not([data-anim="0"]) .trophy.t-lp:not(.on):hover{transform:translateY(-2px)}
+  .trophy.t-lp:hover{transition-duration:.25s}
+}
+.trophy.t-lp:focus-visible{border-color:color-mix(in srgb,var(--acc) 55%,var(--line))}
+/* Study calendar levels follow the accent (light + dark): 4 steps mixed from --acc over the card, top step pushed toward the text colour */
+:root,[data-theme=light]{--h1:color-mix(in srgb,var(--acc) 26%,var(--card2));--h2:color-mix(in srgb,var(--acc) 50%,var(--card2));--h3:color-mix(in srgb,var(--acc) 80%,var(--card2));--h4:color-mix(in srgb,var(--acc) 78%,var(--text))}
+#heatS rect.tip-hot{stroke:var(--text);stroke-width:1.5}
+#heatS circle{stroke:color-mix(in srgb,var(--card) 75%,transparent);stroke-width:.9;pointer-events:none}
+.sc-note{margin-left:6px;font-size:12px;color:var(--acc)}
