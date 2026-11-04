@@ -190,3 +190,10 @@ test('ui: trophy hover uses a static hit box + debounced sheen; session card siz
   assert.match(js, /const lean = \(\) => \{\};/); assert.doesNotMatch(js, /dataset\.yaw = Math/); assert.doesNotMatch(css, /\.trophy[^{]*\{[^}]*rotate[XY]/); assert.doesNotMatch(css, /\.t-art \.ta\{transform:perspective/);
   assert.match(js, /ACT\.nowSize = /); assert.match(css, /html\[data-now="l"\]\{--nz:1\.3\}/);
 });
+test('Thirty Down: hover lifts the top page within the stack (never the flipped-over page), tap turns it up and it lands flat', () => {
+  const fs = require('fs'), path = require('path'), w = {}; new Function('window', fs.readFileSync(path.join(__dirname, '../public/trophy-art.js'), 'utf8'))(w); const T = w.TrophyArt;
+  const nums = s => (s.match(/-?\d+(\.\d+)?/g) || []).map(Number), inBox = s => { const d = [...s.matchAll(/ d="([^"]+)"/g)].map(m => m[1]).join(' '); const n = nums(d.replace(/[A-Za-z]/g, ' ')); return n.every(v => v > 4 && v < 60); };
+  for (const y of [10, 20, 30, 45]) assert.ok(inBox(T.inner('month1', 1, { aim: { x: 32, y, s: 1 } })), 'hover y=' + y);
+  for (const p of [.25, .5, .75]) assert.ok(inBox(T.inner('month1', p)), 'tap p=' + p);
+  assert.equal(T.inner('month1', 1), T.inner('month1', 1, { aim: { x: 32, y: 20, s: 0 } })); assert.doesNotMatch(T.inner('month1', 1), /class="hl" d="M[^"]*"\/><path class="l w d"[^>]*\/>.*class="hl"/);
+});

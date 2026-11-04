@@ -52,11 +52,13 @@
       let near = R.length - 1; if (AIM && AIM.s > .05) { let bd = 1e9; R.forEach((q, i) => { const [X, Y] = P(...q), dd = (X - AIM.x) ** 2 + (Y - AIM.y) ** 2; if (dd < bd) { bd = dd; near = i; } }); }
       const n = (AIM && AIM.s > .05 ? lerp(R.length - 1, near, AIM.s) : (R.length - 1) * E(p)), k = Math.floor(n), Rp = R.slice(0, k + 1).concat(k < R.length - 1 ? [R[k].map((v, i) => v + (R[k + 1][i] - v) * (n - k))] : []);
       return s + (p < 1 || (AIM && AIM.s > .05) ? line(R, 'l d dd') + line(Rp, 'l a') : line(R, 'l a dd')) + ell(...c(0, 0), 1, 'l a') + ell(...c(2, 2), 1.9, 'l a') + ell(...c(2, 2), 0.6, 'l a'); },
-    // Thirty Down: a month of pages stacked, the top one ruled and checked
-    month1: (p = 1) => { const lift = AIM ? AIM.s * (.15 + .3 * Math.min(1, Math.max(0, (52 - AIM.y) / 40))) : 0, a = Math.max(Math.PI * E(p * 1.05), lift), live = (p > 0 && p < 1) || lift > .02, Q = (x, y) => [x, -11 + (y + 11) * Math.cos(a), 8.8 + (y + 11) * Math.sin(a)];
-      return [0, 2.4, 4.8, 7.2].map((z, i) => box(-11, -11, z, 22, 22, 1.6, i === 3 ? 'hl' : '')).join('') +
-      [1, 2, 3, 4].map(k => line([[-11 + k * 4.4, -11, 8.8], [-11 + k * 4.4, 11, 8.8]], 'l d')).join('') + [1, 2, 3, 4].map(k => line([[-11, -11 + k * 4.4, 8.8], [11, -11 + k * 4.4, 8.8]], 'l d')).join('') +
-      line([[-4, 3, 8.8], [0, 7, 8.8], [8, -5, 8.8]], 'l a w') + (live ? poly([Q(-11, -11), Q(11, -11), Q(11, 11), Q(-11, 11)], 'hl') : ''); }
+    // Thirty Down: a month of pages stacked, the top one ruled and checked. Hover lifts the top page a little at its front edge
+    // (hinged on the back edge, more as the cursor rises); tap turns it up and lets it fall back. Rest = flat, no flap.
+    month1: (p = 1) => { const lift = AIM ? AIM.s * (.12 + .38 * Math.min(1, Math.max(0, (52 - AIM.y) / 40))) : 0, a = Math.max(lift, 1.1 * B(p)),
+        Q = (x, y) => [x, -11 + (y + 11) * Math.cos(a), 8.8 + (y + 11) * Math.sin(a)], top = a > .01;
+      const ruled = M => [1, 2, 3, 4].map(k => line([M(-11 + k * 4.4, -11), M(-11 + k * 4.4, 11)], 'l w d')).join('') + [1, 2, 3, 4].map(k => line([M(-11, -11 + k * 4.4), M(11, -11 + k * 4.4)], 'l w d')).join('') + line([M(-4, 3), M(0, 7), M(8, -5)], 'l a w');
+      const flat = (x, y) => [x, y, 8.8];
+      return [0, 2.4, 4.8, 7.2].map((z, i) => box(-11, -11, z, 22, 22, 1.6, i === 3 ? 'hl' : '')).join('') + (top ? poly([Q(-11, -11), Q(11, -11), Q(11, 11), Q(-11, 11)].map(([x, y, z]) => [x, y, z + .05]), 'hl') + ruled((x, y) => { const [X, Y, Z] = Q(x, y); return [X, Y, Z + .05]; }) : ruled(flat)); }
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
