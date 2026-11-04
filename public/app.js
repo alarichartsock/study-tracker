@@ -645,7 +645,8 @@ function achBody(cat, filt) { const { A, seen } = ACH, keep = x => filt === 'all
   const inCat = id => id === 'all' ? [...A.global, ...A.personal] : id === 'mine' ? A.personal : A.global.filter(x => x.cat === id);
   const prog = x => x.unit === 'h' ? fmtH(x.value) + ' / ' + fmtH(x.target) : x.value + ' / ' + x.target + (x.unit === 'd' ? ' days' : '');
   const TT = ACH.tiers ||= window.TrophySpec ? TrophySpec.tiers(achAll(A)) : {}, spec = x => window.TrophySpec ? ' data-spec="' + esc(JSON.stringify(TrophySpec.spec(x, TT[x.id], x.kind === 'subject' ? color(x.key) : null))) + '"' : '';
-  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + '" data-act="trophyView" data-id="' + esc(x.id) + '" role="button" tabindex="0" aria-label="' + esc(x.name + (x.earned ? ', earned' : ', locked')) + ' - open 3D view"><div class="t-ic"' + spec(x) + '>' + (x.earned ? '&#127942;' : '&#128274;') + '</div><b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
+  const lp = x => x.cat === 'launch' ? ' t-lp' + (x.earned && !seen.has(x.id) ? ' t-new' : '') : '';
+  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + lp(x) + '" data-act="trophyView" data-id="' + esc(x.id) + '" role="button" tabindex="0" aria-label="' + esc(x.name + (x.earned ? ', earned' : ', locked')) + ' - open 3D view"><div class="t-ic"' + spec(x) + '>' + (x.earned ? '&#127942;' : '&#128274;') + '</div>' + (x.cat === 'launch' && x.earned ? '<svg class="t-line" aria-hidden="true"><rect x="0.5" y="0.5" rx="12" pathLength="100"/></svg><i class="t-sheen" aria-hidden="true"></i>' : '') + '<b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
     '<div class="muted small">' + esc(x.desc) + '</div>' + (x.earned ? '' : '<div class="bar t-prog"><i style="width:' + Math.round((x.progress || 0) * 100) + '%"></i></div><div class="muted small">' + prog(x) + '</div>') +
     (x.earnedBy ? '<div class="t-by small">Earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') + ' (' + x.earnedBy.pct + '%)</div>' : '') + '</div>';
   const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4><div class="trophies">' + list.map(card).join('') + '</div>' : ''; };
@@ -667,15 +668,25 @@ VIEWS.trophy = async () => {
     '<div class="tabs ach-filter">' + ['all', 'earned', 'locked'].map(v => '<button data-act="achFilter" data-v="' + v + '" class="' + (filt === v ? 'on' : '') + '">' + v[0].toUpperCase() + v.slice(1) + '</button>').join('') + '</div><div id="achGrid">' + body + '</div></div>';
 };
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Launch Pad trophies: when one first scrolls into view, an earned card's hairline outline draws itself once (and a new one lifts off once),
+// a locked card's progress fills in like the goal rings; a sheen crosses an earned card once per hover/tap. Nothing idles. Reduced motion: all static.
+const TLP = (() => { const done = new Set(); let io = null;
+  const go = el => { const id = el.dataset.id; if (done.has(id)) return el.classList.add('t-shown'); done.add(id); el.classList.add('t-play'); setTimeout(() => el.classList.add('t-shown'), 1600); };
+  return { scan(root) { if (!root) return; const els = root.querySelectorAll('.trophy.t-lp'); if (reduceMotion() || !('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('t-shown')); return; }
+    io ||= new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); go(e.target); } }), { threshold: 0.4 });
+    els.forEach(el => { if (done.has(el.dataset.id)) el.classList.add('t-shown'); else io.observe(el); }); },
+    sheen(el) { if (reduceMotion() || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
+$('main').addEventListener('pointerenter', e => { const t = e.target.closest && e.target.closest('.trophy.t-lp.on'); if (t && !t.contains(e.relatedTarget)) TLP.sheen(t); }, true);
+$('main').addEventListener('pointerdown', e => { const t = e.target.closest && e.target.closest('.trophy.t-lp.on'); if (t && e.pointerType !== 'mouse') TLP.sheen(t); });
 function achIndicator(instant) { const bar = document.querySelector('.ach-cats'), on = bar && bar.querySelector('.on'), ind = bar && bar.querySelector('.ach-ind'); if (!on || !ind) return;
   if (instant || reduceMotion()) ind.style.transition = 'none'; ind.style.width = on.offsetWidth + 'px'; ind.style.height = on.offsetHeight + 'px'; ind.style.transform = 'translate(' + on.offsetLeft + 'px,' + on.offsetTop + 'px)';
   if (instant) { void ind.offsetWidth; ind.style.transition = ''; } bar.classList.add('has-ind'); on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 function achSwap() { const g = $('achGrid'); if (!g || !ACH) return render(); const { body } = achBody(localStorage.achCat || 'all', localStorage.achFilter || 'all');
   const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); clearTimeout(g._achT); g._achT = setTimeout(() => { g.classList.remove('in'); g.querySelectorAll('.trophy').forEach(t => { t.style.animationDelay = ''; }); }, 700); };
-  if (reduceMotion()) { g.innerHTML = body; t3dHydrate(); return; }
+  if (reduceMotion()) { g.innerHTML = body; TLP.scan(g); t3dHydrate(); return; }
   g.style.minHeight = g.offsetHeight + 'px'; const unlock = () => setTimeout(() => { g.style.minHeight = ''; }, 450);
   // No View Transitions here: WebKit crashed on repeated grid swaps in CI; the CSS fade below is used everywhere.
-  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); t3dHydrate(); }, 120); }
+  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); TLP.scan(g); t3dHydrate(); }, 120); }
 ACT.achCat = b => { localStorage.achCat = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); }); achIndicator(); achSwap(); };
 ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); achSwap(); };
 const achAll = A => [...A.global, ...A.personal];
@@ -698,7 +709,7 @@ ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.data
     '<p class="muted small center t3d-hint">Drag to rotate</p><div class="row"><span class="sp"></span><button class="btn primary" value="cancel">Close</button></div>', () => {});
   if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
 $('main').addEventListener('keydown', e => { const t = e.target.closest && e.target.closest('.trophy[data-act]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ACT.trophyView(t); } });
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); t3dHydrate(); };
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); TLP.scan($('achGrid')); t3dHydrate(); };
 // ---- achievement notifications: the server diffs earned vs. already-notified (per user, so each unlock is announced once) ----
 const achQ = []; let achBusy = false, achT = 0;
 function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }

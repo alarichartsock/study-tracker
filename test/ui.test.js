@@ -103,3 +103,9 @@ test('dashboard goal rings animate quietly and respect reduced motion', () => {
   assert.match(css, /\.goal-ring \.ring-fg\{transition:stroke-dashoffset/); assert.match(css, /html\.tab-hidden \.g-comet\{animation-play-state:paused\}/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{[^\n]*\.g-comet\{animation:none/);
 });
+test('Launch Pad trophy animations are one-shot, launch-only and reduced-motion safe', () => {
+  const js = pub('app.js'), css = pub('style.css');
+  assert.match(js, /x\.cat === 'launch' \? ' t-lp'/); assert.match(js, /const TLP = /); assert.match(js, /TLP\.scan\(\$\('achGrid'\)\)/);
+  assert.match(css, /@keyframes t-trace/); assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.t-line,\.t-sheen/);
+  assert.ok(!/\.t-lp[^{]*\{[^}]*animation:[^}]*infinite/.test(css), 'no idle loops');
+});
