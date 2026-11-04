@@ -314,19 +314,6 @@ function createApp(opts = {}) {
       if (Array.isArray(ud.achNotified) && !ud.achNotified.includes('onboard')) ud.achNotified.push('onboard'); } // silent: already "notified"
     store.db.config.readyRoomGrant = { at: new Date().toISOString(), users: n }; store.save(); if (n && !opts.quiet) console.log('Granted Ready Room to ' + n + ' existing user(s)'); }
 
-  async function busy(ud, text) { // Busy Bar HTTP API; never throws
-    const { busyIp, busyToken } = ud.settings; if (!busyIp || !fetchImpl) return false;
-    const base = 'http://' + busyIp, headers = { 'Content-Type': 'application/json' };
-    if (busyToken) headers['X-API-Token'] = busyToken;
-    try {
-      const signal = AbortSignal.timeout(3000);
-      if (text === null) await fetchImpl(base + '/api/display/draw?app_id=mcat', { method: 'DELETE', headers, signal });
-      else await fetchImpl(base + '/api/display/draw', { method: 'POST', headers, signal, body: JSON.stringify({
-        app_id: 'mcat', elements: [{ id: 't', type: 'text', text, x: 0, y: 0, display: 'front' }] }) });
-      return true;
-    } catch { return false; }
-  }
-
   const send = (res, code, body, type = 'application/json', extra = {}) => {
     if (code >= 400 && res.log && body && typeof body === 'object' && body.error && !res.log.err) res.log.err = String(body.error);
     res.writeHead(code, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin', ...extra });
@@ -356,7 +343,7 @@ function createApp(opts = {}) {
   const emailTaken = (e, exceptId) => store.db.users.some(x => x.id !== exceptId && [x.email, ...(x.identities || []).map(i => i.email)].some(m => m && String(m).toLowerCase() === e));
   const EMAIL_BAD = 'Enter a valid email address', EMAIL_TAKEN = 'That email is already used by another account';
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
-    return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
+    return { ...rest, settings: (({ busyIp, busyToken, ...x }) => x)(settings) } /* Busy Bar removed: stored values are kept but never read or returned */; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
   // Exam templates: set a user's study template. On a fresh account the lists are replaced; on a switch, subjects and
   // activities that past sessions/tasks still use are kept (appended) so no history is orphaned. Sessions never change.
@@ -619,11 +606,11 @@ function createApp(opts = {}) {
         if (!ud.active) ud.active = { subject: str(j.subject || ud.subjects[0] || 'Study', 60), activity: str(j.activity, 60), note: str(j.note, 1000), start: new Date().toISOString(), accum: 0, paused: false,
           mode: ['stopwatch', 'pomodoro', 'countdown'].includes(j.mode) ? j.mode : 'stopwatch', targetSec: j.targetSec ? Math.round(numIn(j.targetSec, 60, 86400)) : null, breakSec: 0, pausedAt: null };
         else if (ud.active.paused) { if (ud.active.pausedAt) ud.active.breakSec += 0; ud.active.start = new Date().toISOString(); ud.active.paused = false; ud.active.pausedAt = null; }
-        save(); busy(ud, 'Studying ' + ud.active.subject); return send(res, 200, ud.active);
+        save(); return send(res, 200, ud.active);
       }
       if (p === '/api/timer/pause' && M === 'POST') {
         if (!ud.active || ud.active.paused) return send(res, 409, { error: 'Timer not running' });
-        ud.active.accum += (Date.now() - new Date(ud.active.start)) / 1000; ud.active.paused = true; ud.active.pausedAt = new Date().toISOString(); save(); busy(ud, j.reason === 'break' ? 'Break' : 'Paused'); return send(res, 200, ud.active);
+        ud.active.accum += (Date.now() - new Date(ud.active.start)) / 1000; ud.active.paused = true; ud.active.pausedAt = new Date().toISOString(); save(); return send(res, 200, ud.active);
       }
       if (p === '/api/timer/stop' && M === 'POST') {
         const a = ud.active; if (!a) return send(res, 409, { error: 'Timer not running' });
@@ -634,9 +621,9 @@ function createApp(opts = {}) {
           session = { id: ud.nextId++, subject: a.subject, activity: a.activity || '', note: a.note, start: new Date(+end - secs * 1000).toISOString(), end: end.toISOString(), breakSec: 0, mode: a.mode || 'stopwatch',
             focus: j.focus ? Math.round(numIn(j.focus, 1, 5)) : null, progress: j.progress ? Math.round(numIn(j.progress, 1, 5)) : null };
           ud.sessions.push(session); ensureSubject(ud, a.subject); ensureActivity(ud, a.activity); }
-        if (session) rewardReferral(user); ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true, session });
+        if (session) rewardReferral(user); ud.active = null; save(); return send(res, 200, { ok: true, session });
       }
-      if (p === '/api/timer/discard' && M === 'POST') { ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true }); }
+      if (p === '/api/timer/discard' && M === 'POST') { ud.active = null; save(); return send(res, 200, { ok: true }); }
 
       // ---- sessions ----
       if (p === '/api/sessions' && M === 'GET') return send(res, 200, ud.sessions);
@@ -723,11 +710,8 @@ function createApp(opts = {}) {
         if (j.background !== undefined) { if (!j.background || typeof j.background !== 'object' || Array.isArray(j.background)) return send(res, 400, { error: 'background must be an object' });
           try { s.background = mix.cleanBackground(j.background, s.background); } catch (e) { return send(res, 400, { error: e.message }); } }
         if (j.lang !== undefined) { if (j.lang && !i18n.LANGS.includes(j.lang)) return send(res, 400, { error: 'unsupported language' }); s.lang = j.lang || ''; }
-        if (j.busyIp !== undefined) s.busyIp = String(j.busyIp).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').slice(0, 100);
-        if (j.busyToken !== undefined && j.busyToken !== '********') s.busyToken = String(j.busyToken).trim().slice(0, 300);
         save(); return send(res, 200, { ok: true });
       }
-      if (p === '/api/busybar/test' && M === 'POST') return send(res, 200, { ok: await busy(ud, 'MCAT tracker test') });
 
       // ---- bug reports (any user submits; only admins review) ----
       if (p === '/api/reports' && M === 'POST') {

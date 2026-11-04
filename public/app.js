@@ -978,9 +978,6 @@ VIEWS.set = async () => {
   <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label><span class="medal m-${m}"></span> ${m} (h/day)</label><input type="number" step="0.25" min="0" id="md_${m}" value="${md[m] / 60}"></div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
   <div class="card"><h3>Notifications &amp; reminders</h3>${achNotifRow()}<p class="muted small">${window.isSecureContext ? '' : 'Installing the app also needs HTTPS. '}Reminders fire while the app is open or installed.</p>
     <div class="row wrap gap"><button class="btn" data-act="notifPerm">${'Notification' in window && Notification.permission === 'granted' ? 'Notifications enabled ✓' : 'Enable notifications'}</button><span class="muted small">Remind me if I haven't studied by</span><input type="time" id="remT" value="${localStorage.remindAt || ''}" style="width:auto"><button class="btn" data-act="saveRem">Save</button></div></div>
-  <div class="card"><h3>Busy Bar</h3><p class="muted small">Optional. Shows your study status on a Busy Bar on your network. Leave the IP blank to disable.</p>
-    <label>Busy Bar IP</label><input id="sBip" value="${esc(s.busyIp)}" placeholder="192.168.0.x"><label>API token</label><input id="sBtok" type="password" autocomplete="off" value="${esc(s.busyToken)}">
-    <div class="row"><button class="btn primary" data-act="saveBusy">Save</button><button class="btn" data-act="testBusy">Send test</button></div></div>
   <div class="card"><h3>Report a bug</h3><p class="muted small">Goes to the admin for review. The current page and browser info are attached.</p>
     <input id="bgT" placeholder="Short title" maxlength="120"><textarea id="bgD" class="mt" placeholder="What happened? What did you expect?" maxlength="4000"></textarea><textarea id="bgS" class="mt" placeholder="Steps to reproduce (optional)" maxlength="4000"></textarea>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="bugSend">Submit report</button></div>
@@ -1264,8 +1261,6 @@ ACT.notifPerm = async () => { if (!('Notification' in window)) return toast('Not
 ACT.saveRem = () => { localStorage.remindAt = $('remT').value; toast($('remT').value ? 'Reminder set' : 'Reminder off'); };
 function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.active) return; const now = new Date(), [h, m] = t.split(':').map(Number), np = TZ.parts(now, utz());
   if (np.h * 60 + np.mi < h * 60 + m || localStorage.remindedOn === ik(now) || ST.today > 0) return; localStorage.remindedOn = ik(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
-ACT.saveBusy = async () => { await api('/api/settings', 'POST', { busyIp: $('sBip').value, busyToken: $('sBtok').value }); toast('Busy Bar saved'); refresh(); };
-ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); toast(r.ok ? 'Sent! Check your Busy Bar.' : 'Could not reach the Busy Bar'); };
 ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund, and lifetime access isn't refundable. This can't be undone.</p>
   <label for="delConf">Type DELETE (or your email) to confirm</label><input id="delConf" name="confirm" autocomplete="off" autocapitalize="characters" required>
   ${ME.hasPassword ? '<label for="delPw">Password</label><input id="delPw" name="password" type="password" autocomplete="current-password" required>' : ''}

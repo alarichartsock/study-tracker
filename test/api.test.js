@@ -48,9 +48,9 @@ test('auth flow, admin, registration lock, isolation, logout', async t => {
   await a('/api/settings', 'POST', { dailyGoalMin: 240, busyIp: '10.0.0.5', busyToken: 'tok' });
   await a('/api/subjects', 'POST', { name: 'Anki' });
   const sb = (await b('/api/state')).body;
-  assert.equal(sb.sessions.length, 0); assert.equal(sb.settings.dailyGoalMin, 360); assert.equal(sb.settings.busyIp, ''); assert.ok(!sb.subjects.includes('Anki'));
+  assert.equal(sb.sessions.length, 0); assert.equal(sb.settings.dailyGoalMin, 360); assert.equal(sb.settings.busyIp, undefined); assert.ok(!sb.subjects.includes('Anki'));
   const sa = (await a('/api/state')).body;
-  assert.equal(sa.sessions.length, 1); assert.equal(sa.settings.busyToken, '********'); assert.ok(sa.subjects.includes('Anki'));
+  assert.equal(sa.sessions.length, 1); assert.equal(sa.settings.busyToken, undefined); assert.equal(sa.settings.busyIp, undefined); // Busy Bar removed: never stored or returned assert.ok(sa.subjects.includes('Anki'));
   assert.equal((await b('/api/sessions/' + sa.sessions[0].id, 'DELETE')).status, 404);
   // login / logout
   const a2 = app.client();
@@ -70,7 +70,7 @@ test('login rate limiting returns 429', async t => {
   assert.equal((await c('/api/login', 'POST', { username: 'alaric', password: 'secret-pass-1' })).status, 429);
 });
 
-test('timer, sessions CRUD, stats, import/export, busy bar calls', async t => {
+test('timer, sessions CRUD, stats, import/export, no busy bar calls', async t => {
   const calls = [];
   const app = await start({ fetch: async (url, o) => { calls.push({ url, ...o }); return { ok: true }; } }); t.after(app.close);
   const c = app.client();
@@ -92,24 +92,18 @@ test('timer, sessions CRUD, stats, import/export, busy bar calls', async t => {
   assert.equal(imp.added, 1); assert.equal(imp.skipped, 1); assert.ok((await c('/api/state')).body.subjects.includes('Anki'));
   const ex = await c('/api/export.csv'); assert.match(ex.headers.get('content-type'), /text\/csv/); assert.match(ex.body, /Anki/);
   assert.equal((await c('/api/import', 'POST', 'x')).status, 400);
-  // busy bar
+  // Busy Bar removed: settings no longer accept it and the timer never calls out
   await c('/api/settings', 'POST', { busyIp: 'http://192.168.0.50/', busyToken: 'secret' });
   await c('/api/timer/start', 'POST', { subject: 'CARS' }); await c('/api/timer/stop', 'POST', {});
   await new Promise(r => setTimeout(r, 20));
-  assert.equal(calls[0].url, 'http://192.168.0.50/api/display/draw'); assert.equal(calls[0].method, 'POST');
-  assert.equal(calls[0].headers['X-API-Token'], 'secret'); assert.equal(JSON.parse(calls[0].body).app_id, 'mcat');
-  assert.equal(calls[1].method, 'DELETE');
-  assert.equal((await c('/api/settings', 'POST', { busyToken: '********' })).status, 200);
-  assert.equal(app.server.store.data(1).settings.busyToken, 'secret'); // masked value doesn't overwrite
+  assert.equal(calls.length, 0); assert.equal(app.server.store.data(1).settings.busyIp || '', '');
 });
 
-test('busy bar failures are silent', async t => {
-  const app = await start({ fetch: async () => { throw new Error('unreachable'); } }); t.after(app.close);
+test('Busy Bar endpoint is gone', async t => {
+  const app = await start(); t.after(app.close);
   const c = app.client();
   await c('/api/register', 'POST', { email: 'u' + Math.random().toString(36).slice(2) + '@example.com', agree: true, birthYear: 1990, username: 'alaric', password: 'secret-pass-1' });
-  await c('/api/settings', 'POST', { busyIp: '192.0.2.1' });
-  assert.equal((await c('/api/timer/start', 'POST', { subject: 'CARS' })).status, 200);
-  assert.deepEqual((await c('/api/busybar/test', 'POST')).body, { ok: false });
+  assert.notEqual((await c('/api/busybar/test', 'POST')).status, 200);
 });
 
 test('legacy v1 data.json is migrated to the first (admin) user with a backup', async t => {
