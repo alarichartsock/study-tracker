@@ -317,6 +317,28 @@
       return cyl(10, 6, 0, 3.6, 1.6) + cyl(-10, 5, 0, 3.6, 1.6) + s; },
     // Full Set: bronze, silver and gold medals in a row; the medal nearest the cursor lifts; tap raises them in turn
     medalset: (p = 1) => { const xs = [-9, 0, 9], k = nearest(xs.map(x => [x, 0, 10])); return plate(28, 10, 1.5) + xs.map((x, i) => { const z = 10 + (i === k ? 2 * AIM.s : 0) + 3 * B(sq(p, i, 3, .5)); return line([[x - 2, 0, 1.5], [x, 0, z - 3]], 'l') + line([[x + 2, 0, 1.5], [x, 0, z - 3]], 'l') + sdisc(x, 0, z, 4, 'hl') + sdisc(x, 0, z, 2.4 + i * .3, 'l a') + (i === 2 ? star(x, 0, z, 1.4, 'l a') : ''); }).join(''); },
+    // ---- Exploration ----
+    // Five Fronts: five flags planted on a map; the flag nearest the cursor raises; tap plants them one by one
+    subj5: (p = 1) => { const fl = [[-8, -6], [6, -7], [-2, 0], [9, 4], [-7, 7]], k = nearest(fl.map(([x, y]) => [x, y, 8])); let s = box(-13, -11, 0, 26, 22, 1.5) + line([[-13, 0, 1.5], [-6, -3, 1.5], [3, 3, 1.5], [13, -2, 1.5]], 'l d');
+      fl.forEach(([x, y], i) => { const t = p >= 1 ? 1 : E(sq(p, i, 5, .4)), h = (6 + (i === k ? 2 * AIM.s : 0)) * t; if (t > .05) s += line([[x, y, 1.5], [x, y, 1.5 + h + 3]], 'l') + pth([[x, y, 1.5 + h + 3], [x + 3, y, 1.5 + h + 2], [x, y, 1.5 + h + 1]], 'hl'); }); return s; },
+    // Triple Play: three balls on a tray; the ball nearest the cursor bounces; tap bounces them in turn
+    subj3day: (p = 1) => { const xs = [-7, 0, 7], k = nearest(xs.map(x => [x, 0, 4])); return box(-12, -5, 0, 24, 10, 1.5) + xs.map((x, i) => ball(x, 0, 5 + (i === k ? 2 * AIM.s : 0) + 6 * B(sq(p, i, 3, .5)), 3.4, i === 1 ? 'hl' : 'tp')).join(''); },
+    // Ten Tools: a toolbox with tools poking out; the lid lifts toward the cursor; tap opens it wide and back
+    acts10: (p = 1) => { const lift = Math.max(1.0 * B(p), AIM ? AIM.s * (.15 + .25 * Math.max(0, -ay())) : 0), Q = (x, y) => [x, -5 + (y + 5) * Math.cos(lift), 10 + (y + 5) * Math.sin(lift)];
+      let s = box(-12, -5, 0, 24, 10, 10) + line([[-4, 5.05, 7], [4, 5.05, 7]], 'l a');
+      if (lift > .05) s += line([[-6, 0, 10], [-6, 0, 15]], 'l a w') + line([[2, 0, 10], [4, 0, 14]], 'l a w') + ell(4, 0, 14, 1.2, 'l a');
+      return s + pth([Q(-12, -5), Q(12, -5), Q(12, 5), Q(-12, 5)], 'hl') + line([Q(-4, 0), Q(-4, 0).map((v, i) => i === 2 ? v + 2 : v), Q(4, 0).map((v, i) => i === 2 ? v + 2 : v), Q(4, 0)], 'l'); },
+    // Sun to Moon: a disc that is half sun, half moon on a stand; it turns with the cursor; tap flips day to night
+    daynight: (p = 1) => { const a = (ax() * 40 + 180 * E(p) * (p < 1 ? 1 : 0)) * Math.PI / 180, [X, Y] = S(0, 0, 14), r = 9, dx = r * Math.cos(a - Math.PI / 2), dy = r * Math.sin(a - Math.PI / 2);
+      return cyl(0, 0, 0, 7, 2) + line([[0, 0, 2], [0, 0, 5]], 'l') + sdisc(0, 0, 14, r) + '<path class="hl" d="M' + f(X + dx) + ' ' + f(Y + dy) + 'A' + r + ' ' + r + ' 0 0 1 ' + f(X - dx) + ' ' + f(Y - dy) + 'Z"/>' +
+        '<circle class="l a" cx="' + f(X + .5 * dy) + '" cy="' + f(Y - .5 * dx) + '" r="2.2"/>' + '<path class="l" d="M' + f(X - .5 * dy - 1.6) + ' ' + f(Y + .5 * dx - 2) + 'a2.4 2.4 0 1 0 3.2 3.4a2 2 0 0 1 -3.2 -3.4Z"/>'; },
+    // All Weather: four season tiles (leaf, sun, ember, snow); the tile nearest the cursor lifts; tap flips them in turn
+    seasons: (p = 1) => { const t4 = [[-11, -11], [1, -11], [-11, 1], [1, 1]], k = nearest(t4.map(([x, y]) => [x + 5, y + 5, 3])); let s = '';
+      t4.forEach(([x, y], i) => { const z = (i === k ? 2 * AIM.s : 0) + 3 * B(sq(p, i, 4, .4)), c = [x + 5, y + 5, z + 2.4]; s += box(x, y, z, 10, 10, 2.4, i % 3 ? 'hl' : '');
+        s += i === 0 ? line([[c[0] - 3, c[1] + 3, c[2]], [c[0] + 3, c[1] - 3, c[2]]], 'l a') + ell(c[0], c[1], c[2], 2.4, 'l a') : i === 1 ? ell(c[0], c[1], c[2], 2.6, 'l a') + [0, 60, 120, 180, 240, 300].map(d => line([onRim(c[0], c[1], c[2], 3.4, d), onRim(c[0], c[1], c[2], 4.4, d)], 'l a')).join('') : i === 2 ? flame(...c, 4, 0, 'l a') : [0, 60, 120].map(d => line([onRim(c[0], c[1], c[2], 3.4, d), onRim(c[0], c[1], c[2], 3.4, d + 180)], 'l a')).join(''); }); return s; },
+    // Round the Clock: a dial cut into six four-hour blocks, all filled; the block under the cursor lifts; tap fills them in turn
+    spectrum: (p = 1) => { const ang = aimDeg(3, -999), k = AIM && AIM.s > .05 ? Math.floor((((ang + 90) % 360) + 360) % 360 / 60) : -1; let s = cyl(0, 0, 0, 13, 3);
+      for (let i = 0; i < 6; i++) { const on = p >= 1 || sq(p, i, 6, .35) > .4, z = 3 + (i === k ? 1.6 * AIM.s : 0); s += pth([[0, 0, z], ...Array.from({ length: 7 }, (_, j) => onRim(0, 0, z, 11, -90 + i * 60 + 4 + j * 52 / 6))], on ? 'hl' : 'l d'); } return s + ell(0, 0, 3.2, 1.2, 'l a'); },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
