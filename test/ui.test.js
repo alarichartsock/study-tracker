@@ -149,3 +149,10 @@ test('trophy drawings track the cursor while hovered (one part each, faint when 
   for (const id of T.ids) { assert.notEqual(T.inner(id, 1, { aim: { x: 50, y: 15, s: 1 } }), T.inner(id), id); assert.equal(T.inner(id, 1, { aim: { x: 50, y: 15, s: 0 } }), T.inner(id)); }
   assert.match(js, /const hovTick = /); assert.match(js, /h\.ts = el\.closest\('\.trophy\.on, \.t-art\.on'\) \? 1 : \.35/); assert.match(js, /if \(animLevel\(\) < 2\) return; const svg/);
 });
+
+test('in-app logo mark is an accent-derived hairline wave, synced to the session clock and tied to quality', () => {
+  const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8'), js = P('app.js'), html = P('index.html'), css = P('style.css');
+  assert.match(html, /<header class="top">\s*<div class="brand"><svg class="sh-mark"/); assert.match(html, /stop-color:var\(--acc\)/); assert.match(css, /--acc-b:color-mix\(in oklch,var\(--acc\)/);
+  assert.match(js, /const LOGO = /); assert.match(js, /% COMET_S\) \/ COMET_S \* 2 \* Math\.PI/); assert.match(js, /animLevel\(\) >= 2/); assert.match(css, /html:not\(\[data-anim="0"\]\) \.sh-wave/);
+  assert.match(html, /class="l-top glass"><div class="brand"><img src="\/favicon\.svg"/); // landing brand unchanged
+});

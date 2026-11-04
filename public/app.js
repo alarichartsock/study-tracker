@@ -357,7 +357,7 @@ VIEWS.timer = () => {
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
 function tick() {
-  if (S && view === 'dash') GA.live(); cometSync();
+  if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
   if (!S || view !== 'timer' || !$('clock')) return;
   const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
@@ -688,6 +688,27 @@ const TLP = (() => { const done = new Set(); let io = null;
     io ||= new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); go(e.target); } }), { threshold: 0.4 });
     els.forEach(el => { if (done.has(el.dataset.id)) el.classList.add('t-shown'); else io.observe(el); }); },
     sheen(el) { if (animLevel() < 2 || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
+// In-app logo mark: a hairline wave in an accent tile. Draws itself once on load; while hovered the wave is a travelling sine
+// (amplitude follows the pointer a little), easing back to rest in ~300ms on leave (a tap plays ~1.5s); while a timer runs it travels on
+// the shared session clock (same 9s period/phase as the ring lines). Lowest quality: static. Low: no running motion. rAF only while needed.
+const LOGO = (() => { const el = document.querySelector('#app .sh-mark'), w = el && el.querySelector('.sh-wave'); if (!w) return { kick() {} };
+  let raf = 0, hov = false, until = 0, A = 5, tA = 5, ph = 0, hp = 0, last = 0, base = 0;
+  const path = (amp, phi) => { let d = ''; for (let i = 0; i <= 44; i++) { const x = 5 + i * .5, y = 16 - amp * Math.sin((x - 5) / 22 * 4 * Math.PI - phi); d += (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2); } return d; };
+  const running = () => S && S.active && !S.active.paused && animLevel() >= 2;
+  const clock = () => (((Date.now() - new Date(S.active.start)) / 1000) % COMET_S) / COMET_S * 2 * Math.PI;
+  const frame = now => { raf = 0; const dt = Math.min(64, now - (last || now)); last = now; const live = hov || now < until, run = running(); if (!live && until && now >= until) { until = 0; wrap(); }
+    if (live) hp += dt / 1000 * 5; else hp *= Math.pow(0.002, dt / 300); A += ((live ? tA : 5) - A) * Math.min(1, dt / 90);
+    base = run ? clock() : base * Math.pow(0.001, dt / 300 / 3);
+    w.setAttribute('d', path(A, base + hp)); const settled = !live && !run && Math.abs(hp) < .01 && Math.abs(base) < .01 && Math.abs(A - 5) < .02;
+    if (settled) { w.setAttribute('d', path(5, 0)); hp = base = 0; last = 0; return; } raf = requestAnimationFrame(frame); };
+  const kick = () => { if (!raf && animLevel() >= 2 && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } };
+  el.addEventListener('pointerenter', e => { if (e.pointerType === 'touch' || animLevel() < 2) return; hov = true; kick(); });
+  el.addEventListener('pointermove', e => { if (!hov) return; const r = el.getBoundingClientRect(); tA = 3.2 + 3.6 * (1 - Math.abs((e.clientY - r.top) / r.height - .5) * 2); });
+  const wrap = () => { hp = ((hp + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; }; // ease back the short way
+  el.addEventListener('pointerleave', () => { hov = false; tA = 5; wrap(); });
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && animLevel() >= 2) { until = performance.now() + 1500; tA = 5.5; kick(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+  w.setAttribute('d', path(5, 0)); return { kick }; })();
 // Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
 // click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
 // isometric view a few degrees. Reduced motion: no lean, actions show their end state.

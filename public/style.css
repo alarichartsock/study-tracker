@@ -725,3 +725,13 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 [data-anim="1"] .t-art .ta,[data-anim="0"] .t-art .ta{transform:none!important}
 [data-anim="0"] .goal-ring .ring-fg,[data-anim="0"] .t-lp .t-prog i{transition:none!important;animation:none!important}
 [data-anim="3"] .t-art .ta{transform:perspective(220px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg)) translate(var(--px,0px),var(--py,0px))}
+
+/* In-app logo mark: accent-derived hairline tile + wave (follows --acc live) */
+:root{--acc-b:color-mix(in oklch,var(--acc) 62%,#2fd3b4)}
+.brand .sh-mark{width:24px;height:24px;flex:none;overflow:visible;display:block}
+.sh-tile{fill:color-mix(in srgb,var(--acc) 10%,transparent);stroke:url(#shMarkG);stroke-width:1.1;opacity:.9}
+.sh-wave{fill:none;stroke:url(#shMarkG);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+html:not([data-anim="0"]) .sh-tile,html:not([data-anim="0"]) .sh-wave{stroke-dasharray:1 1;animation:sh-draw .8s var(--ease) .15s both}
+html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
+@keyframes sh-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.sh-tile,.sh-wave{animation:none!important;stroke-dasharray:none}}
