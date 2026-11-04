@@ -656,7 +656,8 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 /* Goal rings: quiet load-in, a hairline comet while timing, a drawn check on completion */
 .goal-ring .ring-fg{transition:stroke-dashoffset .9s var(--ease) var(--gd,0ms)}
 .g-comet{transform-origin:100px 100px;animation:g-orbit 9s linear infinite;opacity:0;animation-fill-mode:both}
-.g-comet circle{fill:none;stroke:var(--acc);stroke-width:1.5;stroke-linecap:round;opacity:.85}
+.g-comet circle{fill:none;stroke:var(--text);stroke-width:1.5;stroke-linecap:round;opacity:.4}
+.goal-ring .ring-fg{transition:stroke-dashoffset .9s var(--ease) var(--gd,0ms),opacity .3s}
 [data-run] .g-comet{opacity:1;transition:opacity .6s var(--ease)}
 @keyframes g-orbit{to{transform:rotate(360deg)}}
 .g-check{position:absolute;right:6%;top:6%;width:22%;height:22%;opacity:0;transform:scale(.8);transition:opacity .4s var(--ease),transform .4s var(--ease)}
@@ -685,3 +686,8 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .t-play.t-new .t-ic::after{content:"";position:absolute;left:50%;bottom:6px;width:1px;height:14px;margin-left:-.5px;background:var(--acc);opacity:0;transform-origin:top;animation:t-trail 1s var(--ease) .35s both}
 @keyframes t-trail{0%{opacity:0;transform:scaleY(0)}35%{opacity:.6;transform:scaleY(1)}100%{opacity:0;transform:scaleY(1) translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.t-line,.t-sheen,.t-new .t-ic::after{display:none}.t-lp .t-prog i{animation:none!important;transform:none!important}.t-play.t-new .t-ic{animation:none}}
+/* Timer page: the same circling hairline as the goal rings while a session runs (own svg, so per-second ring redraws don't restart it) */
+.tring .t-comet-svg{position:absolute;inset:0;pointer-events:none}
+.tring .t-comet-svg .g-comet{transition:opacity .6s var(--ease)}
+.running .tring .t-comet-svg .g-comet{opacity:1}
+.tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
