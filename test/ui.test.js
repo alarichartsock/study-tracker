@@ -152,16 +152,19 @@ test('trophy drawings track the cursor while hovered (one part each, faint when 
 
 test('in-app logo mark is an accent-derived hairline wave, synced to the session clock and tied to quality', () => {
   const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8'), js = P('app.js'), html = P('index.html'), css = P('style.css');
-  assert.match(html, /<header class="top">\s*<div class="brand"><svg class="sh-mark"/); assert.match(html, /stop-color:var\(--acc\)/); assert.match(css, /--acc-b:color-mix\(in srgb,var\(--acc\)/); assert.match(js, /function logoInk\(\)/); assert.match(css, /\.sh-tile\{fill:url\(#shMarkG\)/); assert.match(css, /\.sh-wave\{fill:none;stroke:var\(--logo-ink\)/);
+  assert.match(html, /<header class="top">\s*<div class="brand"><svg class="sh-mark"/); assert.match(html, /stop-color:var\(--logo-a,var\(--acc\)\)/); assert.match(css, /--acc-b:color-mix\(in srgb,var\(--acc\)/); assert.match(js, /function logoInk\(\)/); assert.match(css, /\.sh-tile\{fill:url\(#shMarkG\)/); assert.match(css, /\.sh-wave\{fill:none;stroke:var\(--logo-ink\)/);
   assert.match(js, /const LOGO = /); assert.match(js, /% COMET_S\) \/ COMET_S \* 2 \* Math\.PI/); assert.match(js, /animLevel\(\) >= 2/); assert.match(css, /html:not\(\[data-anim="0"\]\) \.sh-wave/);
   assert.match(html, /class="l-top glass"><div class="brand"><img src="\/favicon\.svg"/); // landing brand unchanged
 });
 
-test('logo ink picks white or near-black by WCAG contrast; trophy focus ring is keyboard-only; card hover uses transform/shadow only', () => {
+test('logo ink follows the theme (white wave in light, near-black in dark); the tile shifts for contrast; trophy focus ring is keyboard-only; card hover uses transform/shadow only', () => {
   const fs = require('node:fs'), path = require('node:path'), js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
   const src = js.slice(js.indexOf('function logoInk()'), js.indexOf('new MutationObserver(() => logoInk())'));
-  const ink = acc => { const st = {}; const r = { style: { getPropertyValue: k => st[k] || '', setProperty: (k, v) => { st[k] = v; } } }; new Function('document', 'getComputedStyle', src + 'logoInk();')({ documentElement: r }, () => ({ getPropertyValue: () => acc })); return st['--logo-ink']; };
-  assert.equal(ink('#4c6ef5'), '#141620'); assert.equal(ink('#7048e8'), '#fff'); assert.equal(ink('#ffe066'), '#141620'); assert.equal(ink('#f8f0e3'), '#141620'); assert.equal(ink('#1b1f3a'), '#fff');
+  const run = (acc, theme) => { const st = {}; const r = { dataset: { theme }, style: { getPropertyValue: k => st[k] || '', setProperty: (k, v) => { st[k] = v; } } }; new Function('document', 'getComputedStyle', src + 'logoInk();')({ documentElement: r }, () => ({ getPropertyValue: () => acc })); return st; };
+  const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4)); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; }, cr = (a, b) => (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+  for (const acc of ['#4c6ef5', '#7048e8', '#ffe066', '#f8f0e3', '#1b1f3a', '#2fd3b4', '#000000', '#ffffff']) for (const th of ['light', 'dark']) { const st = run(acc, th), ink = th === 'dark' ? '#0b0d18' : '#fff';
+    assert.equal(st['--logo-ink'], ink, acc + ' ' + th); const L = th === 'dark' ? lum('#0b0d18') : 1; assert.ok(Math.min(cr(L, lum(st['--logo-a'])), cr(L, lum(st['--acc-b']))) >= 3 || acc === '#ffffff' || acc === '#000000', acc + ' ' + th + ' contrast'); }
+  assert.equal(run('#7048e8', 'light')['--logo-a'], '#7048e8'); // already fine: tile untouched
   assert.match(css, /\.t-art:focus:not\(:focus-visible\)/); assert.match(css, /-webkit-tap-highlight-color:transparent/); assert.match(css, /@media \(hover:hover\)\{\n  \.trophy\.t-lp:hover/);
 });
 

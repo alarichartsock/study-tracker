@@ -718,13 +718,19 @@ const TLP = (() => { const done = new Set(); let io = null;
     sheen(el) { const now = performance.now(); if (now - (el._shT || 0) < 600) return; el._shT = now; if (animLevel() < 2 || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
 // Logo tile contrast: solid accent gradient tile; the wave is white or near-black, whichever has the better worst-case WCAG
 // contrast against both gradient stops (>= 4.5:1 for nearly every accent). Re-run whenever the accent or theme changes.
+// Logo tile: the wave follows the resolved theme (light theme: white wave; dark theme: near-black wave, the dark background ink),
+// including System and live OS changes. If the accent would make the wave hard to see (< 3:1 against either gradient stop), only the
+// tile is shifted: darkened in light mode, lightened in dark mode. The wave colour never changes with the accent.
 function logoInk() { const r = document.documentElement, cs = getComputedStyle(r), hex = cs.getPropertyValue('--acc').trim();
   const m = /^#?([0-9a-f]{6})$/i.exec(hex) || /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex); if (!m) return;
   const rgb = m.length === 2 ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : m.slice(1).map(c => parseInt(c + c, 16));
-  const b = rgb.map((v, i) => Math.round(v * .62 + [0x2f, 0xd3, 0xb4][i] * .38)), lum = c => { const [R, G, B] = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * R + .7152 * G + .0722 * B; };
-  const cr = (a, l) => (Math.max(a, l) + .05) / (Math.min(a, l) + .05), L = [lum(rgb), lum(b)], W = Math.min(...L.map(l => cr(1, l))), K = Math.min(...L.map(l => cr(lum([20, 22, 32]), l)));
-  const ab = '#' + b.map(v => v.toString(16).padStart(2, '0')).join(''), ink = W >= K ? '#fff' : '#141620';
-  if (r.style.getPropertyValue('--acc-b') !== ab) r.style.setProperty('--acc-b', ab); if (r.style.getPropertyValue('--logo-ink') !== ink) r.style.setProperty('--logo-ink', ink); }
+  const lum = c => { const [R, G, B] = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * R + .7152 * G + .0722 * B; };
+  const cr = (a, l) => (Math.max(a, l) + .05) / (Math.min(a, l) + .05), dark = r.dataset.theme === 'dark', inkRgb = dark ? [11, 13, 24] : [255, 255, 255], ink = dark ? '#0b0d18' : '#fff', LI = lum(inkRgb);
+  const mix = (c, t, k) => c.map((v, i) => Math.round(v + (t[i] - v) * k)), hx = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  let a = rgb, b = mix(rgb, [0x2f, 0xd3, 0xb4], .38); const to = dark ? [255, 255, 255] : [0, 0, 0];
+  for (let k = 0; k < 12 && Math.min(cr(LI, lum(a)), cr(LI, lum(b))) < 3; k++) { a = mix(a, to, .12); b = mix(b, to, .12); }
+  const set = (n, v) => { if (r.style.getPropertyValue(n) !== v) r.style.setProperty(n, v); };
+  set('--logo-a', hx(a)); set('--acc-b', hx(b)); set('--logo-ink', ink); }
 new MutationObserver(() => logoInk()).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] }); logoInk();
 // In-app logo mark: a hairline wave in an accent tile. Draws itself once on load; while hovered the wave is a travelling sine
 // (amplitude follows the pointer a little), easing back to rest in ~300ms on leave (a tap plays ~1.5s); while a timer runs it travels on

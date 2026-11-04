@@ -726,7 +726,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 [data-anim="0"] .goal-ring .ring-fg,[data-anim="0"] .t-lp .t-prog i{transition:none!important;animation:none!important}
 .t-art .ta{transform:none}
 
-/* In-app logo mark: solid accent-gradient tile (like the original), wave in --logo-ink (white or near-black by contrast, see logoInk()) */
+/* In-app logo mark: solid accent-gradient tile (like the original), wave in --logo-ink (white in light theme, near-black in dark theme; tile shifted for contrast, see logoInk()) */
 :root{--acc-b:color-mix(in srgb,var(--acc) 62%,#2fd3b4);--logo-ink:#fff}
 .brand .sh-mark{width:24px;height:24px;flex:none;overflow:visible;display:block}
 .sh-tile{fill:url(#shMarkG);stroke:color-mix(in srgb,var(--logo-ink) 30%,transparent);stroke-width:1px;vector-effect:non-scaling-stroke}
