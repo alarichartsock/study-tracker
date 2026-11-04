@@ -154,7 +154,9 @@ test('in-app logo mark is an accent-derived hairline wave, synced to the session
   const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8'), js = P('app.js'), html = P('index.html'), css = P('style.css');
   assert.match(html, /<header class="top">\s*<div class="brand"><svg class="sh-mark"/); assert.match(html, /stop-color:var\(--logo-a,var\(--acc\)\)/); assert.match(css, /--acc-b:color-mix\(in srgb,var\(--acc\)/); assert.match(js, /function logoInk\(\)/); assert.match(css, /\.sh-tile\{fill:url\(#shMarkG\)/); assert.match(css, /\.sh-wave\{fill:none;stroke:var\(--logo-ink\)/);
   assert.match(js, /const LOGO = /); assert.match(js, /% COMET_S\) \/ COMET_S \* 2 \* Math\.PI/); assert.match(js, /animLevel\(\) >= 2/); assert.match(css, /html:not\(\[data-anim="0"\]\) \.sh-wave/);
-  assert.match(html, /class="l-top glass"><div class="brand"><img src="\/favicon\.svg"/); // landing brand unchanged
+  assert.match(html, /class="l-top glass"><div class="brand"><svg class="sh-mark"[^>]*>.*id="shMarkL"/); assert.match(js, /mkLogo\(document\.querySelector\('#landing \.sh-mark'\)\)/); // landing: same hairline mark
+  assert.match(html, /rel="icon"[^>]*favicon/); // favicon unchanged
+  assert.match(html, /id="accTop"[\s\S]*id="langTop"/); assert.match(js, /const ACCENTS = /); assert.match(js, /async function carryAccent\(\) \{ const a = localAccent\(\); if \(!a \|\| !S \|\| S\.settings\.accent/);
 });
 
 test('logo ink follows the theme (white wave in light, near-black in dark); the tile shifts for contrast; trophy focus ring is keyboard-only; card hover uses transform/shadow only', () => {

@@ -224,7 +224,7 @@ function refOffer() { const c = refCode(); if (!c || refOffer.done) return; refO
     const n = document.querySelector('.hero-note'); if (n) n.textContent = 'A friend invited you, so your free trial is ' + r.trialDays + ' days. No card required.';
     const m = $('authMsg'); if (m && authMode === 'register') m.textContent = 'Create an account: ' + r.trialDays + '-day free trial from your friend'; }).catch(() => {}); }
 refOffer();
-async function showAuth(me) {
+async function showAuth(me) { queueMicrotask(applyLocalAccent);
   me = me || await api('/api/me').catch(() => ME_FALLBACK);
   document.documentElement.classList.remove('authed'); try { localStorage.removeItem('shAuthed'); } catch { /* ignore */ }
   $('app').classList.add('hid');
@@ -289,6 +289,26 @@ $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = nu
 $('themeBtn').onclick = () => { SHTheme.set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); if (view === 'set') render(); };
 const nowSize = () => ['s', 'm', 'l'].includes(S?.settings?.nowSize) ? S.settings.nowSize : (localStorage.nowSize || 'm');
 function applyNowSize() { document.documentElement.dataset.now = nowSize(); }
+// Accent swatches: the same choices in Settings and on the landing page. Signed out, a pick is saved locally (localStorage.shAccent),
+// recolours the page live, and becomes the account accent at sign-up / first sign-in, but never replaces an accent the account already has.
+const ACCENTS = [['#4c6ef5', 'Blue'], ['#7048e8', 'Violet'], ['#d6336c', 'Raspberry'], ['#e8590c', 'Orange'], ['#f08c00', 'Amber'], ['#2b8a3e', 'Green'], ['#0c8599', 'Teal'], ['#495057', 'Graphite']];
+const localAccent = () => { try { const a = localStorage.shAccent; return /^#[0-9a-f]{6}$/i.test(a || '') ? a.toLowerCase() : ''; } catch { return ''; } };
+function applyLocalAccent() { if (ME) return; const a = localAccent(), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } document.documentElement.classList.toggle('acc-local', !!a); accPick.sync(); }
+const accPick = (() => { const root = $('accTop'), trig = root && root.querySelector('.acc-trig'), pop = root && root.querySelector('.acc-pop'); if (!pop) return { sync() {} };
+  pop.innerHTML = ACCENTS.map(([c, n]) => '<button type="button" role="radio" class="acc-sw" data-c="' + c + '" style="--sw:' + c + '" aria-label="' + n + '" title="' + n + '"></button>').join('') + '<button type="button" class="acc-sw acc-def" data-c="" aria-label="Default" title="Default">\u21ba</button>';
+  const sws = () => [...pop.querySelectorAll('.acc-sw')];
+  const sync = () => { const a = localAccent(); sws().forEach(b => { const on = b.dataset.c === a; b.setAttribute('aria-checked', on); b.tabIndex = on || (!a && !b.dataset.c) ? 0 : -1; }); };
+  const open = v => { pop.hidden = !v; trig.setAttribute('aria-expanded', v); if (v) { sync(); (pop.querySelector('[tabindex="0"]') || sws()[0]).focus(); } };
+  const pick = c => { try { if (c) localStorage.shAccent = c; else localStorage.removeItem('shAccent'); } catch { /* ignore */ } applyLocalAccent(); };
+  trig.addEventListener('click', () => open(pop.hidden));
+  pop.addEventListener('click', e => { const b = e.target.closest('.acc-sw'); if (b) { pick(b.dataset.c); b.focus(); } });
+  pop.addEventListener('keydown', e => { const l = sws(), i = l.indexOf(document.activeElement); if (e.key === 'Escape') { open(false); trig.focus(); } else if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key) && i >= 0) { e.preventDefault(); const n = l[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : l.length - 1)) % l.length]; n.focus(); pick(n.dataset.c); } });
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !root.contains(e.target)) open(false); });
+  root.addEventListener('focusout', e => { if (!pop.hidden && !root.contains(e.relatedTarget)) open(false); });
+  sync(); return { sync }; })();
+// first signed-in load: carry a locally chosen accent over to an account that has none (once per user; never overwrites)
+async function carryAccent() { const a = localAccent(); if (!a || !S || S.settings.accent || !ME) return; const k = 'shAccentDone:' + (ME.id || ME.username || ''); try { if (localStorage[k]) return; localStorage[k] = '1'; } catch { return; }
+  try { await api('/api/settings', 'POST', { accent: a }); S.settings.accent = a; applyAccent(); } catch { /* ignore */ } }
 function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.accent || (S && sel && S.subjectMeta[sel]?.color && color(sel)), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
 
 // ---------- nav & data ----------
@@ -315,7 +335,7 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); }
+async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -742,7 +762,7 @@ new MutationObserver(() => logoInk()).observe(document.documentElement, { attrib
 // In-app logo mark: a hairline wave in an accent tile. Draws itself once on load; while hovered the wave is a travelling sine
 // (amplitude follows the pointer a little), easing back to rest in ~300ms on leave (a tap plays ~1.5s); while a timer runs it travels on
 // the shared session clock (same 9s period/phase as the ring lines). Lowest quality: static. Low: no running motion. rAF only while needed.
-const LOGO = (() => { const el = document.querySelector('#app .sh-mark'), w = el && el.querySelector('.sh-wave'); if (!w) return { kick() {} };
+const mkLogo = el => { const w = el && el.querySelector('.sh-wave'); if (!w) return { kick() {} };
   let raf = 0, hov = false, until = 0, A = 5, tA = 5, ph = 0, hp = 0, last = 0, base = 0;
   const path = (amp, phi) => { let d = ''; for (let i = 0; i <= 44; i++) { const x = 5 + i * .5, y = 16 - amp * Math.sin((x - 5) / 22 * 4 * Math.PI - phi); d += (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2); } return d; };
   const running = () => S && S.active && !S.active.paused && animLevel() >= 2;
@@ -759,7 +779,16 @@ const LOGO = (() => { const el = document.querySelector('#app .sh-mark'), w = el
   el.addEventListener('pointerleave', () => { hov = false; tA = 5; wrap(); });
   el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && animLevel() >= 2) { until = performance.now() + 1500; tA = 5.5; kick(); } });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
-  w.setAttribute('d', path(5, 0)); return { kick }; })();
+  w.setAttribute('d', path(5, 0)); return { kick }; };
+// Landing tour > Trophies: the same hairline drawings as the app (accent colour, feature-only hover, draw once when shown).
+// Falls back to the plain medal discs when a drawing is missing.
+(() => { const g = $('pvTrophies'); if (!g || !window.TrophyArt) return; let any = false;
+  g.querySelectorAll('.pv-tro[data-tid]').forEach(c => { const id = c.dataset.tid; if (!TrophyArt.has(id)) return; any = true; const on = !c.classList.contains('lock');
+    c.querySelector('.medal-c').outerHTML = '<div class="t-ic t-art' + (on ? ' on' : '') + '" data-tid="' + id + '">' + TrophyArt.svg(id) + '</div>'; });
+  if (!any) return; g.classList.add('pv-art');
+  const play = () => { if (animLevel() >= 1) { g.classList.add('pv-play'); setTimeout(() => g.classList.add('pv-shown'), 1700); } else g.classList.add('pv-shown'); };
+  if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); play(); } }, { threshold: .5 }); io.observe(g); } else play(); })();
+const LOGO = mkLogo(document.querySelector('#app .sh-mark')); mkLogo(document.querySelector('#landing .sh-mark')); // landing: same hairline wave (no session clock there)
 // Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
 // click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
 // isometric view a few degrees. Reduced motion: no lean, actions show their end state.
@@ -928,7 +957,7 @@ VIEWS.set = async () => {
   const af = await api('/api/affiliates/me').catch(() => null);
   return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div>
     <div class="mt"><label>Session card size</label><div class="tabs" id="sNowSize">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
+    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><span class="acc-row" role="group" aria-label="Accent swatches">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
@@ -1194,6 +1223,7 @@ async function adminHTML() {
       <div class="row"><button class="btn" data-act="repReview" data-id="${r.id}">Review / edit</button>${r.status !== 'approved' ? `<button class="btn primary" data-act="repSet" data-id="${r.id}" data-s="approved">Approve</button>` : ''}${r.status !== 'rejected' ? `<button class="btn danger" data-act="repSet" data-id="${r.id}" data-s="rejected">Reject</button>` : ''}</div></div>`).join('') || '<p class="muted small">No reports.</p>'}</div>`;
 }
 ACT.theme = b => { SHTheme.set(b.dataset.t); render(); };
+ACT.accSw = async b => { $('sAccent').value = b.dataset.c; await api('/api/settings', 'POST', { accent: b.dataset.c }); await refresh(); };
 ACT.saveAccent = async () => { await api('/api/settings', 'POST', { accent: $('sAccent').value }); await refresh(); };
 ACT.resetAccent = async () => { await api('/api/settings', 'POST', { accent: '' }); await refresh(); };
 const hrs = id => Math.round((+$(id).value || 0) * 60);

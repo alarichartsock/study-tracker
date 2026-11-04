@@ -554,9 +554,9 @@ html.authed #landing{display:none}
    no filter/mask, no per-section or container backgrounds), so nothing can clip it into seams at any width. App screens are unaffected. */
 body:has(#landing:not(.hid)) .wallpaper{display:none}
 body:has(#landing:not(.hid))::before{content:'';position:fixed;inset:-10vh -10vw;z-index:-1;pointer-events:none;background:
-  radial-gradient(75vmax 60vmax at 12% 8%,color-mix(in srgb,var(--wp1) 75%,transparent),transparent 72%),
-  radial-gradient(70vmax 60vmax at 92% 38%,color-mix(in srgb,var(--wp2) 60%,transparent),transparent 72%),
-  radial-gradient(80vmax 60vmax at 40% 105%,color-mix(in srgb,var(--wp3) 45%,transparent),transparent 72%),
+  radial-gradient(75vmax 60vmax at 12% 8%,color-mix(in srgb,var(--lw1) 75%,transparent),transparent 72%),
+  radial-gradient(70vmax 60vmax at 92% 38%,color-mix(in srgb,var(--lw2) 60%,transparent),transparent 72%),
+  radial-gradient(80vmax 60vmax at 40% 105%,color-mix(in srgb,var(--lw3) 45%,transparent),transparent 72%),
   var(--bg)}
 #landing{position:relative}
 
@@ -813,3 +813,43 @@ html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
 /* Anchor buttons (<a class="btn">) take the button text colour in every link state, both themes, instead of the browser's link blue/purple.
    Zero specificity, so .btn.primary / .btn.danger / .btn.ghost colours still win. */
 :where(a.btn,a.btn:link,a.btn:visited,a.btn:hover,a.btn:focus,a.btn:focus-visible,a.btn:active){color:var(--text);text-decoration:none}
+
+/* Landing: hairline logo mark (same as the app), accent picker; nav controls share one height and centre line */
+#landing .sh-tile{fill:url(#shMarkL)}
+.l-top{align-items:center}.l-top>*{align-self:center}
+.l-top .btn,.l-top .acc-trig,.l-top .lang-pick{height:var(--control-h);min-height:var(--control-h);box-sizing:border-box;line-height:1;margin:0}
+.l-top .lang-slot{display:inline-flex;align-items:center;height:var(--control-h)}
+.l-top .lang-pick{padding:0 14px;border-radius:999px;border:1px solid transparent;gap:6px}
+.l-top .lang-pick:hover,.l-top .acc-trig:hover{background:color-mix(in srgb,var(--acc) 8%,transparent)}
+.l-top .lang-pick:focus-within:has(select:focus-visible){outline:2px solid color-mix(in srgb,var(--acc) 60%,transparent);outline-offset:1px}
+.acc-pick{position:relative;display:inline-flex;align-items:center}
+.acc-trig{padding:0 14px!important;width:auto;min-width:var(--control-h)}
+.acc-dot{display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--acc-b,var(--acc)));box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 25%,transparent)}
+.acc-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:20;display:grid;grid-template-columns:repeat(5,28px);gap:8px;padding:10px;border-radius:16px;box-shadow:0 12px 30px -10px rgba(10,20,50,.35)}
+.acc-pop[hidden]{display:none}
+.acc-sw{width:28px;height:28px;min-height:0;padding:0;border-radius:50%;border:2px solid var(--card);background:var(--sw,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 18%,transparent);cursor:pointer;color:var(--muted);font-size:14px;line-height:1}
+.acc-sw[aria-checked="true"],.acc-sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--sw,var(--acc))}
+.acc-sw:focus{outline:none}.acc-sw:focus-visible,.acc-trig:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.acc-def{background:var(--card2)}
+.acc-row{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;margin-right:6px}.acc-row .acc-sw{width:24px;height:24px}
+@media(max-width:520px){.l-top .btn.ghost.acc-trig{display:inline-flex;align-items:center;justify-content:center}.acc-pop{right:-60px}.l-top .lang-pick{padding:0 10px}.acc-trig{padding:0 10px!important}}
+
+/* landing tour trophies drawn with trophy-art.js */
+.pv-art .t-ic.t-art{height:auto!important;color:var(--acc)}.pv-art .t-art .ta{width:64px;height:64px}
+.pv-art .pv-tro.lock .t-art{color:var(--muted)}.pv-art .pv-tro.lock .ta .a{stroke-dasharray:.03 .03}.pv-art .pv-tro.lock .ta .tp,.pv-art .pv-tro.lock .ta .hl{fill:var(--card2)}
+.pv-art .ta path,.pv-art .ta ellipse,.pv-art .ta circle{stroke-width:.9}
+.pv-art:not(.pv-play):not(.pv-shown) .ta>*{stroke-dasharray:1;stroke-dashoffset:1}
+.pv-art.pv-play:not(.pv-shown) .ta>*:not(.dd){stroke-dasharray:1;animation:ta-draw 1.2s var(--ease) .1s both}
+[data-anim="0"] .pv-art .ta>*{animation:none!important;stroke-dashoffset:0!important;stroke-dasharray:none!important}
+.pv-tro.lock{opacity:.6}
+
+/* Landing washes follow a locally picked accent: a soft tint of the accent, a neighbour hue and a low-chroma complement (light theme),
+   or deep low-saturation versions (dark theme). Default accent = the original periwinkle/cyan/pink washes. Text sits on --bg/cards, AA kept. */
+@property --lw1{syntax:'<color>';inherits:true;initial-value:transparent}@property --lw2{syntax:'<color>';inherits:true;initial-value:transparent}@property --lw3{syntax:'<color>';inherits:true;initial-value:transparent}
+body{--lw1:var(--wp1);--lw2:var(--wp2);--lw3:var(--wp3);transition:--lw1 .4s ease,--lw2 .4s ease,--lw3 .4s ease}
+html.acc-local[data-theme=light] body{--lw1:color-mix(in oklab,var(--acc) 45%,#fff);--lw2:color-mix(in oklab,var(--acc) 22%,#cfeef6);--lw3:color-mix(in oklab,var(--acc) 15%,#f6dbe8)}
+html.acc-local[data-theme=dark] body{--lw1:color-mix(in oklab,var(--acc) 55%,#10132a);--lw2:color-mix(in oklab,var(--acc) 30%,#0b3a44);--lw3:color-mix(in oklab,var(--acc) 22%,#3a1030)}
+@supports (color:oklch(from red l c h)){
+  html.acc-local[data-theme=light] body{--lw1:oklch(from var(--acc) .8 .11 h);--lw2:oklch(from var(--acc) .9 .08 calc(h + 50));--lw3:oklch(from var(--acc) .88 .06 calc(h + 180))}
+  html.acc-local[data-theme=dark] body{--lw1:oklch(from var(--acc) .42 .1 h);--lw2:oklch(from var(--acc) .4 .07 calc(h + 50));--lw3:oklch(from var(--acc) .36 .06 calc(h + 180))}}
+@media (prefers-reduced-motion:reduce){body{transition:none}}
