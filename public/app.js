@@ -720,7 +720,7 @@ function achBody(cat, filt) { const { A, seen } = ACH, keep = x => filt === 'all
     (x.earnedBy ? '<div class="t-by small">Earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') + ' (' + x.earnedBy.pct + '%)</div>' : '') + '</div>';
   // Launch Pad: the outer card is a static hit box (hover/focus/click); the visible face inside it lifts and tilts, so the hit area never
   // moves out from under the cursor (no enter/leave flicker at the edges)
-  const face = (x, h) => { if (x.cat !== 'launch') return h; const i = h.indexOf('>') + 1; return h.slice(0, i) + '<div class="t-face">' + h.slice(i, -6) + '</div></div>'; };
+  const face = (x, h) => { if (!(window.TrophyArt && TrophyArt.has(x))) return h; /* every line-art (.t-lp) card needs its .t-face: the outer box is invisible */ const i = h.indexOf('>') + 1; return h.slice(0, i) + '<div class="t-face">' + h.slice(i, -6) + '</div></div>'; };
   const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4><div class="trophies">' + list.map(x => face(x, card(x))).join('') + '</div>' : ''; };
   const personal = () => { const groups = {}; for (const x of A.personal) (groups[x.kind + '|' + x.key] ||= []).push(x);
     const out = ['activity', 'subject'].map(k => Object.entries(groups).filter(([g]) => g.startsWith(k + '|')).map(([g, l]) => section((k === 'activity' ? 'Activity: ' : 'Subject: ') + g.slice(k.length + 1), l)).join('')).join('');

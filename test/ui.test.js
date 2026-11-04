@@ -243,3 +243,11 @@ test('tab favicon follows the accent via an SVG data URI; PNG/ICO and home-scree
   assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /'data:image\/svg\+xml,'/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
+
+test('trophy cards: every line-art card gets its visible .t-face, and the sheen ends hidden', () => {
+  const app = pub('app.js'), css = pub('style.css');
+  assert.match(app, /const face = \(x, h\) => \{ if \(!\(window\.TrophyArt && TrophyArt\.has\(x\)\)\) return h;/);
+  assert.doesNotMatch(app, /const face = \(x, h\) => \{ if \(x\.cat !== 'launch'\)/);
+  assert.match(css, /\.t-lp>\.t-face\{[^}]*background:var\(--card\);border:1px solid var\(--line\)/);
+  assert.match(css, /@keyframes t-sheen\{[^}]*\}[^@]*100%\{transform:translateX\(110%\);opacity:0\}/);
+});

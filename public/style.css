@@ -679,7 +679,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 @keyframes t-fill{from{transform:scaleX(0)}to{transform:none}}
 .t-sheen{position:absolute;inset:0;pointer-events:none;background:linear-gradient(105deg,transparent 35%,color-mix(in srgb,var(--text) 9%,transparent) 50%,transparent 65%);transform:translateX(-110%);opacity:0}
 .t-sh .t-sheen{animation:t-sheen .8s var(--ease) both}
-@keyframes t-sheen{0%{transform:translateX(-110%);opacity:1}100%{transform:translateX(110%);opacity:1}}
+@keyframes t-sheen{0%{transform:translateX(-110%);opacity:1}90%{opacity:1}100%{transform:translateX(110%);opacity:0}}
 .t-play.t-new .t-ic{animation:t-lift 1s var(--ease) .35s both}
 @keyframes t-lift{0%{transform:none}35%{transform:translateY(-7px)}100%{transform:none}}
 .t-new .t-ic{position:relative}
