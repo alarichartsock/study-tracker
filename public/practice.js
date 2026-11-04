@@ -31,21 +31,50 @@
     act: 'https://www.act.org/content/act/en/products-and-services/the-act/scores/understanding-your-scores.html',
     usmle1: 'https://www.usmle.org/scores-transcripts/examination-results-and-scoring', dat: 'https://www.ada.org/education/testing/exams/dental-admission-test-dat/dat-scores'
   };
-  const CALC = { sum: xs => xs.reduce((a, b) => a + b, 0), avgHalfUp: xs => halfUp(avg(xs)), avgR10: xs => r10(avg(xs)), first: xs => xs[0] };
+  // Known official / common practice-test sources per template (suggestions for the Source field; free text still allowed).
+  // Checked Nov 2026: LSAC LawHub PrepTests; ETS POWERPREP Online 1-2 (free) + POWERPREP PLUS 1-3; GMAT Official Practice Exams 1-6 (1-2 free);
+  // College Board Bluebook SAT Practice Tests 4-11; ACT Official Practice Tests 1-4 + Official ACT Prep Guide; NBME CBSSA forms 28-34 (26/27 retired
+  // Sep 2026), UWorld UWSA 1-3, Free 120; ADA DAT practice test, DAT Bootcamp, Booster Prep.
+  const n = (pre, a, b) => Array.from({ length: b - a + 1 }, (_, i) => pre + (a + i));
+  const PROVIDERS = {
+    lsat: ['LawHub PrepTest', 'LawHub official sample test', 'LSAC PrepTest (book)', '7Sage', 'Blueprint LSAT', 'Kaplan', 'PowerScore', 'LSAT Demon'],
+    gre: ['POWERPREP Online Test 1', 'POWERPREP Online Test 2', ...n('POWERPREP PLUS Test ', 1, 3), 'Manhattan Prep', 'Kaplan', 'Princeton Review', 'Magoosh', 'Target Test Prep'],
+    gmat: [...n('GMAT Official Practice Exam ', 1, 6), 'Target Test Prep', 'Manhattan Prep', 'e-GMAT', 'Kaplan'],
+    sat: [...n('Bluebook Practice Test ', 4, 11), 'Khan Academy', 'Princeton Review', 'Kaplan', 'UWorld'],
+    act: [...n('ACT Official Practice Test ', 1, 4), 'Official ACT Prep Guide test', 'Kaplan', 'Princeton Review', 'UWorld'],
+    usmle1: [...n('NBME CBSSA ', 28, 34), 'NBME CBSSA 26 (retired)', 'NBME CBSSA 27 (retired)', 'UWSA 1', 'UWSA 2', 'UWSA 3', 'Free 120', 'AMBOSS Self-Assessment'],
+    dat: ['ADA DAT Practice Test', 'DAT Bootcamp', 'Booster Prep', 'Kaplan', 'Princeton Review', 'Chad\u2019s Prep'],
+    custom: []
+  };
+  const CALC = { sum: xs => xs.reduce((a, b) => a + b, 0), avgHalfUp: xs => halfUp(avg(xs)), avgR10: xs => r10(avg(xs)), first: xs => xs[0], avg1: xs => Math.round(avg(xs) * 10) / 10 };
   // Custom template: user-defined sections [{ k, l, min, max }], total = sum of sections.
   function customSpec(defs) { const sections = (Array.isArray(defs) ? defs : []).map(d => [d.k, d.l, d.l, d.min, d.max, 1, true]);
     return { sections, total: { label: 'Total', min: sections.reduce((a, s) => a + s[3], 0), max: sections.reduce((a, s) => a + s[4], 0), step: 1, of: sections.map(s => s[0]), calc: 'sum' }, note: 'Total is the sum of your sections.' }; }
   function cleanCustomSections(list) { const out = [], seen = new Set();
     for (const d of Array.isArray(list) ? list.slice(0, 10) : []) { const l = String(d && d.l || '').replace(/\s+/g, ' ').trim().slice(0, 40); if (!l) continue;
       const min = Number(d.min), max = Number(d.max); if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max > 100000 || max <= min) throw new Error(l + ': min and max must be whole numbers with max > min');
-      let k = 's' + (out.length + 1); while (seen.has(k)) k += 'x'; seen.add(k); out.push({ k, l, min, max }); }
+      // keep an existing key so logged scores stay attached when sections are renamed/reordered/removed
+      let k = /^s\d{1,3}x*$/.test(d.k) && !seen.has(d.k) ? d.k : null; if (!k) { let i = out.length + 1; k = 's' + i; while (seen.has(k) || list.some(o => o && o.k === k)) k = 's' + ++i; } seen.add(k); out.push({ k, l, min, max }); }
     return out; }
-  const spec = (id, custom) => id === 'custom' ? customSpec(custom) : SPECS[id] || null;
+  // User-defined tests (any template): { id: 'ct_N', name, sections: [{ k, l, min, max }], total: 'sum' | 'avg' | 'none' }
+  const RULES = { sum: 'Total (sum)', avg: 'Average', none: '' };
+  function testSpec(t) { if (!t) return null; const sections = t.sections.map(d => [d.k, d.l, d.l, d.min, d.max, 1, true]), of = sections.map(s => s[0]);
+    const tot = t.total === 'avg' ? { label: 'Average', min: Math.min(...t.sections.map(d => d.min)), max: Math.max(...t.sections.map(d => d.max)), step: 0.1, of, calc: 'avg1' }
+      : t.total === 'none' ? { label: 'Score', min: 0, max: 0, step: 1, none: true } : { label: 'Total', min: t.sections.reduce((a, d) => a + d.min, 0), max: t.sections.reduce((a, d) => a + d.max, 0), step: 1, of, calc: 'sum' };
+    return { sections, total: tot, note: t.total === 'none' ? 'Sections are tracked separately (no total).' : t.total === 'avg' ? 'Average of your sections.' : 'Total is the sum of your sections.' }; }
+  function cleanTests(list, prev) { const out = [], used = new Set(); let next = 1 + Math.max(0, ...(prev || []).map(t => +String(t.id).slice(3) || 0));
+    for (const t of Array.isArray(list) ? list.slice(0, 10) : []) { const name = String(t && t.name || '').replace(/\s+/g, ' ').trim().slice(0, 60); if (!name) continue;
+      const sections = cleanCustomSections(t.sections); if (!sections.length) throw new Error(name + ': add at least one section');
+      let id = /^ct_\d{1,6}$/.test(t.id) && (prev || []).some(p => p.id === t.id) && !used.has(t.id) ? t.id : 'ct_' + next++; used.add(id);
+      out.push({ id, name, sections, total: RULES[t.total] !== undefined ? t.total : 'sum' }); }
+    return out; }
+  const isTest = id => /^ct_\d+$/.test(String(id || ''));
+  const spec = (id, custom, tests) => isTest(id) ? testSpec((tests || []).find(t => t.id === id)) : id === 'custom' ? customSpec(custom) : SPECS[id] || null;
   const ok = (v, lo, hi, st) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi && Math.abs(Math.round((v - lo) / st) * st - (v - lo)) < 1e-9;
   const calc = (how, keys, x) => { const vs = keys.map(k => x[k]); return vs.some(v => v == null) ? null : CALC[how](vs); };
-  function totalOf(sp, x) { return sp.total.entered ? x.total : calc(sp.total.calc, sp.total.of, x); }
-  function clean(id, j, old = {}, custom) {
-    const sp = spec(id, custom); if (!sp || !sp.sections.length) throw new Error('No practice-exam sections for this template'); j = j || {};
+  function totalOf(sp, x) { return sp.total.none ? null : sp.total.entered ? x.total : calc(sp.total.calc, sp.total.of, x); }
+  function clean(id, j, old = {}, custom, tests) {
+    const sp = spec(id, custom, tests); if (!sp || !sp.sections.length) throw new Error('No practice-exam sections for this template'); j = j || {};
     const date = j.date ?? old.date; if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) || isNaN(new Date(date + 'T00:00:00Z'))) throw new Error('date required (YYYY-MM-DD)');
     const out = { exam: id, date, source: String(j.source ?? old.source ?? '').trim().slice(0, 80) || 'Practice exam', notes: String(j.notes ?? old.notes ?? '').trim().slice(0, 1000) };
     for (const [k, l, , lo, hi, st, req] of sp.sections) { const raw = j[k] !== undefined ? j[k] : old[k]; const v = raw === '' || raw == null ? null : Number(raw);
@@ -56,15 +85,15 @@
     else out.total = totalOf(sp, out);
     for (const [name, keys, how] of sp.extra || []) out[name === 'STEM' ? 'stem' : 'ts'] = calc(how, keys, out);
     return out; }
-  const cleanGoal = (id, g, custom) => { if (g === null || g === '' || g === undefined) return null; const sp = spec(id, custom), n = Number(g); if (!sp || !(n >= sp.total.min && n <= sp.total.max)) throw new Error(`goal must be from ${sp ? sp.total.min : 0} to ${sp ? sp.total.max : 0}`); return n; };
-  function summary(list, id) {
-    const xs = (list || []).filter(x => x.exam === id && x.total != null).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  const cleanGoal = (id, g, custom, tests) => { if (g === null || g === '' || g === undefined) return null; const sp = spec(id, custom, tests), n = Number(g); if (sp && sp.total.none) throw new Error('This test has no total, so it has no goal score'); if (!sp || !(n >= sp.total.min && n <= sp.total.max)) throw new Error(`goal must be from ${sp ? sp.total.min : 0} to ${sp ? sp.total.max : 0}`); return n; };
+  function summary(list, id, sp) {
+    const xs = (list || []).filter(x => x.exam === id && (x.total != null || (sp && sp.total.none))).sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
     if (!xs.length) return { n: 0, exams: [] };
     const first = xs[0], last = xs[xs.length - 1], prev = xs.length > 1 ? xs[xs.length - 2] : null;
     const best = xs.reduce((b, x) => x.total > b.total || (x.total === b.total && x.date > b.date) ? x : b, first);
     const d = (a, b, k) => b && a[k] != null && b[k] != null ? +(a[k] - b[k]).toFixed(1) : null;
     const keys = ['total', ...Object.keys(last).filter(k => !['id', 'exam', 'date', 'source', 'notes', 'total'].includes(k))];
     return { n: xs.length, exams: xs, first, last, prev, best, change: Object.fromEntries(keys.map(k => [k, { prev: d(last, prev, k), first: xs.length > 1 ? d(last, first, k) : null }])) }; }
-  const api = { SPECS, SOURCES, spec, customSpec, cleanCustomSections, clean, cleanGoal, summary, totalOf };
+  const api = { SPECS, SOURCES, PROVIDERS, RULES, isTest, testSpec, cleanTests, spec, customSpec, cleanCustomSections, clean, cleanGoal, summary, totalOf };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.PRACTICE = api;
 })(typeof self !== 'undefined' ? self : this);

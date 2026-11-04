@@ -387,9 +387,11 @@ function createApp(opts = {}) {
   }
   // Exams are MCAT sittings: one combined score (472-528). Legacy subject/weight fields are no longer written or used,
   // but are left in place on existing records (PUT merges), so no data is lost.
-  const cleanExam = (j, old, ud) => { const [lo, hi] = TEMPLATES.scoreRange(ud && ud.template); const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
+  const cleanExam = (j, old, ud) => { const tests = (ud && ud.settings && ud.settings.customTests) || [], tid = j.test !== undefined ? j.test : old.test;
+    const ct = PRACTICE.isTest(tid) ? tests.find(t => t.id === tid) : null; if (PRACTICE.isTest(tid) && !ct) throw new Error('unknown test');
+    const sp = ct ? PRACTICE.testSpec(ct) : null, [lo, hi] = sp ? (sp.total.none ? [0, 100000] : [Math.floor(sp.total.min), Math.ceil(sp.total.max)]) : TEMPLATES.scoreRange(ud && ud.template); const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
     let grade = old.grade ?? null; if (j.grade !== undefined) { if (j.grade === '' || j.grade === null) grade = null; else { const g = Number(j.grade); if (!Number.isInteger(g) || g < lo || g > hi) throw new Error(`score must be a whole number from ${lo} to ${hi}`); grade = g; } }
-    return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade }; };
+    return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade, ...(ct ? { test: ct.id } : {}) }; };
   const cleanTask = (j, old) => { const due = j.due !== undefined ? j.due : old.due; if (due && !isDateKey(due)) throw new Error('due must be YYYY-MM-DD');
     const done = j.done !== undefined ? !!j.done : !!old.done;
     return { title: str(j.title ?? old.title, 200) || 'Task', due: due || '', priority: ['low', 'normal', 'high'].includes(j.priority) ? j.priority : old.priority || 'normal',
@@ -682,9 +684,20 @@ function createApp(opts = {}) {
       // ---- MCAT practice exams ----
       if (p === '/api/practice' || p.startsWith('/api/practice/')) ud.practice ||= [];
       // MCAT keeps its own validator and record shape; other templates use the template-driven tracker (records tagged exam: <id>)
-      const pxMcat = (ud.template || 'mcat') === 'mcat', pxClean = (a, b) => b && b.id && (b.exam || 'mcat') !== (ud.template || 'mcat') ? (() => { throw new Error('That practice exam belongs to another template'); })() : pxMcat ? MCAT.cleanPractice(a, b) : PRACTICE.clean(ud.template, a, b, ud.settings.customSections);
+      // practice records: the template's own test (MCAT keeps mcat.js; records without exam are MCAT) or one of the user's custom tests (ct_N)
+      const pxMcat = (ud.template || 'mcat') === 'mcat', tpl = ud.template || 'mcat', ctests = ud.settings.customTests || [];
+      const pxClean = (a, b) => { const ex = b && b.id ? (b.exam || 'mcat') : PRACTICE.isTest(a.exam) ? a.exam : tpl;
+        if (PRACTICE.isTest(ex)) { if (!ctests.some(t => t.id === ex)) throw new Error('That custom test no longer exists'); return PRACTICE.clean(ex, a, b, null, ctests); }
+        if (ex !== tpl) throw new Error('That practice exam belongs to another template');
+        return pxMcat ? MCAT.cleanPractice(a, b) : PRACTICE.clean(tpl, a, b, ud.settings.customSections); };
+      if (p === '/api/practice-tests' && M === 'POST') { let next; try { next = PRACTICE.cleanTests(j.tests, ctests); } catch (e) { return send(res, 400, { error: e.message }); }
+        const gone = ctests.filter(t => !next.some(n => n.id === t.id)).map(t => t.id); // deleting a test also deletes its logged scores and goal (the UI confirms first)
+        if (gone.length) { ud.practice = (ud.practice || []).filter(x => !gone.includes(x.exam)); for (const id of gone) if (ud.settings.practiceGoals) delete ud.settings.practiceGoals[id]; for (const e of ud.exams || []) if (gone.includes(e.test)) delete e.test; } // exam dates stay, just unlinked
+        ud.settings.customTests = next; save(); return send(res, 200, { tests: next, removed: gone }); }
       if (p === '/api/practice-sections' && M === 'POST') { try { ud.settings.customSections = PRACTICE.cleanCustomSections(j.sections); } catch (e) { return send(res, 400, { error: e.message }); } save(); return send(res, 200, { sections: ud.settings.customSections }); }
-      const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' && p !== '/api/practice-sections' ? crud(ud, 'practice', p, M, j, pxClean, res) : false; if (r3 !== false) return r3;
+      const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' && p !== '/api/practice-sections' && p !== '/api/practice-tests' ? crud(ud, 'practice', p, M, j, pxClean, res) : false; if (r3 !== false) return r3;
+      if (p === '/api/practice-goal' && M === 'POST' && PRACTICE.isTest(j.exam)) { if (!ctests.some(t => t.id === j.exam)) return send(res, 400, { error: 'unknown test' });
+        let g; try { g = PRACTICE.cleanGoal(j.exam, j.goal, null, ctests); } catch (e) { return send(res, 400, { error: e.message }); } (ud.settings.practiceGoals ||= {})[j.exam] = g; save(); return send(res, 200, { goal: g }); }
       if (p === '/api/practice-goal' && M === 'POST') { if (pxMcat) { ud.settings.mcatGoal = MCAT.cleanGoal(j.goal); save(); return send(res, 200, { goal: ud.settings.mcatGoal }); }
         const g = PRACTICE.cleanGoal(ud.template, j.goal, ud.settings.customSections); (ud.settings.practiceGoals ||= {})[ud.template] = g; save(); return send(res, 200, { goal: g }); }
       const r2 = crud(ud, 'tasks', p, M, j, cleanTask, res); if (r2 !== false) return r2;

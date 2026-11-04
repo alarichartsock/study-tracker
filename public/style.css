@@ -650,3 +650,6 @@ body:has(#landing:not(.hid)){overflow-x:clip}
    padding is cancelled by a negative margin. The h1 itself (no-JS/reduced-motion gradient) gets bottom/right room the same way. */
 .hero h1#heroH1{padding:0 .08em .16em 0;margin-right:-.08em;margin-bottom:calc(18px - .16em)}
 .hero h1#heroH1.rotating .gw{padding:.12em .08em .22em;margin:0 -.08em}
+/* Scores page: test tabs (template test + custom tests) scroll sideways instead of clipping on phones */
+.px-tests .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none;flex:0 1 auto}.px-tests .tabs::-webkit-scrollbar{display:none}.px-tests .tabs button{white-space:nowrap;flex:0 0 auto}
+@media(max-width:699px){.px-tests{flex-direction:column;align-items:stretch}.px-tests .sp{display:none}.px-tests>.btn{align-self:flex-end}}
