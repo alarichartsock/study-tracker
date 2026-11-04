@@ -123,3 +123,12 @@ test('circling timer lines share one clock derived from the session start (no pe
   assert.match(js, /function cometSync\(force\)/); assert.match(js, /\(Date\.now\(\) - new Date\(a\.start\)\) \/ 1000\) % COMET_S/);
   assert.doesNotMatch(js, /g-comet" style="animation-delay/); assert.match(js, /if \(!document\.hidden\) cometSync\(true\)/); assert.match(js, /AFTER\.dash = \(\) => \{ GA\.play\(\); cometSync\(\);/);
 });
+
+test('trophy drawings are interactive: lean, one action per trophy, keyboard, popup turn, reduced-motion end states', () => {
+  const fs = require('node:fs'), path = require('node:path'), js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  delete require.cache[require.resolve('../public/trophy-art.js')]; global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
+  for (const id of T.ids) { assert.ok(T.DUR[id] > 0); if (id !== 'tinker') assert.notEqual(T.inner(id, 0.4), T.inner(id, 1), id + ' action changes the drawing'); assert.equal(T.inner(id, 1), T.inner(id), id + ' rests at p=1'); }
+  assert.notEqual(T.inner('first', 1, { yaw: 12 }), T.inner('first', 1)); assert.notEqual(T.inner('tinker', 1, { turn: 45 }), T.inner('tinker', 1));
+  assert.match(js, /const TAI = /); assert.match(js, /ACT\.taPlay = b => TAI\.play\(b\)/); assert.match(js, /closest\('\.t-art\[data-act\]'\) && \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
+  assert.match(js, /if \(still\(\)\) return draw\(el, 1\)/);
+});

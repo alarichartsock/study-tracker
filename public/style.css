@@ -708,3 +708,11 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 @keyframes ta-fade{from{opacity:0}}
 #dlg:has(.t-art) .t3d-hint{display:none}
 @media (prefers-reduced-motion:reduce){.t-play.on .ta>*{animation:none!important}.t-lp.on .ta>*{stroke-dashoffset:0!important}}
+/* Trophy drawings lean toward the pointer and ease back; the popup drawing can be dragged to turn */
+.t-art .ta{transform:perspective(260px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg));transition:transform .6s var(--ease);will-change:transform}
+.t-art.ta-lean .ta{transition:transform .18s ease-out}
+.t-art[data-act]{cursor:pointer;border-radius:12px;outline-offset:2px}.t-art[data-act]:focus-visible{outline:1.5px solid var(--acc)}
+.t-art.big{cursor:grab;touch-action:pan-y;user-select:none}.t-art.big:active{cursor:grabbing}.t-art[data-tid=tinker][data-act]{touch-action:pan-y}
+.ta-cap{text-align:center;margin-top:2px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.t-art .ta{transform:none!important;transition:none}}
+.t-shown .ta>*{animation:none!important}
