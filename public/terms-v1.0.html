@@ -5,7 +5,7 @@
 <meta name="description" content="StudyHertz Terms of Service, version 1.0.">
 <link rel="canonical" href="https://studyhertz.com/terms"><meta name="robots" content="noindex">
 <link rel="icon" href="/favicon.svg?v=3" type="image/svg+xml"><link rel="icon" href="/favicon-32.png?v=3" sizes="32x32" type="image/png"><link rel="shortcut icon" href="/favicon.ico?v=3"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=3"><link rel="stylesheet" href="/style.css">
-<script>document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');</script>
+<script>(function () { var d = document.documentElement, q = matchMedia('(prefers-color-scheme: light)'), C = { dark: '#0b0d18', light: '#eef1f8' }; function pref() { var t; try { t = localStorage.theme; } catch (e) { /* ignore */ } return t === 'light' || t === 'dark' ? t : 'system'; } function apply() { var p = pref(), t = p === 'system' ? (q.matches ? 'light' : 'dark') : p; d.dataset.theme = t; d.dataset.themePref = p; var m = document.querySelector('meta[name=theme-color]'); if (m) m.content = C[t]; } function set(p) { try { localStorage.theme = p === 'light' || p === 'dark' ? p : 'system'; } catch (e) { /* ignore */ } apply(); } var on = function () { if (pref() === 'system') apply(); }; if (q.addEventListener) q.addEventListener('change', on); else if (q.addListener) q.addListener(on); addEventListener('storage', function (e) { if (e.key === 'theme') apply(); }); window.SHTheme = { pref: pref, set: set, apply: apply }; apply(); })();</script>
 </head><body>
 <div class="wallpaper" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
 <main class="privacy">
