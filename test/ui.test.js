@@ -97,3 +97,13 @@ test('admin Users rows filter Logs to that user with a removable chip; Details b
   assert.match(js, /ACT\.usrLogs = b => \{[^]*?UI\.logF\.uid = id/); assert.match(js, /User: ' \+ esc\(/); assert.match(js, /ACT\.logUserClear = /);
   assert.match(js, /\$\('logsTop'\)\?\.scrollIntoView/);
 });
+
+test('landing section links scroll in-page and deep links survive boot', () => {
+  const a = pub('app.js'), c = pub('style.css');
+  assert.match(a, /location\.pathname \+ \(ks \? '\?' \+ ks : ''\) \+ location\.hash/, 'query cleanup must keep the #hash');
+  assert.match(a, /closest\('#landing a\[href\^="#"\]'\)/);
+  assert.match(a, /prefers-reduced-motion: reduce\)'\)\.matches \? 'smooth' : 'auto'/);
+  assert.match(a, /history\.pushState\(null, '', u\)/);
+  assert.match(a, /showLanding && location\.hash\.length > 1\) requestAnimationFrame\(\(\) => landNav\(location\.hash, false\)\)/);
+  assert.match(c, /\.landing section\[id\]\{scroll-margin-top:/);
+});
