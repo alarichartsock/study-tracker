@@ -105,7 +105,7 @@ test('dashboard goal rings animate quietly and respect reduced motion', () => {
 });
 test('Launch Pad trophy animations are one-shot, launch-only and reduced-motion safe', () => {
   const js = pub('app.js'), css = pub('style.css');
-  assert.match(js, /x\.cat === 'launch' \? ' t-lp'/); assert.match(js, /const TLP = /); assert.match(js, /TLP\.scan\(\$\('achGrid'\)\)/);
+  assert.match(js, /TrophyArt\.has\(x\) \? ' t-lp'/); assert.match(js, /const TLP = /); assert.match(js, /TLP\.scan\(\$\('achGrid'\)\)/);
   assert.match(css, /@keyframes t-trace/); assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.t-line,\.t-sheen/);
   assert.ok(!/\.t-lp[^{]*\{[^}]*animation:[^}]*infinite/.test(css), 'no idle loops');
 });
@@ -113,9 +113,11 @@ test('Launch Pad trophy animations are one-shot, launch-only and reduced-motion 
 test('Launch Pad trophy art: one isometric hairline svg per trophy, served and cached', () => {
   const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
   global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
-  assert.deepEqual(T.ids.sort(), ['explore', 'first', 'month1', 'onboard', 'subjgoal', 'timer1', 'tinker', 'week1']);
+  const AN = require('../lib/analytics.js'), A = AN.achievements({ sessions: [], settings: { goals: { dailyMin: 60 } }, subjectMeta: {} }, 0), DONE = ['launch', 'time'];
+  for (const x of A.global.filter(x => DONE.includes(x.cat))) assert.ok(T.has(x), x.id + ' has line art');
+  for (const k of ['h1', 'h10', 'h50', 'h100', 'h250', 'n10', 'n50', 'n100']) assert.equal(T.key('subject:bio:' + k), DONE.includes('personal') ? 'p-' + k : T.key('subject:bio:' + k));
   for (const id of T.ids) assert.match(T.svg(id), /^<svg class="ta" viewBox="6 5 52 52"/);
-  assert.match(P('index.html'), /trophy-art\.js/); assert.match(P('sw.js'), /'\/trophy-art\.js'/); assert.match(P('app.js'), /TrophyArt\.has\(x\.id\)/);
+  assert.match(P('index.html'), /trophy-art\.js/); assert.match(P('sw.js'), /'\/trophy-art\.js'/); assert.match(P('app.js'), /TrophyArt\.has\(x\)/); assert.match(P('app.js'), /TrophyArt\.svg\(TrophyArt\.key\(x\)\)/);
 });
 
 test('circling timer lines share one clock derived from the session start (no per-ring offsets)', () => {
