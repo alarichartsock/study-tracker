@@ -788,7 +788,7 @@ const mkLogo = el => { const w = el && el.querySelector('.sh-wave'); if (!w) ret
   if (!any) return; g.classList.add('pv-art');
   const play = () => { if (animLevel() >= 1) { g.classList.add('pv-play'); setTimeout(() => g.classList.add('pv-shown'), 1700); } else g.classList.add('pv-shown'); };
   if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); play(); } }, { threshold: .5 }); io.observe(g); } else play(); })();
-const LOGO = mkLogo(document.querySelector('#app .sh-mark')); mkLogo(document.querySelector('#landing .sh-mark')); // landing: same hairline wave (no session clock there)
+const LOGO = mkLogo(document.querySelector('#app .sh-mark')); mkLogo(document.querySelector('#landing .sh-mark')); mkLogo(document.querySelector('#auth .sh-mark')); // landing: same hairline wave (no session clock there)
 // Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
 // click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
 // isometric view a few degrees. Reduced motion: no lean, actions show their end state.

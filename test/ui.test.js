@@ -211,3 +211,9 @@ test('landing section links scroll in-page and deep links survive boot', () => {
   assert.match(a, /showLanding && location\.hash\.length > 1\) requestAnimationFrame\(\(\) => landNav\(location\.hash, false\)\)/);
   assert.match(c, /\.landing section\[id\]\{scroll-margin-top:/);
 });
+
+test('auth/setup screens use the accent logo tile, hairline wave and accent washes', () => {
+  const h = pub('index.html'), c = pub('style.css'), a = pub('app.js');
+  assert.match(h, /<div class="brand big"><svg class="sh-mark"[^>]*>.*id="shMarkA"/); assert.match(c, /#auth \.sh-tile\{fill:url\(#shMarkA\)\}/);
+  assert.match(a, /mkLogo\(document\.querySelector\('#auth \.sh-mark'\)\)/); assert.match(c, /body:has\(#auth:not\(\.hid\)\)::before/); assert.match(h, /rel="icon"[^>]*favicon/);
+});

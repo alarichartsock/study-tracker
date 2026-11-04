@@ -552,8 +552,8 @@ html.authed #landing{display:none}
 
 /* landing background: ONE continuous fixed full-viewport layer. Smooth radial gradients on body::before (no blurred blobs,
    no filter/mask, no per-section or container backgrounds), so nothing can clip it into seams at any width. App screens are unaffected. */
-body:has(#landing:not(.hid)) .wallpaper{display:none}
-body:has(#landing:not(.hid))::before{content:'';position:fixed;inset:-10vh -10vw;z-index:-1;pointer-events:none;background:
+body:has(#landing:not(.hid)) .wallpaper,body:has(#auth:not(.hid)) .wallpaper{display:none}
+body:has(#landing:not(.hid))::before,body:has(#auth:not(.hid))::before{content:'';position:fixed;inset:-10vh -10vw;z-index:-1;pointer-events:none;background:
   radial-gradient(75vmax 60vmax at 12% 8%,color-mix(in srgb,var(--lw1) 75%,transparent),transparent 72%),
   radial-gradient(70vmax 60vmax at 92% 38%,color-mix(in srgb,var(--lw2) 60%,transparent),transparent 72%),
   radial-gradient(80vmax 60vmax at 40% 105%,color-mix(in srgb,var(--lw3) 45%,transparent),transparent 72%),
@@ -815,7 +815,7 @@ html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
 :where(a.btn,a.btn:link,a.btn:visited,a.btn:hover,a.btn:focus,a.btn:focus-visible,a.btn:active){color:var(--text);text-decoration:none}
 
 /* Landing: hairline logo mark (same as the app), accent picker; nav controls share one height and centre line */
-#landing .sh-tile{fill:url(#shMarkL)}
+#landing .sh-tile{fill:url(#shMarkL)}#auth .sh-tile{fill:url(#shMarkA)}.brand.big .sh-mark{width:32px;height:32px}
 .l-top{align-items:center}.l-top>*{align-self:center}
 .l-top .btn,.l-top .acc-trig,.l-top .lang-pick{height:var(--control-h);min-height:var(--control-h);box-sizing:border-box;line-height:1;margin:0}
 .l-top .lang-slot{display:inline-flex;align-items:center;height:var(--control-h)}
