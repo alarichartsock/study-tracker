@@ -64,7 +64,13 @@ const color = name => (S && S.subjectMeta[name] && S.subjectMeta[name].color) ||
 const opt = (list, cur, blank) => (blank !== undefined ? `<option value="">${esc(blank)}</option>` : '') + list.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('');
 // Goal rings on the dashboard: ease from the last shown value (0 on first load) to the current one, count the % with it,
 // draw a check once a goal completes, and keep every ring live (with a circling hairline) while a timer runs. Reduced motion: values jump, nothing moves.
-const GA = (() => { const last = new Map(), still = () => matchMedia('(prefers-reduced-motion: reduce)').matches, C = 2 * Math.PI * 84, clamp = v => Math.min(1, Math.max(0, v));
+// Animation fidelity follows the 3D quality setting in Settings (one helper, read everywhere). OS reduced motion always wins (level 0).
+// 0 = no motion (end states) · 1 Low = one-shot fills only · 2 Medium = default · 3 High = richer tilt, Liftoff exhaust trail, comet tail
+function animLevel() { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return 0; let q = localStorage.t3dQuality;
+  if (!q || q === 'auto') { try { q = (JSON.parse(localStorage.t3dAuto || 'null') || {}).tier; } catch { q = null; } } return q === 'low' ? 1 : q === 'high' ? 3 : 2; }
+function applyAnimLevel() { document.documentElement.dataset.anim = animLevel(); }
+applyAnimLevel(); matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', applyAnimLevel);
+const GA = (() => { const last = new Map(), still = () => animLevel() < 1, C = 2 * Math.PI * 84, clamp = v => Math.min(1, Math.max(0, v));
   const set = (el, p) => { const fg = el.querySelector('.ring-fg'); if (fg) { fg.style.strokeDashoffset = C * (1 - clamp(p)); fg.style.opacity = p > 0.001 ? '' : '0'; } }; // no lone round-cap dot at 0%
   const count = (el, a, b) => { const t = el.querySelector('.g-pct'); if (!t) return; if (still() || Math.round(a * 100) === Math.round(b * 100)) { t.textContent = Math.round(b * 100) + '%'; return; }
     const t0 = performance.now(), D = 700, e = x => 1 - Math.pow(1 - x, 3); const f = now => { const k = Math.min(1, (now - t0) / D); if (!t.isConnected) return; t.textContent = Math.round((a + (b - a) * e(k)) * 100) + '%'; if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); };
@@ -80,7 +86,7 @@ document.addEventListener('visibilitychange', () => { document.documentElement.c
 // One shared clock for every circling line (goal rings + timer ring): phase = ((now - session start) / period) mod 1, so they stay in lockstep
 // across re-renders, views and tabs. Each new line is anchored once; returning to a hidden tab restarts them at the synced angle.
 const COMET_S = 9;
-function cometSync(force) { const a = S && S.active; if (!a || a.paused) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S;
+function cometSync(force) { const a = S && S.active; if (!a || a.paused || animLevel() < 2) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S;
   document.querySelectorAll('.g-comet').forEach(el => { const k = String(a.start), re = force || (el.dataset.sync && el.dataset.sync !== k); if (el.dataset.sync === k && !force) return; el.dataset.sync = k; if (re) { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; } el.style.animationDelay = -ph.toFixed(3) + 's'; }); }
 const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}${pct > 0.001 ? '' : ';opacity:0'}"/>`; };
 const statCards = items => `<div class="grid4">${items.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
@@ -337,7 +343,7 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color((a && a.subject) || sel)}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
+    <div class="ring-box tring" style="--subj:${color((a && a.subject) || sel)}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
@@ -431,7 +437,7 @@ VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
   const ringH = sec => { const t = fmtH(sec), m = Math.round(sec / 60); if (sec >= 3600 && m % 60 === 0) return Math.round(m / 60) + 'h'; return t.length > 7 ? (sec / 3600).toFixed(sec >= 360000 ? 0 : 1) + 'h' : t; };
   const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = S.active && !S.active.paused, c = 2 * Math.PI * 84;
-    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
+    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
@@ -678,32 +684,39 @@ const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matche
 // a locked card's progress fills in like the goal rings; a sheen crosses an earned card once per hover/tap. Nothing idles. Reduced motion: all static.
 const TLP = (() => { const done = new Set(); let io = null;
   const go = el => { const id = el.dataset.id; if (done.has(id)) return el.classList.add('t-shown'); done.add(id); el.classList.add('t-play'); setTimeout(() => el.classList.add('t-shown'), 1600); };
-  return { scan(root) { if (!root) return; const els = root.querySelectorAll('.trophy.t-lp'); if (reduceMotion() || !('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('t-shown')); return; }
+  return { scan(root) { if (!root) return; const els = root.querySelectorAll('.trophy.t-lp'); if (animLevel() < 1 || !('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('t-shown')); return; }
     io ||= new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); go(e.target); } }), { threshold: 0.4 });
     els.forEach(el => { if (done.has(el.dataset.id)) el.classList.add('t-shown'); else io.observe(el); }); },
-    sheen(el) { if (reduceMotion() || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
+    sheen(el) { if (animLevel() < 2 || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
 // Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
 // click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
 // isometric view a few degrees. Reduced motion: no lean, actions show their end state.
-const TAI = (() => { const turn = {}, run = new WeakMap(), still = () => reduceMotion();
-  const draw = (el, p, o = {}) => { const id = el.dataset.tid, svg = el.querySelector('.ta'); if (svg) svg.innerHTML = TrophyArt.inner(id, p, { turn: turn[id] || 0, yaw: +el.dataset.yaw || 0, ...o }); };
-  const lean = (el, e) => { if (still()) return; const r = el.getBoundingClientRect(), k = el.closest('.trophy.on, .t-art.on') ? 9 : 3, nx = (e.clientX - r.left) / r.width - .5, ny = (e.clientY - r.top) / r.height - .5;
-    el.style.setProperty('--tx', (nx * k).toFixed(2) + 'deg'); el.style.setProperty('--ty', (-ny * k).toFixed(2) + 'deg'); el.classList.add('ta-lean'); };
-  const rest = el => { el.style.removeProperty('--tx'); el.style.removeProperty('--ty'); el.classList.remove('ta-lean'); };
+const TAI = (() => { const turn = {}, run = new WeakMap(), still = () => animLevel() < 2;
+  const draw = (el, p, o = {}) => { const id = el.dataset.tid, svg = el.querySelector('.ta'); if (svg) svg.innerHTML = TrophyArt.inner(id, p, { turn: turn[id] || 0, yaw: +el.dataset.yaw || 0, rich: animLevel() > 2, ...o }); };
+  const lean = (el, e) => { if (still()) return; const r = el.getBoundingClientRect(), k = (el.closest('.trophy.on, .t-art.on') ? 9 : 3) * (animLevel() > 2 ? 1.6 : 1), nx = (e.clientX - r.left) / r.width - .5, ny = (e.clientY - r.top) / r.height - .5;
+    el.style.setProperty('--tx', (nx * k).toFixed(2) + 'deg'); el.style.setProperty('--ty', (-ny * k).toFixed(2) + 'deg'); el.style.setProperty('--px', (nx * 4).toFixed(1) + 'px'); el.style.setProperty('--py', (ny * 4).toFixed(1) + 'px'); el.classList.add('ta-lean'); };
+  const rest = el => { ['--tx', '--ty', '--px', '--py'].forEach(v => el.style.removeProperty(v)); el.classList.remove('ta-lean'); };
   const play = el => { const id = el.dataset.tid; if (!id || run.get(el)) return; if (id === 'tinker') { const a = turn[id] || 0; turn[id] = a + 45;
       if (still()) return draw(el); const t0 = performance.now(); run.set(el, 1); const f = now => { const k = Math.min(1, (now - t0) / TrophyArt.DUR.tinker), e = 1 - Math.pow(1 - k, 3); draw(el, 1, { turn: a + 45 * e }); if (k < 1 && el.isConnected) requestAnimationFrame(f); else run.delete(el); }; return requestAnimationFrame(f); }
     if (still()) return draw(el, 1); const t0 = performance.now(), D = TrophyArt.DUR[id] || 1000; run.set(el, 1); el.classList.add('ta-go');
     const f = now => { const k = Math.min(1, (now - t0) / D); draw(el, k); if (k < 1 && el.isConnected) requestAnimationFrame(f); else { run.delete(el); el.classList.remove('ta-go'); draw(el, 1); } }; requestAnimationFrame(f); };
+  // Hover tracking: one part of each drawing follows the cursor live (rAF only while hovered or easing back; ~300ms back to rest)
+  const hov = new Map(); let hovRaf = 0;
+  const hovTick = () => { hovRaf = 0; for (const [el, h] of hov) { if (!el.isConnected) { hov.delete(el); continue; } h.s += (h.ts - h.s) * .16; h.x += (h.tx - h.x) * .3; h.y += (h.ty - h.y) * .3;
+      const done = h.ts === 0 && h.s < .01; if (!run.get(el)) draw(el, 1, done ? {} : { aim: { x: h.x, y: h.y, s: h.s } }); if (done) hov.delete(el); } if (hov.size) hovRaf = requestAnimationFrame(hovTick); };
+  const aimAt = (el, e) => { if (animLevel() < 2) return; const svg = el.querySelector('.ta'); if (!svg) return; const r = svg.getBoundingClientRect(), x = 6 + (e.clientX - r.left) / r.width * 52, y = 5 + (e.clientY - r.top) / r.height * 52;
+    const h = hov.get(el) || { x, y, s: 0 }; h.tx = x; h.ty = y; h.ts = el.closest('.trophy.on, .t-art.on') ? 1 : .35; hov.set(el, h); hovRaf ||= requestAnimationFrame(hovTick); };
+  const unaim = el => { const h = hov.get(el); if (h) h.ts = 0; };
   // Knob Turner: drag turns the dial (on the card and in the popup); a drag never also counts as a click
   let drag = null;
   const down = e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (!el) return; drag = { el, x: e.clientX, y: e.clientY, moved: false, yaw: +el.dataset.yaw || 0, turn: turn[el.dataset.tid] || 0 }; };
-  const move = e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && e.pointerType !== 'touch') lean(el, e);
+  const move = e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && e.pointerType !== 'touch') { lean(el, e); aimAt(el, e); } else if (drag && e.pointerType === 'touch' && drag.el.isConnected) aimAt(drag.el, e);
     if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 4) drag.moved = true; if (!drag.moved) return; if (drag.el.isConnected && e.pointerType === 'touch') lean(drag.el, e);
     if (drag.el.classList.contains('big')) { drag.el.dataset.yaw = Math.max(-16, Math.min(16, drag.yaw + dx * .15)).toFixed(1); draw(drag.el, 1); }
     else if (drag.el.dataset.tid === 'tinker' && drag.el.dataset.act) { turn.tinker = drag.turn + dx * 2; draw(drag.el, 1); } };
-  const up = e => { if (!drag) return; const d = drag; drag = null; if (d.moved) { const kill = ev => { ev.stopPropagation(); ev.preventDefault(); }; d.el.addEventListener('click', kill, { capture: true, once: true }); setTimeout(() => d.el.removeEventListener('click', kill, true), 0); } if (e.pointerType === 'touch') rest(d.el); };
+  const up = e => { if (!drag) return; const d = drag; drag = null; if (d.moved) { const kill = ev => { ev.stopPropagation(); ev.preventDefault(); }; d.el.addEventListener('click', kill, { capture: true, once: true }); setTimeout(() => d.el.removeEventListener('click', kill, true), 0); } if (e.pointerType === 'touch') { rest(d.el); unaim(d.el); } };
   document.addEventListener('pointerdown', down); document.addEventListener('pointermove', move, { passive: true }); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
-  document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && !el.contains(e.relatedTarget)) rest(el); });
+  document.addEventListener('pointerout', e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && !el.contains(e.relatedTarget)) { rest(el); unaim(el); } });
   return { play, popup(el, earned) { if (!el) return; if (earned) { el.addEventListener('click', () => play(el)); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(el); } }); } if (turn[el.dataset.tid]) draw(el, 1); } }; })();
 ACT.taPlay = b => TAI.play(b);
 $('main').addEventListener('pointerenter', e => { const t = e.target.closest && e.target.closest('.trophy.t-lp.on'); if (t && !t.contains(e.relatedTarget)) TLP.sheen(t); }, true);
@@ -729,8 +742,8 @@ function t3dInfo() { const ov = localStorage.t3dQuality; let a = null; try { a =
   if (T3DQ.includes(ov) && ov !== 'auto') return 'Forced to ' + capW(ov) + ' on this device.';
   return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects on your first visit to Trophies.'; }
 function t3dQualityRow() { const cur = T3DQ.includes(localStorage.t3dQuality) ? localStorage.t3dQuality : 'auto';
-  return '<div class="t3dq mt"><label>3D trophy quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p></div>'; }
-async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; const m = T3D && await T3D; if (m) await m.refreshTier(); }
+  return '<div class="t3dq mt"><label>3D trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer tilt and trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
+async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; applyAnimLevel(); const m = T3D && await T3D; if (m) await m.refreshTier(); applyAnimLevel(); cometSync(true); }
 ACT.t3dQ = async b => { const v = b.dataset.q; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); const p = setT3dQuality(v), i = $('t3dInfo'); if (i) i.textContent = v === 'auto' ? 'Re-detecting\u2026' : t3dInfo(); await p; if (i && i.isConnected) i.textContent = t3dInfo(); };
 ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.dataset.id); if (!x) return;
   const spec = window.TrophySpec ? TrophySpec.spec(x, (ACH.tiers || {})[x.id], x.kind === 'subject' ? color(x.key) : null) : null;

@@ -716,3 +716,12 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .ta-cap{text-align:center;margin-top:2px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){.t-art .ta{transform:none!important;transition:none}}
 .t-shown .ta>*{animation:none!important}
+
+/* Animation quality levels (html[data-anim], from animLevel() in app.js) */
+.g-tail{display:none}[data-anim="3"] .g-tail{display:inline;opacity:.35}.ta .pf{opacity:.5}
+[data-anim="1"] .g-comet,[data-anim="0"] .g-comet{display:none}
+[data-anim="1"] .t-line,[data-anim="1"] .t-sheen,[data-anim="1"] .t-new .t-ic::after,[data-anim="0"] .t-line,[data-anim="0"] .t-sheen,[data-anim="0"] .t-new .t-ic::after{display:none}
+[data-anim="1"] .ta>*,[data-anim="0"] .ta>*{animation:none!important;stroke-dashoffset:0!important}[data-anim="1"] .t-play.t-new .t-ic,[data-anim="0"] .t-play.t-new .t-ic{animation:none}
+[data-anim="1"] .t-art .ta,[data-anim="0"] .t-art .ta{transform:none!important}
+[data-anim="0"] .goal-ring .ring-fg,[data-anim="0"] .t-lp .t-prog i{transition:none!important;animation:none!important}
+[data-anim="3"] .t-art .ta{transform:perspective(220px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg)) translate(var(--px,0px),var(--py,0px))}

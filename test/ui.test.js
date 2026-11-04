@@ -132,3 +132,20 @@ test('trophy drawings are interactive: lean, one action per trophy, keyboard, po
   assert.match(js, /const TAI = /); assert.match(js, /ACT\.taPlay = b => TAI\.play\(b\)/); assert.match(js, /closest\('\.t-art\[data-act\]'\) && \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
   assert.match(js, /if \(still\(\)\) return draw\(el, 1\)/);
 });
+
+test('animation fidelity follows the quality setting through one helper; reduced motion forces level 0', () => {
+  const fs = require('node:fs'), path = require('node:path'), js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  const src = js.slice(js.indexOf('function animLevel()'), js.indexOf('function applyAnimLevel()'));
+  const lvl = (rm, q, auto) => { const ls = { t3dQuality: q, t3dAuto: auto }; return new Function('matchMedia', 'localStorage', src + 'return animLevel();')(() => ({ matches: rm }), ls); };
+  assert.equal(lvl(true, 'high'), 0); assert.equal(lvl(false, 'low'), 1); assert.equal(lvl(false, 'medium'), 2); assert.equal(lvl(false, 'high'), 3);
+  assert.equal(lvl(false, 'auto', '{"tier":"high"}'), 3); assert.equal(lvl(false, undefined), 2);
+  assert.match(js, /applyAnimLevel\(\); const m = T3D/); assert.match(js, /animLevel\(\) < 2\) return; const ph/);
+  assert.match(css, /\[data-anim="1"\] \.g-comet/); assert.match(css, /\[data-anim="3"\] \.g-tail/);
+});
+
+test('trophy drawings track the cursor while hovered (one part each, faint when locked) and ease back', () => {
+  const js = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  delete require.cache[require.resolve('../public/trophy-art.js')]; global.window = {}; require('../public/trophy-art.js'); const T = global.window.TrophyArt;
+  for (const id of T.ids) { assert.notEqual(T.inner(id, 1, { aim: { x: 50, y: 15, s: 1 } }), T.inner(id), id); assert.equal(T.inner(id, 1, { aim: { x: 50, y: 15, s: 0 } }), T.inner(id)); }
+  assert.match(js, /const hovTick = /); assert.match(js, /h\.ts = el\.closest\('\.trophy\.on, \.t-art\.on'\) \? 1 : \.35/); assert.match(js, /if \(animLevel\(\) < 2\) return; const svg/);
+});
