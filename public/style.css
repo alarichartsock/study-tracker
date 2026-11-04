@@ -635,6 +635,9 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 .rot-w{grid-area:1/1;transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .5s,visibility 0s .5s;opacity:0;visibility:hidden;transform:translateY(70%)}
 .rot-w.on{opacity:1;visibility:visible;transform:none;transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .5s,visibility 0s}.rot-w.out{opacity:0;visibility:visible;transform:translateY(-70%);transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .5s,visibility 0s .5s}
 @media (prefers-reduced-motion:reduce){.rot-w{transition:none}}
-.hero h1#heroH1{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--text)}
-.hero h1#heroH1 .g{background:linear-gradient(135deg,var(--text) 30%,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.hero h1#heroH1 .rot-w{background:linear-gradient(135deg,var(--acc),var(--text) 160%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;padding:0 .02em}
+/* Gradient headline. Without JS / with reduced motion the h1 keeps its original single gradient (background-clip:text on the h1).
+   While rotating, a parent text-clip would paint every stacked word regardless of opacity/transform, so the h1 drops its own
+   background and each word (.gw static words, .rot-w rotating words) gets its own clipped copy of the SAME h1-sized gradient,
+   offset by JS to the word's position, so the result looks like one continuous gradient and nothing outside the glyphs is painted. */
+.hero h1#heroH1.rotating{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--text)}
+.hero h1#heroH1.rotating .gw,.hero h1#heroH1.rotating .rot-w{background:linear-gradient(135deg,var(--text) 30%,var(--acc)) no-repeat;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
