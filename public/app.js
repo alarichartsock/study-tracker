@@ -76,7 +76,12 @@ const GA = (() => { const last = new Map(), still = () => matchMedia('(prefers-r
     live() { if (!S.active || !UI.gaBase) return; document.querySelectorAll('.goal-ring[data-gk]').forEach(el => { const k = el.dataset.gk, g = UI.gaBase[k]; if (!g || !g.goal) return; const d = g.done + live(), p = d / g.goal; if (Math.abs(p - +el.dataset.p) < 0.0005) return;
       const was = +el.dataset.p; el.dataset.p = p; set(el, p); const t = el.querySelector('.g-pct'); if (t) t.textContent = Math.round(p * 100) + '%'; const dt = el.querySelector('.g-done-t'); if (dt) dt.textContent = fmtH(d).length > 7 ? (d / 3600).toFixed(1) + 'h' : fmtH(d);
       if (p >= 1 && was < 1) { el.dataset.done = ''; el.classList.add('g-new'); } last.set(k, p); }); } }; })();
-document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('tab-hidden', document.hidden));
+document.addEventListener('visibilitychange', () => { document.documentElement.classList.toggle('tab-hidden', document.hidden); if (!document.hidden) cometSync(true); });
+// One shared clock for every circling line (goal rings + timer ring): phase = ((now - session start) / period) mod 1, so they stay in lockstep
+// across re-renders, views and tabs. Each new line is anchored once; returning to a hidden tab restarts them at the synced angle.
+const COMET_S = 9;
+function cometSync(force) { const a = S && S.active; if (!a || a.paused) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S;
+  document.querySelectorAll('.g-comet').forEach(el => { const k = String(a.start), re = force || (el.dataset.sync && el.dataset.sync !== k); if (el.dataset.sync === k && !force) return; el.dataset.sync = k; if (re) { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; } el.style.animationDelay = -ph.toFixed(3) + 's'; }); }
 const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}${pct > 0.001 ? '' : ';opacity:0'}"/>`; };
 const statCards = items => `<div class="grid4">${items.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
 
@@ -346,7 +351,7 @@ VIEWS.timer = () => {
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
 function tick() {
-  if (S && view === 'dash') GA.live();
+  if (S && view === 'dash') GA.live(); cometSync();
   if (!S || view !== 'timer' || !$('clock')) return;
   const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
@@ -425,8 +430,8 @@ document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTA
 VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
   const ringH = sec => { const t = fmtH(sec), m = Math.round(sec / 60); if (sec >= 3600 && m % 60 === 0) return Math.round(m / 60) + 'h'; return t.length > 7 ? (sec / 3600).toFixed(sec >= 360000 ? 0 : 1) + 'h' : t; };
-  const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = S.active && !S.active.paused, c = 2 * Math.PI * 84, ph = { day: 0, week: -3.1, month: -6.2, term: -4.6 }[key] ?? -1.5;
-    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet" style="animation-delay:${ph}s"><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
+  const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = S.active && !S.active.paused, c = 2 * Math.PI * 84;
+    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
@@ -446,7 +451,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Study calendar</h3><div class="heat-scroll" id="heatS">${heatmap(ST.byDay)}</div>
     <div class="heat-key muted small">Less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> More · dots = medal days</div></div>`;
 };
-AFTER.dash = () => { GA.play(); const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
+AFTER.dash = () => { GA.play(); cometSync(); const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
 function stackChart() {
   const days = [...Array(14)].map((_, i) => addD(k2d(ST.todayKey), i - 13)), bd = ST.byDaySubject, subs = new Set();
   days.forEach(d => Object.keys(bd[dk(d)] || {}).forEach(s => subs.add(s)));

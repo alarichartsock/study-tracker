@@ -117,3 +117,9 @@ test('Launch Pad trophy art: one isometric hairline svg per trophy, served and c
   for (const id of T.ids) assert.match(T.svg(id), /^<svg class="ta" viewBox="6 5 52 52"/);
   assert.match(P('index.html'), /trophy-art\.js/); assert.match(P('sw.js'), /'\/trophy-art\.js'/); assert.match(P('app.js'), /TrophyArt\.has\(x\.id\)/);
 });
+
+test('circling timer lines share one clock derived from the session start (no per-ring offsets)', () => {
+  const js = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.match(js, /function cometSync\(force\)/); assert.match(js, /\(Date\.now\(\) - new Date\(a\.start\)\) \/ 1000\) % COMET_S/);
+  assert.doesNotMatch(js, /g-comet" style="animation-delay/); assert.match(js, /if \(!document\.hidden\) cometSync\(true\)/); assert.match(js, /AFTER\.dash = \(\) => \{ GA\.play\(\); cometSync\(\);/);
+});
