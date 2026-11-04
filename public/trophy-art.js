@@ -217,6 +217,36 @@
     samesub30: (p = 1) => { const fly = p >= 1 ? 0 : (1 - E(p)) * 12, sw = ax() * 2.5; let s = line([[-3, 2, 0], [0, 0, 12]], 'l') + line([[3, -2, 0], [0, 0, 12]], 'l');
       s += vc(0, 0, 14, 11, 'x', 'tp') + vc(0, .01, 14, 7.5, 'x', 'l') + vc(0, .02, 14, 4, 'x', 'hl') + vc(0, .03, 14, 1.2, 'x', 'l a');
       return s + line([[.2 + fly, fly * .2, 14], [8 + fly, sw + fly * .2, 14 + ay() * 2]], 'l a w') + line([[7 + fly, sw - 1.2 + fly * .2, 14 + ay() * 2], [9 + fly, sw + fly * .2, 14 + ay() * 2], [7 + fly, sw + 1.2 + fly * .2, 14 + ay() * 2]], 'l a'); },
+    // ---- Big days ----
+    // Solid Shift: a mug of coffee on a saucer; the steam drifts toward the cursor; tap sends up fresh puffs
+    day2: (p = 1) => { const sw = ax() * 2.5; let s = cyl(0, 0, 0, 9, 1.2) + cyl(0, 0, 1.2, 5.5, 10) + ell(0, 0, 10.4, 4.6, 'hl') + '<path class="l" d="M' + pt(S(4.6, 3.2, 9)) + 'C' + pt(S(9, 6, 9)) + ' ' + pt(S(9, 6, 3.5)) + ' ' + pt(S(4.6, 3.2, 3.5)) + '"/>';
+      for (let i = 0; i < 3; i++) { const [X, Y] = S(-2.5 + i * 2.5, 0, 12.5), up = 3 * B(sq(p, i, 3, .5)); s += '<path class="l a" d="M' + f(X) + ' ' + f(Y - up) + 'c' + f(-1.5 + sw * .4) + ' -2 ' + f(1.5 + sw * .7) + ' -3.5 ' + f(sw) + ' -6"/>'; } return s; },
+    // Heavy Lift: a loaded barbell on a rack; the bar tips toward the cursor; tap presses it up and down
+    day4: (p = 1) => { const up = 6 * B(p), tilt = ax() * 1.6, Z = x => 12 + up + tilt * x / 12; let s = box(-10, -1, 0, 2, 2, 12) + box(8, -1, 0, 2, 2, 12) + line([[-14, 0, Z(-14)], [14, 0, Z(14)]], 'l w');
+      for (const x of [-12, -10.5, 10.5, 12]) s += vc(x, 0, Z(x), Math.abs(x) > 11 ? 3.2 : 4.6, 'x', x > 0 ? 'hl' : 'tp'); return s; },
+    // Overdrive: a speedometer; the needle follows the cursor; tap sweeps it to the red line and back
+    day6: (p = 1) => { const a = aimDeg(4, 150 + 189 * B(p)); let s = cyl(0, 0, 0, 12, 4); for (let i = 0; i <= 6; i++) { const d = 150 + i * 40; s += line([onRim(0, 0, 4, 9.5, d), onRim(0, 0, 4, 11.2, d)], i === 6 ? 'l a w' : 'l'); }
+      return s + line([[0, 0, 4], onRim(0, 0, 4, 8.5, a)], 'l a w') + ell(0, 0, 4, 1.3, 'hl'); },
+    // Full Throttle: a throttle quadrant; the lever follows the cursor up and down; tap pushes it to the stop
+    day8: (p = 1) => { const a = Math.max(-50, Math.min(50, -40 + 90 * B(p) - ay() * 40)) * Math.PI / 180, tx = 11 * Math.sin(a), tz = 5 + 11 * Math.cos(a);
+      let s = box(-9, -5, 0, 18, 10, 5) + Array.from({ length: 5 }, (_, i) => line([[-6 + i * 3, -2, 5], [-6 + i * 3, 2, 5]], i === 4 ? 'l a' : 'l d')).join('');
+      return s + line([[0, 0, 5], [tx, 0, tz]], 'l w') + box(tx - 2, -2.5, tz - 1, 4, 5, 2.4, 'hl'); },
+    // In the Zone: a stopwatch on a stand; the hand points at the cursor; tap runs one lap
+    sess1h: (p = 1) => { const a = (p < 1 ? -90 + 360 * E(p) : -90) * Math.PI / 180 + ax() * 1.4; const [X, Y] = S(0, 0, 13);
+      return cyl(0, 0, 0, 7, 1.5) + line([[0, 0, 1.5], [0, 0, 4]], 'l') + sdisc(0, 0, 13, 9) + sdisc(0, 0, 13, 7.2, 'l d') + box(-1.2, -1.2, 22, 2.4, 2.4, 2.2, 'hl') +
+        '<path class="l a w" d="M' + X + ' ' + Y + 'L' + f(X + 6.4 * Math.cos(a)) + ' ' + f(Y + 6.4 * Math.sin(a)) + '"/>' + sdisc(0, 0, 13, .9, 'hl'); },
+    // Tunnel Vision: nested frames receding to a bright centre; the frames slide toward the cursor; tap zooms through them
+    sess2h: (p = 1) => { let s = ''; const n = 5; for (let i = n - 1; i >= 0; i--) { const k = ((i + (p < 1 ? E(p) : 0)) % n) / n + .08, r = 1 + 10 * k, dx = ax() * (1 - k) * 3, dz = -ay() * (1 - k) * 3 - (p < 1 ? 0 : 0);
+        s += pth([[dx - r, 0, 13 + dz - r], [dx + r, 0, 13 + dz - r], [dx + r, 0, 13 + dz + r], [dx - r, 0, 13 + dz + r]], k < .2 ? 'hl' : 'l' + (k < .5 ? ' a' : '')); } return plate(26, 8, 1.5) + s; },
+    // Endurance: a finish tape between two posts; the tape bows toward the cursor; tap breaks it and the ends flutter back
+    marathon: (p = 1) => { const bow = ax() * 3, brk = p < 1 ? B(p) : 0; let s = line([[-15, 4, 0], [15, 4, 0]], 'l dd') + box(-14, -1, 0, 2, 2, 16) + box(12, -1, 0, 2, 2, 16);
+      const T = (x0, x1, n = 8) => Array.from({ length: n + 1 }, (_, i) => { const x = x0 + (x1 - x0) * i / n, w = 1 - (x / 12) ** 2; return [x, -bow * w + brk * 3 * (1 - w) * Math.sign(x), 12 - .8 * w - brk * 3 * w]; });
+      return s + (brk > .2 ? pth(T(-12, -1), 'l a w', false) + pth(T(1, 12), 'l a w', false) : pth(T(-12, 12, 12), 'l a w', false)); },
+    // Unbroken: one thick ring standing on a base; a bright arc sits where the cursor points; tap runs the arc all the way round
+    sess4h: (p = 1) => { const a0 = p < 1 ? -90 + 360 * E(p) : -90 + ax() * 90, [X, Y] = S(0, 0, 14), r = 8.3, A = d => f(X + r * Math.cos(d * Math.PI / 180)) + ' ' + f(Y + r * Math.sin(d * Math.PI / 180));
+      return cyl(0, 0, 0, 7, 2) + line([[0, 0, 2], [0, 0, 4]], 'l') + sdisc(0, 0, 14, 10) + sdisc(0, 0, 14, 6.6, '') + '<path class="l a w" d="M' + A(a0 - 40) + 'A' + r + ' ' + r + ' 0 0 1 ' + A(a0 + 40) + '"/>'; },
+    // Deja Vu: two identical clocks side by side; both hands point at the cursor together; tap sweeps both in step
+    carbon: (p = 1) => { const a = aimDeg(2, -90 + 360 * E(p)); return [[-6, 4], [6, -4]].map(([x, y]) => cyl(x, y, 0, 6, 2) + line([[x, y, 2], onRim(x, y, 2, 4.6, a)], 'l a w') + line([[x, y, 2], onRim(x, y, 2, 3, -30)], 'l') + ell(x, y, 2, .7, 'hl')).join(''); },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
