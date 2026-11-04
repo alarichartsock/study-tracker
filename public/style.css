@@ -695,7 +695,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
    tops carry a faint accent tint. Earned: accent. Locked: muted, lighter, accent details dashed. */
 .t-art{color:var(--muted)}.trophy.on .t-art,.t-art.on{color:var(--acc)}
 .t-art .ta{width:84px;height:84px;display:block;overflow:visible}.t-art.big .ta{width:168px;height:168px}
-.ta path,.ta ellipse{fill:var(--card2);stroke:currentColor;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round}
+.ta path,.ta ellipse,.ta circle{fill:var(--card2);stroke:currentColor;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round}
 .ta .tp{fill:color-mix(in srgb,currentColor 7%,var(--card2))}.ta .hl{fill:color-mix(in srgb,currentColor 13%,var(--card2))}
 .ta .l{fill:none}.ta .d{opacity:.45}.ta .dd{stroke-dasharray:.03 .025}.ta .w{stroke-width:1}.t-art.big .ta *{stroke-width:.55}
 .trophy:not(.on) .t-art .ta{opacity:.75}.trophy:not(.on) .ta .a{stroke-dasharray:.03 .03}.trophy:not(.on) .ta .tp,.trophy:not(.on) .ta .hl{fill:var(--card2)}
@@ -747,8 +747,8 @@ html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
 @media(max-width:560px){.trophies:has(.t-lp){grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
 .trophy.t-lp{padding:14px 14px 16px}.trophy.t-lp>b{font-size:15px;display:block;margin-top:4px}.trophy.t-lp>.muted.small{font-size:13.5px;line-height:1.35}
 .trophy .t-ic.t-art{height:128px}.t-art .ta{width:124px;height:124px}
-.ta path,.ta ellipse{stroke-width:.6}.ta .w{stroke-width:.9}.ta .a{stroke-width:.68}
-@media(max-width:560px){.trophy .t-ic.t-art{height:112px}.t-art .ta{width:108px;height:108px}.ta path,.ta ellipse{stroke-width:.66}}
+.ta path,.ta ellipse,.ta circle{stroke-width:.6}.ta .w{stroke-width:.9}.ta .a{stroke-width:.68}
+@media(max-width:560px){.trophy .t-ic.t-art{height:112px}.t-art .ta{width:108px;height:108px}.ta path,.ta ellipse,.ta circle{stroke-width:.66}}
 .t3d-host:has(.t-art){min-height:0}.t-ic.t-art.big{height:auto}.t-art.big .ta{width:min(280px,70vw);height:min(280px,70vw)}.t-art.big .ta *{stroke-width:.3}.t-art.big .ta .a{stroke-width:.34}.t-art.big .ta .w{stroke-width:.45}
 /* Card hover (pointer devices): lift with a softer, larger shadow, border tints toward the accent, slight tilt toward the cursor
    (coordinated with the drawing's lean), faint glow on earned; ~200ms back. transform/box-shadow only, so neighbours never move. */

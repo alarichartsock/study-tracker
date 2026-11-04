@@ -64,6 +64,10 @@
     const h = lo.slice(0, -1).concat(up.slice(0, -1)); return '<path class="' + cls + '" d="M' + h.map(pt).join('L') + 'Z"/>'; };
   // a cylinder lying along x (log, barbell bar, roller): body silhouette + the visible end at x1
   const xcyl = (x0, x1, cy, cz, r, cls = 'tp', endCls = 'hl') => hull([...vpts(x0, cy, cz, r, 'x'), ...vpts(x1, cy, cz, r, 'x')], cls) + vc(x1, cy, cz, r, 'x', endCls);
+  // camera-facing marks for sky things (sun, moon) and round weights: a screen circle, and a lit crescent/gibbous with terminator k (-1..1)
+  const sdisc = (x, y, z, r, cls = 'tp') => { const [X, Y] = S(x, y, z); return '<circle class="' + cls + '" cx="' + X + '" cy="' + Y + '" r="' + f(r) + '"/>'; };
+  const cres = (x, y, z, r, k, cls = 'hl') => { const [X, Y] = S(x, y, z), rx = f(Math.max(.01, Math.abs(k) * r)); return '<path class="' + cls + '" d="M' + X + ' ' + f(Y - r) + 'A' + f(r) + ' ' + f(r) + ' 0 0 1 ' + X + ' ' + f(Y + r) + 'A' + rx + ' ' + f(r) + ' 0 0 ' + (k > 0 ? 1 : 0) + ' ' + X + ' ' + f(Y - r) + 'Z"/>'; };
+  const shalf = (x, y, z, r, cls = 'hl') => { const [X, Y] = S(x, y, z); return '<path class="' + cls + '" d="M' + f(X - r) + ' ' + Y + 'A' + f(r) + ' ' + f(r) + ' 0 0 1 ' + f(X + r) + ' ' + Y + 'Z"/>'; };
   const ART = {
     // Liftoff: a rocket just off its pad, three exhaust dashes beneath
     first: (p = 1) => { const r = 5, nose = (z0, h) => '<path class="tp" d="M' + pt(P(...onRim(0, 0, z0, r, 135))) + 'C' + pt(P(...onRim(0, 0, z0 + h * .55, r, 135))) + ' ' + pt(P(-1.2, 1.2, z0 + h * .9)) + ' ' + pt(P(AS() * (AIM ? (AIM.x - 32) / 26 : 0) * 2.4, -AS() * (AIM ? (AIM.x - 32) / 26 : 0) * 2.4, z0 + h)) + 'C' + pt(P(1.2, -1.2, z0 + h * .9)) + ' ' + pt(P(...onRim(0, 0, z0 + h * .55, r, -45))) + ' ' + pt(P(...onRim(0, 0, z0, r, -45))) + '"/>';
@@ -154,6 +158,65 @@
     n500: (p = 1) => { let s = box(-7, -8, 0, 14, 16, 26); const k = AIM && AIM.s > .05 ? Math.max(0, Math.min(3, Math.floor((S(0, 8, 0)[1] - AIM.y) / 6.5))) : -1;
       for (let d = 3; d >= 0; d--) { const o = (d === k ? 4 * AIM.s : 0) + 5 * B(sq(p, d, 4, .45)), z = 1 + d * 6.2; s += (o > .3 ? box(-6, -7, z, 13.5 + o, 14, 5.4, 'hl') : poly([[7.5, -7, z], [7.5, 7, z], [7.5, 7, z + 5.4], [7.5, -7, z + 5.4]])) + line([[7.5 + o, -2, z + 3.2], [7.5 + o, 2, z + 3.2]], 'l a'); }
       return s; },
+    // ---- Streaks & rhythm ----
+    // Spark Chain: three interlocked links on a plate with a spark at the end; the spark slides toward the cursor; tap lights the links in turn
+    s3: (p = 1) => { let s = plate(28, 12, 1.5); [-7, 0, 7].forEach((x, i) => { const t = p >= 1 ? 1 : sq(p, i, 3, .5); s += vc(x, 0, 8, 4.2, i % 2 ? 'x' : 'y', t > .5 ? 'hl' : 'tp') + vc(x, i % 2 ? 0 : .01, 8, 2.4, i % 2 ? 'x' : 'y', 'l d'); });
+      return s + star(11.5 + ax() * 2.2, 0, 8 - ay() * 2, 2.6 + 1.6 * B(p), 'hl'); },
+    // Seven Strong: seven day blocks in a row, all lit; the block nearest the cursor rises; tap pops them up left to right
+    s7: (p = 1) => { const xs = Array.from({ length: 7 }, (_, i) => -12.6 + i * 3.6), k = nearest(xs.map(x => [x + 1.5, 1.5, 4])); let s = plate(30, 9, 1.5);
+      xs.forEach((x, i) => { const z = 1.5 + (i === k ? 2.4 * AIM.s : 0) + 3 * B(sq(p, i, 7, .4)); s += box(x, -1.5, z, 3, 3, 3 + i * .5, 'hl'); }); return s; },
+    // Two-Week Tear: a tear-off calendar pad reading 14; the top sheet's corner lifts toward the cursor; tap tears the sheet off and away
+    s14: (p = 1) => { const lift = Math.max(.9 * B(p), AIM ? AIM.s * (.15 + .35 * Math.min(1, Math.max(0, (52 - AIM.y) / 40))) : 0), fly = p < 1 ? E(p) * 4 : 0;
+      let s = box(-10, -2, 0, 20, 4, 22) + box(-10, -2.6, 18, 20, .6, 4, 'hl') + digits('14', -5, 2, 5, 9, 'y', 'l a w');
+      const Q = (x, z) => [x + fly, 2.05 + (z - 18 < 0 ? 0 : 0) + Math.sin(lift) * (18 - z) * .7, 18 - (18 - z) * Math.cos(lift) + fly * .5];
+      return s + (lift > .02 ? pth([Q(-10, 18), Q(10, 18), Q(10, 1), Q(-10, 1)], 'tp') + line([Q(-6, 12), Q(6, 12)], 'l d') : ''); },
+    // Moon Cycle: a moon standing on its base; the lit phase follows the cursor left and right; tap runs through a full cycle
+    s30: (p = 1) => { const k = Math.max(-1, Math.min(1, (p < 1 ? Math.cos(2 * Math.PI * E(p)) : 1) * .35 - ax() * .6));
+      return cyl(0, 0, 0, 7, 2) + line([[0, 0, 2], [0, 0, 5]], 'l') + sdisc(0, 0, 15, 9.5) + cres(0, 0, 15, 9.5, k) + star(-9, 0, 27, 1.6, 'l a') + star(10, 0, 28, 1.1, 'l a'); },
+
+    // Six-Week Run: six weekly bars climbing as a staircase; the bar nearest the cursor stands taller; tap builds them one by one
+    s42: (p = 1) => { const k = nearest(Array.from({ length: 6 }, (_, i) => [-12 + i * 4.4 + 1.8, 1.8, 6 + i * 2])); let s = plate(30, 10, 1.5);
+      for (let i = 0; i < 6; i++) { const h = (4 + i * 3) * (p >= 1 ? 1 : .2 + .8 * E(sq(p, i, 6, .45))) + (i === k ? 2.5 * AIM.s : 0); s += box(-12.8 + i * 4.4, -1.8, 1.5, 3.6, 3.6, h, i === 5 ? 'hl' : ''); } return s; },
+    // Iron Habit: an anvil with a hammer resting on it; the hammer cocks back as the cursor moves; tap strikes with a burst of sparks
+    s60: (p = 1) => { const sw = ax() * 6, up = 7 * B(p), [hx, hy] = S(0, 0, 9 + up), [bx, by] = [hx + sw, hy];
+      return plate(22, 14, 1.5) + '<path class="l w" d="M' + f(bx - 5) + ' ' + f(by - 4) + 'C' + f(bx - 6) + ' ' + f(by - 13) + ' ' + f(bx + 6) + ' ' + f(by - 13) + ' ' + f(bx + 5) + ' ' + f(by - 4) + '"/>' +
+        '<circle class="hl" cx="' + f(bx) + '" cy="' + f(by) + '" r="7.5"/>' + '<path class="l d" d="M' + f(bx - 7.5) + ' ' + f(by) + 'A7.5 2.8 0 0 0 ' + f(bx + 7.5) + ' ' + f(by) + '"/>' + digits('60', 6, 7.05, 0, 0, 'y', 'l a').slice(0, 0) + '<path class="l a" d="M' + f(bx - 2) + ' ' + f(by + 1) + 'L' + f(bx + 2) + ' ' + f(by + 1) + '"/>'; },
+
+    // Hundred Hold: a torch flame held on a stand over 100; the flame leans toward the cursor; tap flares it up
+    s100: (p = 1) => rev([[6, 0], [6, 2], [2, 4], [1.6, 14], [3.6, 16], [3.2, 18]]) + ell(0, 0, 18, 3.2, 'tp') + flame(0, 0, 18, 9 + 5 * B(p), ax() * .9, 'hl') + flame(0, 0, 18, 4.5 + 2 * B(p), ax() * .6, 'l a') + digits('100', 6.6, 3, 5, 3.4, 'x', 'l a'),
+    // Full Week: a Mon-Sun planner board, every column ticked; the column under the cursor highlights; tap ticks the days in order
+    week7: (p = 1) => { const k = nearest(Array.from({ length: 7 }, (_, i) => [-12 + i * 3.6 + 1.7, 0, 8])); let s = box(-13, -1, 0, 26, 2, 16);
+      for (let i = 0; i < 7; i++) { const x = -12 + i * 3.6, on = p >= 1 || sq(p, i, 7, .35) > .5; s += pth([[x, 1.05, 2], [x + 3, 1.05, 2], [x + 3, 1.05, 12.5], [x, 1.05, 12.5]], i === k && AIM.s > .3 ? 'hl' : 'l d') + (on ? line([[x + .7, 1.1, 6], [x + 1.4, 1.1, 4.8], [x + 2.6, 1.1, 8]], 'l a') : ''); }
+      return s + line([[-12, 1.1, 14], [12, 1.1, 14]], 'l'); },
+    // Sat-Sun Sweep: two weekend blocks marked S and S; the one nearest the cursor tips up; tap flips both up
+    weekend: (p = 1) => { const k = nearest([[-4, 0, 6], [4, 0, 6]]); let s = plate(24, 12, 1.5);
+      [-9, 1].forEach((x, i) => { const z = 1.5 + (i === k ? 2.4 * AIM.s : 0) + 5 * B(sq(p, i, 2, .6)); s += box(x, -4, z, 8, 8, 8, 'hl') + digits('5', x + 2.4, 4.05, z + 1.6, 4.8, 'y', 'l a w'); }); return s; },
+    // Ten Weekends: ten pennants on a line of posts; the pennant nearest the cursor raises; tap runs them up the posts in turn
+    weekend10: (p = 1) => { const xs = Array.from({ length: 10 }, (_, i) => -13 + i * 2.9), k = nearest(xs.map(x => [x, 0, 9])); let s = box(-14, -1.5, 0, 28, 3, 1.5);
+      xs.forEach((x, i) => { const h = 6 + (i === k ? 3 * AIM.s : 0) + (p >= 1 ? 4 : 4 * E(sq(p, i, 10, .3))); s += line([[x, 0, 1.5], [x, 0, 12]], 'l') + pth([[x, 0, h + 3], [x + 2.2, 0, h + 1.5], [x, 0, h]], 'hl'); }); return s; },
+    // Dawn Patrol: the sun coming up over a horizon at 6 am; it rises higher as the cursor goes up; tap brings it up from below
+    early: (p = 1) => { const z = 2 + 7 * E(p) - ay() * 4, [X, Y] = S(0, -4, 1.5 + z), r = 7.5; let s = plate(28, 14, 1.5);
+      const [hx, hy] = S(0, -4, 1.5), cut = Math.max(0, Y - hy);
+      s += '<path class="hl" d="M' + f(X - r) + ' ' + f(Math.min(hy, Y)) + 'A' + r + ' ' + r + ' 0 ' + (Y < hy - .1 ? 0 : 0) + ' 1 ' + f(X + r) + ' ' + f(Math.min(hy, Y)) + 'Z"/>';
+      s += [200, 225, 250, 270, 290, 315, 340].map(d => { const t = d * Math.PI / 180, a = [X + (r + 1.5) * Math.cos(t), Y + (r + 1.5) * Math.sin(t)], b = [X + (r + 4.5) * Math.cos(t), Y + (r + 4.5) * Math.sin(t)]; return b[1] < hy ? '<path class="l a" d="M' + f(a[0]) + ' ' + f(Math.min(a[1], hy)) + 'L' + f(b[0]) + ' ' + f(b[1]) + '"/>' : ''; }).join('');
+      return s; },
+
+    // Sunrise Regular: a sun with seven long rays; the rays turn with the cursor; tap shoots the rays out one by one
+    early7: (p = 1) => { const rot = ax() * 25, [X, Y] = S(0, 0, 16); let s = cyl(0, 0, 0, 9, 2) + line([[0, 0, 2], [0, 0, 9]], 'l');
+      for (let i = 0; i < 7; i++) { const t = (rot - 90 + i * 360 / 7) * Math.PI / 180, L = p >= 1 ? 1 : E(sq(p, i, 7, .4)); s += '<path class="l a w" d="M' + f(X + 7 * Math.cos(t)) + ' ' + f(Y + 7 * Math.sin(t)) + 'L' + f(X + (7 + 5 * L) * Math.cos(t)) + ' ' + f(Y + (7 + 5 * L) * Math.sin(t)) + '"/>'; }
+      return s + sdisc(0, 0, 16, 5.5, 'hl'); },
+
+    // Midnight Oil: a lit oil lamp under a crescent moon; the flame leans toward the cursor; tap turns the wick up
+    night: (p = 1) => cres(-8, 0, 25, 5, -.45) + cyl(0, 0, 0, 7, 2) + cyl(0, 0, 2, 3, 9) + line([[0, 0, 11], [0, 0, 12.5]], 'l') + flame(0, 0, 12.5, 5 + 4 * B(p), ax() * .8, 'hl') + flame(0, 0, 12.5, 2.4 + 1.5 * B(p), ax() * .5, 'l a'),
+
+    // Moonlighter: a crescent with seven stars round it; the star nearest the cursor grows; tap lights the stars in turn
+    night7: (p = 1) => { const st = Array.from({ length: 7 }, (_, i) => { const t = (200 + i * 24) * Math.PI / 180; return [13 * Math.cos(t), 0, 15 - 13 * Math.sin(t)]; }), k = nearest(st);
+      return cyl(0, 0, 0, 8, 2) + line([[0, 0, 2], [0, 0, 8]], 'l') + cres(0, 0, 15, 6.5, -.4) + st.map((q, i) => { const on = p >= 1 || sq(p, i, 7, .4) > .3; return on ? star(...q, 1.6 + (i === k ? 1.4 * AIM.s : 0) + B(sq(p, i, 7, .4)), 'l a') : ''; }).join(''); },
+
+    // Single-Minded: one target board with an arrow in the bull; the arrow's tail swings with the cursor; tap flies it in
+    samesub30: (p = 1) => { const fly = p >= 1 ? 0 : (1 - E(p)) * 12, sw = ax() * 2.5; let s = line([[-3, 2, 0], [0, 0, 12]], 'l') + line([[3, -2, 0], [0, 0, 12]], 'l');
+      s += vc(0, 0, 14, 11, 'x', 'tp') + vc(0, .01, 14, 7.5, 'x', 'l') + vc(0, .02, 14, 4, 'x', 'hl') + vc(0, .03, 14, 1.2, 'x', 'l a');
+      return s + line([[.2 + fly, fly * .2, 14], [8 + fly, sw + fly * .2, 14 + ay() * 2]], 'l a w') + line([[7 + fly, sw - 1.2 + fly * .2, 14 + ay() * 2], [9 + fly, sw + fly * .2, 14 + ay() * 2], [7 + fly, sw + 1.2 + fly * .2, 14 + ay() * 2]], 'l a'); },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
