@@ -39,3 +39,14 @@ test('landing_exam: saved from first touch at signup (validated / derived from l
   assert.equal(r.body.users.find(x => x.username === 'lsatuser').landingExam, 'lsat');
   assert.deepEqual(r.body.summary.byExam, { lsat: 1, usmle1: 1, gre: 1, none: 1 });
 });
+
+test('per-test landing body copy is test-specific with its own FAQ JSON-LD', () => {
+  const fs = require('fs'); const X = require('../lib/exams'); const src = fs.readFileSync(require('path').join(__dirname, '../public/index.html'), 'utf8');
+  assert.equal(X.examHead(src, 'mcat', 'https://x').includes('Built around the MCAT'), true);
+  for (const s of X.ORDER.filter(s => s !== 'mcat')) {
+    const h = X.examHead(src, s, 'https://x'); const land = h.slice(0, h.indexOf('<div id="app"') > 0 ? h.indexOf('<div id="app"') : h.indexOf('</footer>') + 9).replace(/<span class="vh">[^<]*<\/span>/g, '');
+    assert.doesNotMatch(land, /MCAT/, s);
+    const ld = [...h.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1])).find(o => o['@type'] === 'FAQPage');
+    assert.ok(ld.mainEntity.some(q => q.name.includes(X.EXAMS[s].word === 'USMLE' ? 'Step 1' : X.EXAMS[s].word)), s);
+  }
+});

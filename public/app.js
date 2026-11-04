@@ -38,7 +38,9 @@ const medalOf = sec => { const t = S.settings.medals || {}; for (const m of MEDA
 
 const BRAND = 'StudyHertz';
 const TITLES = { timer: 'Timer', dash: 'Dashboard', sess: 'Sessions', cal: 'Calendar', stats: 'Stats', mcat: 'MCAT practice exams', plan: 'Exams & To-dos', trophy: 'Trophies', data: 'Import / Export', set: 'Settings', admin: 'Bug reports', users: 'Users' };
-document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND)); document.title = BRAND;
+document.querySelectorAll('[data-brand]').forEach(e => (e.textContent = BRAND));
+// landing pages keep their server-rendered title (per-test SEO title); the app uses the brand once signed in
+const LANDING_TITLE = BRAND === 'StudyHertz' ? document.title : BRAND; document.title = LANDING_TITLE;
 let landingDone = false;
 let ME = null, S = null, ST = null, view = localStorage.view || 'timer', sel = localStorage.subject || null, authMode = 'login';
 const UI = { mode: localStorage.timerMode || 'stopwatch', target: +localStorage.countdownMin || 25, pomo: JSON.parse(localStorage.pomo || 'null'), selected: new Set(), layout: localStorage.sessLayout || 'list',
@@ -95,7 +97,7 @@ async function boot() {
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   if (sessionStorage.shOauthLogin) { track('login', { method: sessionStorage.shOauthLogin }); sessionStorage.shOauthLogin = sessionStorage.shOauth = ''; }
-  ME = me.user; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
+  ME = me.user; document.title = BRAND; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar(); emailBar();
   try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
@@ -341,7 +343,7 @@ function tick() {
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
   $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
-  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : 'StudyHertz';
+  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : ME ? BRAND : LANDING_TITLE;
 }
 setInterval(() => { tick(); checkReminder(); }, 1000);
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
