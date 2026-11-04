@@ -653,3 +653,6 @@ body:has(#landing:not(.hid)){overflow-x:clip}
 /* Scores page: test tabs (template test + custom tests) scroll sideways instead of clipping on phones */
 .px-tests .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none;flex:0 1 auto}.px-tests .tabs::-webkit-scrollbar{display:none}.px-tests .tabs button{white-space:nowrap;flex:0 0 auto}
 @media(max-width:699px){.px-tests{flex-direction:column;align-items:stretch}.px-tests .sp{display:none}.px-tests>.btn{align-self:flex-end}}
+/* Anchor buttons (<a class="btn">) take the button text colour in every link state, both themes, instead of the browser's link blue/purple.
+   Zero specificity, so .btn.primary / .btn.danger / .btn.ghost colours still win. */
+:where(a.btn,a.btn:link,a.btn:visited,a.btn:hover,a.btn:focus,a.btn:focus-visible,a.btn:active){color:var(--text);text-decoration:none}
