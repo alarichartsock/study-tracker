@@ -247,6 +247,27 @@
       return cyl(0, 0, 0, 7, 2) + line([[0, 0, 2], [0, 0, 4]], 'l') + sdisc(0, 0, 14, 10) + sdisc(0, 0, 14, 6.6, '') + '<path class="l a w" d="M' + A(a0 - 40) + 'A' + r + ' ' + r + ' 0 0 1 ' + A(a0 + 40) + '"/>'; },
     // Deja Vu: two identical clocks side by side; both hands point at the cursor together; tap sweeps both in step
     carbon: (p = 1) => { const a = aimDeg(2, -90 + 360 * E(p)); return [[-6, 4], [6, -4]].map(([x, y]) => cyl(x, y, 0, 6, 2) + line([[x, y, 2], onRim(x, y, 2, 4.6, a)], 'l a w') + line([[x, y, 2], onRim(x, y, 2, 3, -30)], 'l') + ell(x, y, 2, .7, 'hl')).join(''); },
+    // ---- Focus & craft ----
+    // Tomato Patch: a tomato timer with a leafy top; the leaves sway toward the cursor; tap winds the dial round
+    pomo: (p = 1) => { const [X, Y] = S(0, 0, 10), a = (-90 + 300 * E(p)) * Math.PI / 180, sw = ax() * 3;
+      return cyl(0, 0, 0, 8, 1.2) + '<ellipse class="hl" cx="' + X + '" cy="' + Y + '" rx="10" ry="8.6"/>' + '<path class="l d" d="M' + f(X - 10) + ' ' + Y + 'A10 3.6 0 0 0 ' + f(X + 10) + ' ' + Y + '"/>' +
+        [-1, 0, 1].map(k => '<path class="l a" d="M' + X + ' ' + f(Y - 8.4) + 'q' + f(k * 3 + sw * .5) + ' -2 ' + f(k * 5 + sw) + ' ' + f(-1 + Math.abs(k)) + '"/>').join('') + '<path class="l a w" d="M' + X + ' ' + Y + 'L' + f(X + 5 * Math.cos(a)) + ' ' + f(Y + 4 * Math.sin(a)) + '"/>'; },
+    // Full Picture: a clipboard with subject, activity and note lines; the line nearest the cursor brightens; tap ticks all three
+    detail: (p = 1) => { const zs = [16, 11, 6], k = nearest(zs.map(z => [0, 1, z])); let s = box(-9, -1, 0, 18, 2, 22) + box(-3, -1.4, 20, 6, 2.8, 3, 'hl');
+      zs.forEach((z, i) => { const on = p >= 1 || sq(p, i, 3, .5) > .4; s += line([[-3, 1.05, z], [7, 1.05, z]], i === k && AIM.s > .3 ? 'l a w' : 'l d') + pth([[-7.5, 1.05, z - 1.2], [-5, 1.05, z - 1.2], [-5, 1.05, z + 1.2], [-7.5, 1.05, z + 1.2]], 'l') + (on ? line([[-7.2, 1.1, z], [-6.4, 1.1, z - .9], [-4.6, 1.1, z + 1.6]], 'l a') : ''); }); return s; },
+    // Field Notes: a spiral notebook with a pen; the pen tilts toward the cursor; tap flips the top page up and back
+    notes50: (p = 1) => { const lift = 1.1 * B(p), Q = (x, y) => [x, y * Math.cos(lift) - 8 + 8, 2.6 + y * 0 + (y + 8) * Math.sin(lift) * .9];
+      let s = box(-9, -8, 0, 18, 16, 2.6); for (let i = 0; i < 6; i++) s += ell(-9, -6.5 + i * 2.6, 2.8, .9, 'l');
+      for (let r = 0; r < 4; r++) s += line([[-6, -5 + r * 3.4, 2.6], [7, -5 + r * 3.4, 2.6]], 'l d');
+      if (lift > .02) s += pth([Q(-8, -8), Q(9, -8), Q(9, 8), Q(-8, 8)].map(([x, y, z]) => [x, -8 + (y + 8) * Math.cos(lift), z]), 'tp');
+      const t = ax() * 4; return s + line([[4 + t, 10, 2.8], [10 + t * .4, 2, 8]], 'l a w') + line([[4 + t, 10, 2.8], [4.6 + t, 9.4, 3.6]], 'l'); },
+    // Recharge: a battery being charged; the cell nearest the cursor lights; tap fills the cells one by one
+    breaks100: (p = 1) => { const k = nearest(Array.from({ length: 4 }, (_, i) => [-7 + i * 4.6, 0, 7])); let s = box(-10, -4, 0, 20, 8, 12) + box(10, -2, 3, 2.4, 4, 6);
+      for (let i = 0; i < 4; i++) { const on = p >= 1 ? 1 : E(sq(p, i, 4, .4)); s += pth([[-8.6 + i * 4.6, 4.05, 2], [-5 + i * 4.6, 4.05, 2], [-5 + i * 4.6, 4.05, 2 + 8 * on], [-8.6 + i * 4.6, 4.05, 2 + 8 * on]], i === k && AIM.s > .3 ? 'l a w' : 'hl'); }
+      return s + line([[-1, 4.1, 15], [-3, 4.1, 12], [1, 4.1, 12.5], [-1, 4.1, 9.5]], 'l a'); },
+    // Laser Mode: five stars on a stand; the star nearest the cursor grows; tap lights them left to right
+    focus5: (p = 1) => { const k = nearest(Array.from({ length: 5 }, (_, i) => [-10 + i * 5, 0, 12])); let s = box(-13, -2, 0, 26, 4, 3);
+      for (let i = 0; i < 5; i++) { const t = p >= 1 ? 1 : sq(p, i, 5, .4); s += line([[-10 + i * 5, 0, 3], [-10 + i * 5, 0, 9]], 'l d') + star(-10 + i * 5, 0, 12, 2.4 + (i === k ? 1.2 * AIM.s : 0) + 1.2 * B(t), t > .3 ? 'hl' : 'l d'); } return s; },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
