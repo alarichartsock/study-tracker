@@ -670,7 +670,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 /* Launch Pad trophies: one-time hairline outline draw, progress fill and lift-off; sheen once per hover/tap (transform/opacity + one-shot dash) */
 .trophy.t-lp{position:relative;overflow:hidden;isolation:isolate}
 .t-line{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.t-line rect{width:calc(100% - 1px);height:calc(100% - 1px);fill:none;stroke:var(--acc);stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
+.t-line rect{width:calc(100% - 1px);height:calc(100% - 1px);fill:none;stroke:var(--tro,var(--acc));stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
 .t-play .t-line rect{animation:t-trace 1.1s var(--ease) .1s both}
 @keyframes t-trace{0%{stroke-dashoffset:100;opacity:.9}80%{stroke-dashoffset:0;opacity:.9}100%{stroke-dashoffset:0;opacity:0}}
 .t-lp:not(.on) .t-prog i{transform-origin:left center}
@@ -693,10 +693,10 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
 /* Trophy art (trophy-art.js): isometric hairline drawings. One 1.15px round stroke; faces painted with the card colour hide what's behind;
    tops carry a faint accent tint. Earned: accent. Locked: muted, lighter, accent details dashed. */
-.t-art{color:var(--muted)}.trophy.on .t-art,.t-art.on{color:var(--acc)}
+.t-art{color:var(--muted)}.trophy.on .t-art,.t-art.on{color:var(--tro,var(--acc))}.pv-art{--tro:var(--acc)}
 .t-art .ta{width:84px;height:84px;display:block;overflow:visible}.t-art.big .ta{width:168px;height:168px}
 .ta path,.ta ellipse,.ta circle{fill:var(--card2);stroke:currentColor;stroke-width:.72;stroke-linecap:round;stroke-linejoin:round}
-.ta .tp{fill:color-mix(in srgb,currentColor 7%,var(--card2))}.ta .hl{fill:color-mix(in srgb,currentColor 13%,var(--card2))}
+.ta .tp{fill:color-mix(in srgb,currentColor 4%,var(--card2))}.ta .hl{fill:color-mix(in srgb,currentColor 9%,var(--card2))}
 .ta .l{fill:none}.ta .d{opacity:.45}.ta .dd{stroke-dasharray:.03 .025}.ta .w{stroke-width:1}.t-art.big .ta *{stroke-width:.55}
 .trophy:not(.on) .t-art .ta{opacity:.75}.trophy:not(.on) .ta .a{stroke-dasharray:.03 .03}.trophy:not(.on) .ta .tp,.trophy:not(.on) .ta .hl{fill:var(--card2)}
 .trophy.t-lp:not(.on){opacity:.6}
@@ -835,9 +835,9 @@ html{--nz:1}html[data-now="s"]{--nz:.82}html[data-now="l"]{--nz:1.3}
 @media(max-width:520px){.l-top .btn.ghost.acc-trig{display:inline-flex;align-items:center;justify-content:center}.acc-pop{right:-60px}.l-top .lang-pick{padding:0 10px}.acc-trig{padding:0 10px!important}}
 
 /* landing tour trophies drawn with trophy-art.js */
-.pv-art .t-ic.t-art{height:auto!important;color:var(--acc)}.pv-art .t-art .ta{width:64px;height:64px}
+.pv-art .t-ic.t-art{height:auto!important;color:var(--acc)}.pv-art .t-art .ta{width:104px;height:104px}@media(max-width:560px){.pv-art .t-art .ta{width:84px;height:84px}}
 .pv-art .pv-tro.lock .t-art{color:var(--muted)}.pv-art .pv-tro.lock .ta .a{stroke-dasharray:.03 .03}.pv-art .pv-tro.lock .ta .tp,.pv-art .pv-tro.lock .ta .hl{fill:var(--card2)}
-.pv-art .ta path,.pv-art .ta ellipse,.pv-art .ta circle{stroke-width:.9}
+.pv-art .ta path,.pv-art .ta ellipse,.pv-art .ta circle{stroke-width:.72}.pv-art .ta .w{stroke-width:1}
 .pv-art:not(.pv-play):not(.pv-shown) .ta>*{stroke-dasharray:1;stroke-dashoffset:1}
 .pv-art.pv-play:not(.pv-shown) .ta>*:not(.dd){stroke-dasharray:1;animation:ta-draw 1.2s var(--ease) .1s both}
 [data-anim="0"] .pv-art .ta>*{animation:none!important;stroke-dashoffset:0!important;stroke-dasharray:none!important}

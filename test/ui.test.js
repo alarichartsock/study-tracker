@@ -217,3 +217,17 @@ test('auth/setup screens use the accent logo tile, hairline wave and accent wash
   assert.match(h, /<div class="brand big"><svg class="sh-mark"[^>]*>.*id="shMarkA"/); assert.match(c, /#auth \.sh-tile\{fill:url\(#shMarkA\)\}/);
   assert.match(a, /mkLogo\(document\.querySelector\('#auth \.sh-mark'\)\)/); assert.match(c, /body:has\(#auth:not\(\.hid\)\)::before/); assert.match(h, /rel="icon"[^>]*favicon/);
 });
+
+test('accent changes repaint the logo stops directly and drop the signed-out accent state once signed in', () => {
+  const a = pub('app.js');
+  assert.match(a, /document\.querySelectorAll\('\.sh-mark linearGradient'\)\.forEach\(g => \{ const st = g\.querySelectorAll\('stop'\)/);
+  assert.match(a, /function applyAccent\(\) \{ queueMicrotask\(applyWallpaper\); if \(ME\) document\.documentElement\.classList\.remove\('acc-local'\);/);
+});
+
+test('trophy colours: site-wide drawings follow the selected subject (else accent), subject groups keep their own colour, fills stay faint', () => {
+  const a = pub('app.js'), c = pub('style.css');
+  assert.match(a, /const tc = S && sel && S\.subjectMeta\[sel\] \? color\(sel\) : ''/); assert.match(c, /\.trophy\.on \.t-art,\.t-art\.on\{color:var\(--tro,var\(--acc\)\)\}/);
+  assert.match(a, /--acc:' \+ esc\(color\(x\.key\)\) \+ ';--tro:' \+ esc\(color\(x\.key\)\)/); assert.match(c, /\.pv-art\{--tro:var\(--acc\)\}/);
+  const m = /\.ta \.tp\{fill:color-mix\(in srgb,currentColor (\d+)%[^}]*\}\.ta \.hl\{fill:color-mix\(in srgb,currentColor (\d+)%/.exec(c); assert.ok(m && +m[1] <= 5 && +m[2] <= 10, 'hairline look: faint tints only');
+  assert.doesNotMatch(c, /\.ta[^{]*\{[^}]*fill:currentColor/);
+});

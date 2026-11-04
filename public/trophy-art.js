@@ -123,11 +123,13 @@
       return s + digits('50', 7.2, 2, 9.5, 3, 'x', 'l a'); },
     // Triple Digits: three tiles reading 100; the tile under the cursor lifts; tap rolls the digits in like an odometer
     h100: (p = 1) => ['1', '0', '0'].map((d, i) => { const y = 8 - i * 9.4, z = 2.5 * near([4, y - 4, 8], 50) + 4 * B(sq(p, i, 3, .5)); return box(-4, y - 8.6, z, 8, 8.6, 12, i ? '' : 'hl') + (sq(p, i, 3, .5) > .5 || p >= 1 ? digits(d, 4, y - (d === '1' ? 1.2 : 2.4), z + 2.4, 7.4, 'x', 'l a w') : ''); }).reverse().join(''),
-    // Deep Roots: a tree on a cut-away plot, roots spreading below; the crown sways toward the cursor; tap grows the roots
-    h250: (p = 1) => { const g = E(p), sw = ax() * 2.4, [tx, ty] = S(0, 0, 18);
-      let s = box(-12, -12, -8, 24, 24, 8) + [[-7, 3], [-3, 6], [3, 5], [7, 2], [1, -4]].map(([x, y], i) => line([[0, 0, -.2], [x * .5 * g, y * .5 * g, -3 * g], [x * g, y * g, -6.5 * g]], 'l a')).join('');
-      s += cyl(0, 0, 0, 1.6, 13) + ball(-4 + sw, 3, 17, 5.2, 'hl') + ball(4 + sw, -3, 17.5, 5.2, 'hl') + ball(sw * 1.2, 0, 22, 6, 'hl');
-      return s + line([[-12, 12, -3], [12, 12, -3]], 'l d'); },
+    // Deep Roots (250 h): a big standing clock dial whose thick ring is filled most of the way round; the hand points at the cursor; tap sweeps the ring full
+    h250: (p = 1) => { const [X, Y] = S(0, 0, 17.5), R = 11, r = 8.4, f0 = .82 + .18 * B(p), A = (rr, d) => f(X + rr * Math.cos(d * Math.PI / 180)) + ' ' + f(Y + rr * Math.sin(d * Math.PI / 180));
+      const end = -90 + 359.9 * f0, ha = (AIM && AIM.s > .05 ? Math.atan2(AIM.y - Y, AIM.x - X) * 180 / Math.PI * AIM.s + 30 * (1 - AIM.s) : 30) * Math.PI / 180;
+      let s = cyl(0, 0, 0, 8, 2) + line([[0, 0, 2], [0, 0, 6.5]], "l w") + sdisc(0, 0, 17.5, R) + sdisc(0, 0, 17.5, r - 1.6, "tp");
+      s += '<path class="hl" d="M' + A(R - .6, -90) + 'A' + (R - .6) + ' ' + (R - .6) + ' 0 ' + (end + 90 > 180 ? 1 : 0) + ' 1 ' + A(R - .6, end) + 'L' + A(r - 1.6, end) + 'A' + (r - 1.6) + ' ' + (r - 1.6) + ' 0 ' + (end + 90 > 180 ? 1 : 0) + ' 0 ' + A(r - 1.6, -90) + 'Z"/>';
+      for (let k = 0; k < 12; k++) s += '<path class="l d" d="M' + A(r - 3, k * 30) + 'L' + A(r - 2.2, k * 30) + '"/>';
+      return s + '<path class="l a w" d="M' + X + ' ' + Y + 'L' + f(X + 4.6 * Math.cos(ha)) + ' ' + f(Y + 4.6 * Math.sin(ha)) + '"/>' + sdisc(0, 0, 17.5, .9, "hl"); },
     // Long Game: a pawn far up a chessboard, its long path behind it; the pawn steps toward the cursor's file; tap advances it
     h300: (p = 1) => { let s = ''; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) s += box(-12 + i * 6, -12 + j * 6, 0, 6, 6, 1.5, (i + j) % 2 ? 'hl' : '');
       const j = 3 - 2.6 * E(p), i = 1.5 + ax() * 1.2, cx = -9 + i * 6, cy = -9 + j * 6;
@@ -167,7 +169,7 @@
       xs.forEach((x, i) => { const z = 1.5 + (i === k ? 2.4 * AIM.s : 0) + 3 * B(sq(p, i, 7, .4)); s += box(x, -1.5, z, 3, 3, 3 + i * .5, 'hl'); }); return s; },
     // Two-Week Tear: a tear-off calendar pad reading 14; the top sheet's corner lifts toward the cursor; tap tears the sheet off and away
     s14: (p = 1) => { const lift = Math.max(.9 * B(p), AIM ? AIM.s * (.15 + .35 * Math.min(1, Math.max(0, (52 - AIM.y) / 40))) : 0), fly = p < 1 ? E(p) * 4 : 0;
-      let s = box(-10, -2, 0, 20, 4, 22) + box(-10, -2.6, 18, 20, .6, 4, 'hl') + digits('14', -5, 2, 5, 9, 'y', 'l a w');
+      let s = box(-10, -2, 0, 20, 4, 22) + box(-10, -2.6, 18, 20, .6, 4, 'hl') + digits('14', -5, 2, 5, 9, 'y', 'l a w') + [-6, 0, 6].map(x => va(x, 2.05, 22, 1.6, 'y', 180, 360, 'l w')).join('');
       const Q = (x, z) => [x + fly, 2.05 + (z - 18 < 0 ? 0 : 0) + Math.sin(lift) * (18 - z) * .7, 18 - (18 - z) * Math.cos(lift) + fly * .5];
       return s + (lift > .02 ? pth([Q(-10, 18), Q(10, 18), Q(10, 1), Q(-10, 1)], 'tp') + line([Q(-6, 12), Q(6, 12)], 'l d') : ''); },
     // Moon Cycle: a moon standing on its base; the lit phase follows the cursor left and right; tap runs through a full cycle
@@ -344,11 +346,12 @@
     ...Object.fromEntries([[1, 1], [10, 2], [50, 3], [100, 4], [250, 5]].map(([n, lv]) => ['p-h' + n, (p = 1) => { const lean = ax() * .9, fl = 1 + .5 * B(p); let s = cyl(0, 0, 0, 8 + lv * .8, 1.4);
       if (lv >= 2) s += xcyl(-6, 6, -2, 3, 1.4, 'tp', 'l') + (lv >= 3 ? xcyl(-6, 6, 2, 3, 1.4, 'tp', 'l') : '');
       const fs = [[0, 0, lv + 4]].concat(lv >= 3 ? [[-3, 1, lv + 1], [3, -1, lv + 1.5]] : []).concat(lv >= 5 ? [[-5, -2, lv - 1], [5, 2, lv - .5]] : []);
-      return s + fs.map(([x, y, h]) => flame(x, y, 3.4, (h + 2) * fl, lean, 'hl') + flame(x, y, 3.4, (h + 2) * .5 * fl, lean * .7, 'l a')).join('') + (lv >= 4 ? [-1, 1].map(k => star(k * 9, 0, 14 + lv, 1.2 * fl, 'l a')).join('') : ''); }])),
-    // Regular / Devotee / Lifer: a shield badge with one, two or three chevrons; it turns toward the cursor; tap stamps it
-    ...Object.fromEntries([[10, 1], [50, 2], [100, 3]].map(([n, lv]) => ['p-n' + n, (p = 1) => { const t = ax() * 2.4, up = 3 * B(p), Q = (u, v) => [u, t * u / 9, 6 + up + v];
-      let s = cyl(0, 0, 0, 7, 1.6) + line([[0, 0, 1.6], [0, 0, 6 + up]], 'l') + pth([Q(-8, 18), Q(8, 18), Q(8, 8), Q(0, 1), Q(-8, 8)], 'hl');
-      for (let i = 0; i < lv; i++) s += line([Q(-5, 15 - i * 3.6), Q(0, 12 - i * 3.6), Q(5, 15 - i * 3.6)], 'l a w'); return s; }])),
+      return s + fs.map(([x, y, h]) => flame(x, y, 3.4, (h + 2) * fl, lean, 'l a')).join('') + (lv >= 4 ? [-1, 1].map(k => star(k * 9, 0, 14 + lv, 1.2 * fl, 'l a')).join('') : ''); }])),
+    // Regular / Devotee / Lifer: an upright shield badge with one, two or three chevrons; it sways toward the cursor; tap stamps it down and back
+    ...Object.fromEntries([[10, 1], [50, 2], [100, 3]].map(([n, lv]) => ['p-n' + n, (p = 1) => { const sw = ax() * 2, up = 3 * B(p), [X, Y] = S(0, 0, 15 + up), x = X + sw, w = 8, top = Y - 9, mid = Y + 2, tip = Y + 9;
+      let s = cyl(0, 0, 0, 7, 1.6) + line([[0, 0, 1.6], [0, 0, 6 + up]], 'l');
+      s += '<path class="tp" d="M' + f(x - w) + ' ' + f(top) + 'Q' + f(x) + ' ' + f(top - 2.4) + ' ' + f(x + w) + ' ' + f(top) + 'L' + f(x + w) + ' ' + f(mid) + 'Q' + f(x + w) + ' ' + f(tip - 2) + ' ' + f(x) + ' ' + f(tip) + 'Q' + f(x - w) + ' ' + f(tip - 2) + ' ' + f(x - w) + ' ' + f(mid) + 'Z"/>';
+      for (let i = 0; i < lv; i++) { const yy = top + 4 + i * 3.6; s += '<path class="l a w" d="M' + f(x - 4.6) + ' ' + f(yy) + 'L' + f(x) + ' ' + f(yy + 3) + 'L' + f(x + 4.6) + ' ' + f(yy) + '"/>'; } return s; }])),
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
