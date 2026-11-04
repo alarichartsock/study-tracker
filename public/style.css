@@ -645,3 +645,8 @@ body:has(#landing:not(.hid)){overflow-x:clip}
    column (cqi) so line 1 always fits, then an explicit <br> puts 'study hour' on line 2. Translations wrap naturally. */
 .hero-copy{container-type:inline-size;min-width:0}
 .hero h1#heroH1.h1-en{white-space:nowrap;font-size:min(clamp(38px,5.6vw,66px),10.8cqi)}
+/* descenders/overhang: an inline span's background (and so its text clip) only covers its font content box, which cuts the
+   bottom of y/g/p and the right edge of the last glyph. Vertical padding on inline spans doesn't move layout; the horizontal
+   padding is cancelled by a negative margin. The h1 itself (no-JS/reduced-motion gradient) gets bottom/right room the same way. */
+.hero h1#heroH1{padding:0 .08em .16em 0;margin-right:-.08em;margin-bottom:calc(18px - .16em)}
+.hero h1#heroH1.rotating .gw{padding:.12em .08em .22em;margin:0 -.08em}

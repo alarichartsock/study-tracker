@@ -220,9 +220,10 @@ async function showAuth(me) {
   const all = [rot.querySelector('.rot-w'), ...words]; let i = 0;
   const h1 = rot.closest('h1'); h1.querySelectorAll('.g').forEach(g => { const f = document.createDocumentFragment();
     g.textContent.split(/(\s+)/).forEach(t => { if (!t) return; if (/^\s+$/.test(t)) f.append(t); else { const s = document.createElement('span'); s.className = 'gw'; s.textContent = t; f.append(s); } }); g.replaceChildren(f); });
-  const paint = () => { const r = h1.getBoundingClientRect(), rr = rot.getBoundingClientRect();
+  // the gradient image is the h1 box grown by ex on every side so descenders (y, g, p) and right-side overhang are covered
+  const paint = () => { const r = h1.getBoundingClientRect(), rr = rot.getBoundingClientRect(), ex = parseFloat(getComputedStyle(h1).fontSize) * .3;
     for (const el of [...h1.querySelectorAll('.gw'), ...all]) { const b = el.classList.contains('rot-w') ? rr : el.getBoundingClientRect();
-      el.style.backgroundSize = r.width + 'px ' + r.height + 'px'; el.style.backgroundPosition = (r.left - b.left) + 'px ' + (r.top - b.top) + 'px'; } };
+      el.style.backgroundSize = (r.width + 2 * ex) + 'px ' + (r.height + 2 * ex) + 'px'; el.style.backgroundPosition = (r.left - ex - b.left) + 'px ' + (r.top - ex - b.top) + 'px'; } };
   h1.classList.add('rotating'); paint(); addEventListener('resize', paint); document.fonts?.ready.then(paint); new ResizeObserver(paint).observe(h1);
   setInterval(() => { if (document.hidden || $('landing')?.classList.contains('hid')) return; const cur = all[i]; i = (i + 1) % all.length; const nx = all[i];
     cur.classList.remove('on'); cur.classList.add('out'); nx.classList.remove('out'); nx.classList.add('on'); setTimeout(() => cur.classList.remove('out'), 520); }, 2200); } }
