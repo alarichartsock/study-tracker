@@ -339,6 +339,16 @@
     // Round the Clock: a dial cut into six four-hour blocks, all filled; the block under the cursor lifts; tap fills them in turn
     spectrum: (p = 1) => { const ang = aimDeg(3, -999), k = AIM && AIM.s > .05 ? Math.floor((((ang + 90) % 360) + 360) % 360 / 60) : -1; let s = cyl(0, 0, 0, 13, 3);
       for (let i = 0; i < 6; i++) { const on = p >= 1 || sq(p, i, 6, .35) > .4, z = 3 + (i === k ? 1.6 * AIM.s : 0); s += pth([[0, 0, z], ...Array.from({ length: 7 }, (_, j) => onRim(0, 0, z, 11, -90 + i * 60 + 4 + j * 52 / 6))], on ? 'hl' : 'l d'); } return s + ell(0, 0, 3.2, 1.2, 'l a'); },
+    // ---- Your activities (one drawing per tier, tinted with the subject colour) ----
+    // Spark / Kindling / Blaze / Bonfire / Wildfire: a fire that grows with each hours tier; flames lean toward the cursor; tap flares them
+    ...Object.fromEntries([[1, 1], [10, 2], [50, 3], [100, 4], [250, 5]].map(([n, lv]) => ['p-h' + n, (p = 1) => { const lean = ax() * .9, fl = 1 + .5 * B(p); let s = cyl(0, 0, 0, 8 + lv * .8, 1.4);
+      if (lv >= 2) s += xcyl(-6, 6, -2, 3, 1.4, 'tp', 'l') + (lv >= 3 ? xcyl(-6, 6, 2, 3, 1.4, 'tp', 'l') : '');
+      const fs = [[0, 0, lv + 4]].concat(lv >= 3 ? [[-3, 1, lv + 1], [3, -1, lv + 1.5]] : []).concat(lv >= 5 ? [[-5, -2, lv - 1], [5, 2, lv - .5]] : []);
+      return s + fs.map(([x, y, h]) => flame(x, y, 3.4, (h + 2) * fl, lean, 'hl') + flame(x, y, 3.4, (h + 2) * .5 * fl, lean * .7, 'l a')).join('') + (lv >= 4 ? [-1, 1].map(k => star(k * 9, 0, 14 + lv, 1.2 * fl, 'l a')).join('') : ''); }])),
+    // Regular / Devotee / Lifer: a shield badge with one, two or three chevrons; it turns toward the cursor; tap stamps it
+    ...Object.fromEntries([[10, 1], [50, 2], [100, 3]].map(([n, lv]) => ['p-n' + n, (p = 1) => { const t = ax() * 2.4, up = 3 * B(p), Q = (u, v) => [u, t * u / 9, 6 + up + v];
+      let s = cyl(0, 0, 0, 7, 1.6) + line([[0, 0, 1.6], [0, 0, 6 + up]], 'l') + pth([Q(-8, 18), Q(8, 18), Q(8, 8), Q(0, 1), Q(-8, 8)], 'hl');
+      for (let i = 0; i < lv; i++) s += line([Q(-5, 15 - i * 3.6), Q(0, 12 - i * 3.6), Q(5, 15 - i * 3.6)], 'l a w'); return s; }])),
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
