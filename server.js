@@ -5,6 +5,7 @@ const auth = require('./lib/auth'), csv = require('./lib/csv'), stats = require(
 const reqlog = require('./lib/reqlog'), usage = require('./lib/usage'), reports = require('./lib/reports'), achN = require('./lib/achnotify'), TSpec = require('./public/trophy-spec.js');
 const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
+const PRACTICE = require('./public/practice.js');
 const { Store, PALETTE, TEMPLATES } = require('./lib/store');
 const oauthLib = require('./lib/oauth');
 const billing = require('./lib/billing');
@@ -29,7 +30,7 @@ const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
-const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
+const STATIC = { '/': 'index.html', '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
   '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -672,8 +673,12 @@ function createApp(opts = {}) {
       const r1 = crud(ud, 'exams', p, M, j, (a, b) => cleanExam(a, b, ud), res); if (r1 !== false) return r1;
       // ---- MCAT practice exams ----
       if (p === '/api/practice' || p.startsWith('/api/practice/')) ud.practice ||= [];
-      const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' ? crud(ud, 'practice', p, M, j, MCAT.cleanPractice, res) : false; if (r3 !== false) return r3;
-      if (p === '/api/practice-goal' && M === 'POST') { ud.settings.mcatGoal = MCAT.cleanGoal(j.goal); save(); return send(res, 200, { goal: ud.settings.mcatGoal }); }
+      // MCAT keeps its own validator and record shape; other templates use the template-driven tracker (records tagged exam: <id>)
+      const pxMcat = (ud.template || 'mcat') === 'mcat', pxClean = (a, b) => b && b.id && (b.exam || 'mcat') !== (ud.template || 'mcat') ? (() => { throw new Error('That practice exam belongs to another template'); })() : pxMcat ? MCAT.cleanPractice(a, b) : PRACTICE.clean(ud.template, a, b, ud.settings.customSections);
+      if (p === '/api/practice-sections' && M === 'POST') { try { ud.settings.customSections = PRACTICE.cleanCustomSections(j.sections); } catch (e) { return send(res, 400, { error: e.message }); } save(); return send(res, 200, { sections: ud.settings.customSections }); }
+      const r3 = p.startsWith('/api/practice') && p !== '/api/practice-goal' && p !== '/api/practice-sections' ? crud(ud, 'practice', p, M, j, pxClean, res) : false; if (r3 !== false) return r3;
+      if (p === '/api/practice-goal' && M === 'POST') { if (pxMcat) { ud.settings.mcatGoal = MCAT.cleanGoal(j.goal); save(); return send(res, 200, { goal: ud.settings.mcatGoal }); }
+        const g = PRACTICE.cleanGoal(ud.template, j.goal, ud.settings.customSections); (ud.settings.practiceGoals ||= {})[ud.template] = g; save(); return send(res, 200, { goal: g }); }
       const r2 = crud(ud, 'tasks', p, M, j, cleanTask, res); if (r2 !== false) return r2;
       // ---- settings ----
       if (p === '/api/settings' && M === 'POST') {

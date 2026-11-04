@@ -19,7 +19,8 @@
     { id: 'usmle1', name: 'USMLE Step 1', exam: 'USMLE Step 1', score: null,
       subjects: ['Anatomy', 'Behavioral Science', 'Biochemistry', 'Microbiology', 'Pathology', 'Pharmacology', 'Physiology'],
       activities: ['Content review', 'Q-bank', 'Practice test', 'Flashcards', 'Review mistakes'] },
-    { id: 'dat', name: 'DAT', exam: 'DAT', score: [1, 30], subjects: ['Biology', 'General Chemistry', 'Organic Chemistry', 'Perceptual Ability', 'Reading Comprehension', 'Quantitative Reasoning'],
+    { id: 'dat', name: 'DAT', exam: 'DAT', score: [200, 600], // 200-600 scale since March 1, 2025 (ADA)
+      subjects: ['Biology', 'General Chemistry', 'Organic Chemistry', 'Perceptual Ability', 'Reading Comprehension', 'Quantitative Reasoning'],
       activities: ['Content review', 'Practice questions', 'Practice test', 'Flashcards', 'Review mistakes'] },
     { id: 'custom', name: 'Custom', exam: 'Exam', score: null, subjects: [], activities: ['Study', 'Practice', 'Review'] }
   ];

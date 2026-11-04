@@ -10,7 +10,7 @@ test('"/" serves the full landing page in the initial HTML, visible without JS o
   const app = await start(); t.after(app.close);
   const r = await fetch(app.base + '/', { headers: UA }), h = await r.text();
   assert.equal(r.status, 200);
-  assert.match(h, /<h1>Track every MCAT study hour<\/h1>/);
+  assert.match(h, /<h1 id=\"heroH1\">Track every <span class=\"rot\" aria-live=\"off\"><span class=\"rot-w on\">MCAT<\/span><\/span><span class=\"vh\"> \(or LSAT, GRE, GMAT, SAT, ACT, USMLE, DAT\)<\/span> study hour<\/h1>/);
   assert.match(h, /<div id="landing" class="landing">/, 'landing not hidden');
   assert.match(h, /<section class="pricing" id="pricing"/, 'pricing not hidden'); assert.match(h, /\$4\.99/); assert.match(h, /\$39/);
   assert.match(h, /Start free 30-day trial/); assert.match(h, /Everything you need to study with focus/); assert.match(h, /pv-stats/);

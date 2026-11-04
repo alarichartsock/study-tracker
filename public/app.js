@@ -213,6 +213,13 @@ async function showAuth(me) {
   if (oa) { ob.classList.add('hid'); $('oauthTop').classList.add('hid'); $('aToggle').classList.add('hid'); $('aBack').classList.add('hid'); $('authMsg').textContent = 'Finish creating your account' + (oauthProvider ? ' with ' + oauthProvider : ''); }
   $('aAgree').checked = false; syncAgree();
 }
+// landing hero: rotate the test name. The server-rendered "MCAT" stays the accessible text (aria-live off); the other
+// words are aria-hidden clones stacked in the same grid cell (fixed width). Reduced motion: stays on MCAT.
+{ const rot = document.querySelector('#heroH1 .rot'); if (rot && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  const words = ['LSAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'USMLE', 'DAT'].map(w => { const e = document.createElement('span'); e.className = 'rot-w'; e.setAttribute('aria-hidden', 'true'); e.textContent = w; rot.appendChild(e); return e; });
+  const all = [rot.querySelector('.rot-w'), ...words]; let i = 0;
+  setInterval(() => { if (document.hidden || $('landing')?.classList.contains('hid')) return; const cur = all[i]; i = (i + 1) % all.length; const nx = all[i];
+    cur.classList.remove('on'); cur.classList.add('out'); nx.classList.remove('out'); nx.classList.add('on'); setTimeout(() => cur.classList.remove('out'), 520); }, 2200); } }
 // landing: feature tour tabs (all panels are in the HTML; JS only switches) and CTA click events
 { const tabs = [...document.querySelectorAll('.ltabs [data-tab]')], pick = (b, focus) => { tabs.forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); x.tabIndex = on ? 0 : -1; $('tp-' + x.dataset.tab)?.classList.toggle('on', on); }); if (focus) b.focus(); };
   tabs.forEach((b, i) => { b.tabIndex = i ? -1 : 0; b.onclick = () => { pick(b); track('landing_tab', { tab: b.dataset.tab }); };
@@ -250,7 +257,9 @@ function go(v) { if ((v === 'users' || v === 'logev' || v === 'loglive') && !(ME
   if (v !== 'logev' && v !== 'loglive' && /^#\/admin\/(logs\/|live)/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
   render(); if (!(v === 'users' && UI.usersBack)) window.scrollTo(0, 0); }
 const tplOf = () => TEMPLATES.get(S && S.template) || TEMPLATES.get('mcat'), isMcat = () => tplOf().id === 'mcat';
-function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'); if (b) b.classList.toggle('hid', !isMcat()); }
+function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), t = tplOf(), on = isMcat() || !!gpxSpec(); if (!b) return; b.classList.toggle('hid', !on);
+  const lbl = isMcat() ? 'MCAT scores' : t.id === 'custom' ? 'Scores' : t.name + ' scores'; b.title = lbl; b.setAttribute('aria-label', lbl); const sp = b.querySelector('span'); if (sp && !isMcat()) sp.textContent = 'Scores'; else if (sp && sp.dataset.orig) sp.textContent = sp.dataset.orig;
+  if (sp && !sp.dataset.orig && isMcat()) sp.dataset.orig = sp.textContent; TITLES.mcat = isMcat() ? 'MCAT practice exams' : t.name + ' practice exams'; }
 // Accounts from before per-user time zones: adopt this browser's zone once (server uses America/Los_Angeles until then).
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
@@ -391,7 +400,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
     ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
-  ${isMcat() ? pxHomeCard() : ''}
+  ${isMcat() ? pxHomeCard() : gpxHomeCard()}
   ${todoCard()}
   <div class="grid2">
     <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
@@ -547,7 +556,7 @@ VIEWS.stats = async () => {
   const subjects = Object.keys(c.bySubject), acts = Object.keys(c.matrix.activitySubject), weeks = [...new Set(Object.values(c.matrix.subjectWeek).flatMap(Object.keys))].sort().slice(-12);
   const cell = v => v ? `<td class="num" style="background:color-mix(in srgb,var(--acc) ${Math.round(Math.min(70, v / Math.max(1, c.total) * 300))}%,transparent)">${fmtH(v)}</td>` : '<td class="num muted">–</td>';
   const range = c.from ? `${fmtDate(k2d(c.from), { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(k2d(c.to), { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No data yet';
-  return `${mixChip()}${isMcat() && (S.practice || []).length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(S.practice).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(S.practice).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  return `${mixChip()}${isMcat() && mcatPx().length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(mcatPx()).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(mcatPx()).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <select data-chg="sSubj" style="width:auto">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
     ${UI.range === 'custom' ? `<div class="row"><input type="date" value="${from}" data-chg="cRange" data-k="cFrom"><input type="date" value="${to}" data-chg="cRange" data-k="cTo"></div>` : ''}
     <p class="muted small" style="margin:8px 0 0">${range}${R.previous ? ` · previous period: ${fmtH(R.previous.total)} ${chg == null ? '' : `<b style="color:${chg >= 0 ? 'var(--ok)' : 'var(--danger)'}">${chg >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(chg * 100))}%</b>`}` : ''}</p></div>
@@ -1201,17 +1210,17 @@ const PX_FALLBACK = { cp: '#f59e0b', cars: '#ec4899', bb: '#22c55e', ps: '#6366f
 const pxColor = k => { const sec = MCAT.SECTIONS.find(s => s[0] === k), m = S.subjectMeta || {}, hit = Object.keys(m).find(n => n.toLowerCase() === sec[2].toLowerCase() || n.toLowerCase() === sec[1].toLowerCase()); return hit ? color(hit) : PX_FALLBACK[k]; };
 const pxDelta = v => v == null ? '' : `<span class="px-d ${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${v > 0 ? '\u25b2 +' + v : v < 0 ? '\u25bc ' + v : '\u00b1 0'}</span>`;
 const pxDate = d => fmtDate(k2d(d), { month: 'short', day: 'numeric', year: 'numeric' });
-function pxChart(xs, series, lo, hi, goal) {
+function pxChart(xs, series, lo, hi, goal, tipFn) {
   const n = xs.length, X = i => n > 1 ? 4 + i / (n - 1) * 92 : 50, Y = v => 92 - (v - lo) / (hi - lo) * 84;
   const grid = [0, .25, .5, .75, 1].map(f => Math.round(lo + f * (hi - lo))).map(v => `<span class="px-gl" style="top:${Y(v)}%"><i>${v}</i></span>`).join('');
-  const lines = series.map(s => `<polyline vector-effect="non-scaling-stroke" fill="none" stroke="${s.c}" stroke-width="${s.w || 2}" stroke-linejoin="round" stroke-linecap="round" points="${xs.map((x, i) => X(i) + ',' + Y(x[s.k])).join(' ')}"/>`).join('');
+  const lines = series.map(s => `<polyline vector-effect="non-scaling-stroke" fill="none" stroke="${s.c}" stroke-width="${s.w || 2}" stroke-linejoin="round" stroke-linecap="round" points="${xs.map((x, i) => x[s.k] == null ? '' : X(i) + ',' + Y(x[s.k])).filter(Boolean).join(' ')}"/>`).join('');
   const g = goal != null && goal >= lo && goal <= hi ? `<span class="px-goal" style="top:${Y(goal)}%"><i>Goal ${goal}</i></span>` : '';
-  const dots = series.flatMap(s => xs.map((x, i) => { const p = s.k === 'total' ? MCAT.pctTotal(x.total) : MCAT.pctSection(s.k, x[s.k]), pv = i ? x[s.k] - xs[i - 1][s.k] : null;
+  const dots = series.flatMap(s => xs.map((x, i) => { if (x[s.k] == null) return ''; if (tipFn) return `<b class="px-dot" style="left:${X(i)}%;top:${Y(x[s.k])}%;--c:${s.c}"${tip(tipFn(s, x, i))}></b>`; const p = s.k === 'total' ? MCAT.pctTotal(x.total) : MCAT.pctSection(s.k, x[s.k]), pv = i ? x[s.k] - xs[i - 1][s.k] : null;
     return `<b class="px-dot" style="left:${X(i)}%;top:${Y(x[s.k])}%;--c:${s.c}"${tip(esc(x.source) + ' \u00b7 ' + pxDate(x.date) + ' \u00b7 ' + s.l + ' ' + x[s.k] + ' \u00b7 ' + MCAT.fmtPct(p) + 'th percentile' + (pv != null ? ' \u00b7 ' + (pv >= 0 ? '+' : '') + pv + ' vs previous' : ''))}></b>`; })).join('');
   return `<div class="px-chart">${grid}${g}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${dots}</div>`;
 }
-VIEWS.mcat = () => {
-  const P = MCAT.summary(S.practice || []), goal = S.settings.mcatGoal ?? null, src = MCAT.SOURCE;
+VIEWS.mcat = () => { if (!isMcat()) return gpxView();
+  const P = MCAT.summary(mcatPx()), goal = S.settings.mcatGoal ?? null, src = MCAT.SOURCE;
   const head = `<div class="card"><div class="row wrap gap" style="margin:0"><h3 class="grow" style="margin:0">Practice exams</h3><button class="btn" data-act="pxGoal">${goal ? 'Goal ' + goal : 'Set goal'}</button><button class="btn primary" data-act="pxEdit">+ Practice exam</button></div>
     <p class="muted small" style="margin:8px 0 0">Log full-length scores (AAMC FL, Blueprint, Kaplan...) to track your score and percentile over time.</p></div>`;
   const foot = `<p class="muted small px-foot">Percentiles: <a class="link" href="${src.url}" target="_blank" rel="noopener">${esc(src.name)}</a>, ranks in effect ${src.effective}. Practice-exam scores only approximate real MCAT scores, so these percentiles are estimates.</p>`;
@@ -1244,7 +1253,7 @@ ACT.pxEdit = b => { const e = b.dataset.id ? (S.practice || []).find(x => x.id =
   async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; MCAT.SECTIONS.forEach(([k]) => { body[k] = f[k].value; }); await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); if (!e) track('mcat_exam_logged', { source: STD_SRC(body.source) }); } refresh(); });
   const f = $('dlgForm'); f.oninput = () => { const vs = MCAT.SECTIONS.map(([k]) => +f[k].value), ok = vs.every(v => Number.isInteger(v) && v >= 118 && v <= 132), t = vs.reduce((a, b) => a + b, 0); $('pxTot').textContent = 'Total: ' + (ok ? t + ' (' + MCAT.fmtPct(MCAT.pctTotal(t)) + 'th percentile)' : '\u2013'); }; };
 
-function pxHomeCard() { const P = MCAT.summary(S.practice || []), goal = S.settings.mcatGoal ?? null;
+function pxHomeCard() { const P = MCAT.summary(mcatPx()), goal = S.settings.mcatGoal ?? null;
   if (!P.n) return '<div class="card px-home px-empty"><div class="row wrap gap" style="margin:0"><div class="grow"><h3 style="margin:0">MCAT practice exams</h3><p class="muted small" style="margin:4px 0 0">Log a full-length to track your score and percentile over time.</p></div><button class="btn primary" data-act="pxEdit">+ Log first exam</button></div></div>';
   const L = P.last, ch = P.change.total.prev, pct = MCAT.fmtPct(MCAT.pctTotal(L.total)), xs = P.exams.slice(-12);
   const lo = Math.max(472, Math.min(...xs.map(x => x.total), goal ?? 528) - 2), hi = Math.min(528, Math.max(lo + 6, Math.max(...xs.map(x => x.total), goal ?? 472) + 2));
@@ -1253,6 +1262,66 @@ function pxHomeCard() { const P = MCAT.summary(S.practice || []), goal = S.setti
     <div class="px-home-grid"><div class="px-home-nums"><div><b class="px-big">${L.total}</b> <span class="muted small">${pct}th pct</span> ${ch != null ? pxDelta(ch) : ''}</div><div class="muted small">Latest \u00b7 ${esc(L.source)} \u00b7 ${pxDate(L.date)}</div><div class="small mt-xs">Best <b>${P.best.total}</b> <span class="muted">(${MCAT.fmtPct(MCAT.pctTotal(P.best.total))}th)</span></div>
     ${goal ? `<div class="px-gbar"${tip('Goal ' + goal + ' \u00b7 latest ' + L.total + (L.total >= goal ? ' \u00b7 reached' : ' \u00b7 ' + (goal - L.total) + ' to go'))}><i style="width:${gp}%"></i></div><div class="muted small">${L.total >= goal ? 'Goal ' + goal + ' reached' : (goal - L.total) + ' to goal ' + goal}</div>` : ''}</div>
     <div class="px-spark">${pxChart(xs, [{ k: 'total', l: 'Total', c: 'var(--acc)', w: 2 }], lo, hi, goal)}</div></div></div>`; }
+
+// ================= TEMPLATE-DRIVEN PRACTICE EXAMS (non-MCAT) =================
+const mcatPx = () => (S.practice || []).filter(x => !x.exam);
+const gpxSpec = () => { const t = tplOf().id; if (t === 'mcat') return null; const sp = PRACTICE.spec(t, S.settings.customSections); return sp && (sp.sections.length || t === 'custom') ? sp : null; };
+const GPX_COL = ['#6366f1', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4', '#a855f7', '#f97316', '#84cc16', '#64748b', '#ef4444'];
+const gpxCol = (sp, k) => { const i = sp.sections.findIndex(s => s[0] === k), sec = sp.sections[i], m = S.subjectMeta || {}, hit = sec && Object.keys(m).find(n => n.toLowerCase() === sec[2].toLowerCase() || n.toLowerCase() === sec[1].toLowerCase()); return hit ? color(hit) : GPX_COL[i % GPX_COL.length]; };
+const gpxGoal = () => (S.settings.practiceGoals || {})[tplOf().id] ?? null;
+const gpxFmt = (sp, v) => v == null ? '\u2013' : v + (sp.total.unit || '');
+const gpxRange = (vals, lo, hi, pad) => { const a = Math.max(lo, Math.min(...vals) - pad), b = Math.min(hi, Math.max(...vals) + pad); return b > a ? [a, b] : [lo, hi]; };
+const gpxTip = (sp, s, x) => esc(x.source) + ' \u00b7 ' + pxDate(x.date) + ' \u00b7 ' + s.l + ' ' + x[s.k];
+function gpxPass(sp, x) { return sp.pass && x[sp.pass.key] != null ? (x[sp.pass.key] >= sp.pass.at ? ' <span class="px-d up">Pass range</span>' : ' <span class="px-d down">Below ' + sp.pass.at + '</span>') : ''; }
+function gpxView() { const sp = gpxSpec(), t = tplOf(), goal = gpxGoal();
+  const secEd = t.id === 'custom' ? `<button class="btn" data-act="gpxSections">Sections</button>` : '';
+  const head = `<div class="card"><div class="row wrap gap" style="margin:0"><h3 class="grow" style="margin:0">Practice exams</h3>${secEd}${sp && sp.sections.length ? `<button class="btn" data-act="gpxGoal">${goal != null ? 'Goal ' + gpxFmt(sp, goal) : 'Set goal'}</button><button class="btn primary" data-act="gpxEdit">+ Practice exam</button>` : ''}</div>
+    <p class="muted small" style="margin:8px 0 0">${esc(sp ? sp.note : '')}</p></div>`;
+  const src = PRACTICE.SOURCES[t.id], foot = src ? `<p class="muted small px-foot">Score scales: <a class="link" href="${src}" target="_blank" rel="noopener">official ${esc(t.name)} scoring</a>.</p>` : '';
+  if (!sp || !sp.sections.length) return head + '<div class="card"><p class="muted small">Add your sections (with their min and max scores) to start logging practice exams.</p></div>';
+  const P = PRACTICE.summary(S.practice || [], t.id);
+  if (!P.n) return head + '<div class="card"><p class="muted small">No practice exams yet. Add your first one to see your trend.</p></div>' + foot;
+  const L = P.last, B = P.best, ch = k => P.change[k] || {}, sg = v => v == null ? '\u2013' : (v >= 0 ? '+' : '') + v;
+  const cards = statCards([[gpxFmt(sp, L.total) + gpxPass(sp, L), 'Latest \u00b7 ' + esc(L.source)], [gpxFmt(sp, B.total), 'Best \u00b7 ' + esc(B.source)], [sg(ch('total').prev), 'vs previous exam'], [sg(ch('total').first), 'vs first exam']]);
+  const tv = P.exams.map(x => x.total).concat(goal != null ? [goal] : []), [tLo, tHi] = gpxRange(tv, sp.total.min, sp.total.max, Math.max(sp.total.step, (sp.total.max - sp.total.min) / 20));
+  const secs = sp.sections, sv = P.exams.flatMap(x => secs.map(s => x[s[0]]).filter(v => v != null)), smin = Math.min(...secs.map(s => s[3])), smax = Math.max(...secs.map(s => s[4]));
+  const [sLo, sHi] = sv.length ? gpxRange(sv, smin, smax, Math.max(1, (smax - smin) / 20)) : [smin, smax];
+  const extra = (sp.extra || []).map(([n]) => { const k = n === 'STEM' ? 'stem' : 'ts'; return L[k] != null ? `<div class="stat px-sec"><b>${L[k]}</b><span>${n}</span><span class="px-ch">${pxDelta(ch(k).prev)}</span></div>` : ''; }).join('');
+  const tiles = `<div class="px-secs">${secs.map(([k, l]) => `<div class="stat px-sec" style="--c:${gpxCol(sp, k)}"><b>${L[k] ?? '\u2013'}</b><span>${esc(l)}</span><span class="px-ch">${pxDelta(ch(k).prev)}${ch(k).first != null ? ' <span class="muted">' + sg(ch(k).first) + ' since first</span>' : ''}</span></div>`).join('')}${extra}</div>`;
+  const legend = secs.map(([k, l]) => `<span class="px-leg"><i style="background:${gpxCol(sp, k)}"></i>${esc(l)}</span>`).join('');
+  const rows = P.exams.slice().reverse().map(x => { const i = P.exams.indexOf(x), pv = i ? P.exams[i - 1] : null;
+    return `<div class="item" data-act="gpxEdit" data-id="${x.id}"><div class="grow"><div>${esc(x.source)}</div><div class="n">${pxDate(x.date)} \u00b7 ${secs.filter(s => x[s[0]] != null).map(([k, l]) => esc(l) + ' ' + x[k]).join(' \u00b7 ')}${x.notes ? ' \u00b7 ' + esc(x.notes) : ''}</div></div><div class="t">${gpxFmt(sp, x.total)}${gpxPass(sp, x)} ${pv ? pxDelta(+(x.total - pv.total).toFixed(1)) : ''}</div></div>`; }).join('');
+  const tip1 = (s, x) => gpxTip(sp, s, x);
+  return head + cards + `<div class="card"><h3>${esc(sp.total.label)}</h3>${pxChart(P.exams, [{ k: 'total', l: sp.total.label, c: 'var(--acc)', w: 2.5 }], tLo, tHi, goal, tip1)}${goal != null ? `<p class="muted small">Goal ${gpxFmt(sp, goal)} \u00b7 ${L.total >= goal ? 'reached' : +(goal - L.total).toFixed(1) + ' to go from latest'}</p>` : ''}</div>
+    <div class="card"><h3>Sections (latest)</h3>${tiles}<div class="px-legs">${legend}</div>${pxChart(P.exams, secs.map(([k, l]) => ({ k, l, c: gpxCol(sp, k) })), sLo, sHi, null, tip1)}</div>
+    <div class="card"><h3>All practice exams</h3><div class="list">${rows}</div></div>` + foot; }
+ACT.gpxGoal = () => { const sp = gpxSpec(), g = gpxGoal() ?? '';
+  dialog(`<h3>Goal score</h3><label>Target ${esc(sp.total.label)} (${sp.total.min}\u2013${sp.total.max})</label><input type="number" name="goal" min="${sp.total.min}" max="${sp.total.max}" step="any" value="${g}">
+    <div class="row"><span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+  async (v, f) => { await api('/api/practice-goal', 'POST', { goal: f.goal.value }); track('goal_created', { goal_type: 'practice_score' }); refresh(); }); };
+ACT.gpxEdit = b => { const sp = gpxSpec(), t = tplOf(), e = b.dataset.id ? (S.practice || []).find(x => x.id === +b.dataset.id) : null;
+  const sec = sp.sections.map(([k, l, long, lo, hi, st, req]) => `<div><label title="${esc(long)}">${esc(l)}${req ? '' : ' <small class="muted">(optional)</small>'}</label><input type="number" name="${k}" min="${lo}" max="${hi}" step="${st}" inputmode="decimal" value="${e?.[k] ?? ''}" placeholder="${lo}\u2013${hi}"${req ? ' required' : ''}></div>`).join('');
+  const tot = sp.total.entered ? `<div><label>${esc(sp.total.label)}</label><input type="number" name="total" min="${sp.total.min}" max="${sp.total.max}" step="${sp.total.endsIn5 ? 10 : sp.total.step}" value="${e?.total ?? ''}" placeholder="${sp.total.min}\u2013${sp.total.max}" required></div>` : '';
+  dialog(`<h3>${e ? 'Edit practice exam' : 'Add practice exam'}</h3><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ST.todayKey}" required></div><div><label>Source</label><input name="source" maxlength="80" value="${esc(e?.source || '')}" placeholder="${esc(t.name)} practice test 1" required></div></div>
+    <div class="px-form">${sec}${tot}</div><p class="muted small" id="pxTot"></p><label>Notes</label><input name="notes" maxlength="1000" value="${esc(e?.notes || '')}">
+    <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+  async (v, f) => { if (v === 'del') await api('/api/practice/' + e.id, 'DELETE'); else { const body = { date: f.date.value, source: f.source.value, notes: f.notes.value }; sp.sections.forEach(([k]) => { body[k] = f[k].value; }); if (sp.total.entered) body.total = f.total.value;
+    await api(e ? '/api/practice/' + e.id : '/api/practice', e ? 'PUT' : 'POST', body); if (!e) track('practice_exam_logged', { exam: t.id }); } refresh(); });
+  const f = $('dlgForm'), upd = () => { if (sp.total.entered) return; const x = {}; sp.sections.forEach(([k]) => { x[k] = f[k].value === '' ? null : +f[k].value; }); const v = PRACTICE.totalOf(sp, x); $('pxTot').textContent = sp.total.label + ': ' + gpxFmt(sp, v); }; f.oninput = upd; upd(); };
+ACT.gpxSections = () => { const cur = S.settings.customSections || [], row = (d = {}) => `<div class="row gpx-sec"><div class="grow"><label>Section</label><input name="sl" maxlength="40" value="${esc(d.l || '')}"></div><div><label>Min</label><input type="number" name="smin" step="1" value="${d.min ?? 0}" style="width:90px"></div><div><label>Max</label><input type="number" name="smax" step="1" value="${d.max ?? 100}" style="width:90px"></div></div>`;
+  dialog(`<h3>Practice-exam sections</h3><p class="muted small">Name each scored section with its lowest and highest score. Leave a name blank to remove it. The total is the sum of the sections.</p>${[...cur, {}, {}].slice(0, 10).map(row).join('')}
+    <div class="row"><span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
+  async (v, f) => { const L = [...f.querySelectorAll('.gpx-sec')].map(r => ({ l: r.querySelector('[name=sl]').value, min: +r.querySelector('[name=smin]').value, max: +r.querySelector('[name=smax]').value })).filter(d => d.l.trim());
+    await api('/api/practice-sections', 'POST', { sections: L }); refresh(); }); };
+function gpxHomeCard() { const sp = gpxSpec(), t = tplOf(); if (!sp || !sp.sections.length) return '';
+  const P = PRACTICE.summary(S.practice || [], t.id), goal = gpxGoal(), title = esc(t.id === 'custom' ? 'Practice exams' : t.name + ' practice exams');
+  if (!P.n) return `<div class="card px-home px-empty"><div class="row wrap gap" style="margin:0"><div class="grow"><h3 style="margin:0">${title}</h3><p class="muted small" style="margin:4px 0 0">Log a practice test to track your score over time.</p></div><button class="btn primary" data-act="gpxEdit">+ Log first exam</button></div></div>`;
+  const L = P.last, ch = P.change.total.prev, xs = P.exams.slice(-12), [lo, hi] = gpxRange(xs.map(x => x.total).concat(goal != null ? [goal] : []), sp.total.min, sp.total.max, Math.max(sp.total.step, (sp.total.max - sp.total.min) / 30));
+  const gp = goal != null && goal > sp.total.min ? Math.max(0, Math.min(100, Math.round((L.total - sp.total.min) / (goal - sp.total.min) * 100))) : 0;
+  return `<div class="card px-home" data-act="goto" data-v="mcat" role="link" tabindex="0" aria-label="Open practice exams"><div class="row" style="margin:0 0 6px"><h3 class="grow" style="margin:0">${title}</h3><span class="muted small">View all \u2192</span></div>
+    <div class="px-home-grid"><div class="px-home-nums"><div><b class="px-big">${gpxFmt(sp, L.total)}</b> <span class="muted small">${esc(sp.total.label)}</span> ${ch != null ? pxDelta(ch) : ''}${gpxPass(sp, L)}</div><div class="muted small">Latest \u00b7 ${esc(L.source)} \u00b7 ${pxDate(L.date)}</div><div class="small mt-xs">Best <b>${gpxFmt(sp, P.best.total)}</b></div>
+    ${goal != null ? `<div class="px-gbar"><i style="width:${gp}%"></i></div><div class="muted small">${L.total >= goal ? 'Goal ' + gpxFmt(sp, goal) + ' reached' : +(goal - L.total).toFixed(1) + ' to goal ' + gpxFmt(sp, goal)}</div>` : ''}</div>
+    <div class="px-spark">${pxChart(xs, [{ k: 'total', l: sp.total.label, c: 'var(--acc)', w: 2 }], lo, hi, goal, (s, x) => gpxTip(sp, s, x))}</div></div></div>`; }
 
 // ================= DASHBOARD TO-DOS =================
 function todoCard() { const T = ST.todayKey, wk = dk(addD(k2d(T), 7)), open = S.tasks.filter(x => !x.done), by = (a, b) => (a.due || '').localeCompare(b.due || '') || PRI[a.priority] - PRI[b.priority] || a.id - b.id;
