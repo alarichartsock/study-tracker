@@ -268,6 +268,39 @@
     // Laser Mode: five stars on a stand; the star nearest the cursor grows; tap lights them left to right
     focus5: (p = 1) => { const k = nearest(Array.from({ length: 5 }, (_, i) => [-10 + i * 5, 0, 12])); let s = box(-13, -2, 0, 26, 4, 3);
       for (let i = 0; i < 5; i++) { const t = p >= 1 ? 1 : sq(p, i, 5, .4); s += line([[-10 + i * 5, 0, 3], [-10 + i * 5, 0, 9]], 'l d') + star(-10 + i * 5, 0, 12, 2.4 + (i === k ? 1.2 * AIM.s : 0) + 1.2 * B(t), t > .3 ? 'hl' : 'l d'); } return s; },
+    // ---- Goals & planning ----
+    // Double Up: a goal bar and a bar twice its height; the bar nearest the cursor rises a touch; tap grows the second to double
+    goal200: (p = 1) => { const k = nearest([[-4, 0, 6], [4, 0, 12]]); let s = plate(24, 10, 1.5) + box(-7, -2.5, 1.5, 5, 5, 8 + (k === 0 ? 2 * AIM.s : 0)) + box(2, -2.5, 1.5, 5, 5, 16 * (p >= 1 ? 1 : .5 + .5 * E(p)) + (k === 1 ? 2 * AIM.s : 0), 'hl');
+      return s + line([[-9, 2.6, 9.5], [9, 2.6, 9.5]], 'l a dd'); },
+    // Subject Sealed: an envelope closed with a wax seal; the flap lifts toward the cursor; tap presses the seal
+    subjgoalmet: (p = 1) => { const lift = AIM ? AIM.s * (.2 + .3 * Math.max(0, -ay())) + .05 * ax() : 0, sz = 1 - .25 * B(p); let s = box(-12, -8, 0, 24, 16, 1.6, 'tp');
+      const fl = [[-12, -8, 1.6], [12, -8, 1.6], [0, 1, 1.6 + 0]].map(([x, y, z]) => [x, -8 + (y + 8) * Math.cos(lift), z + (y + 8) * Math.sin(lift)]);
+      return s + line([[-12, 8, 1.6], [0, 0, 1.6], [12, 8, 1.6]], 'l d') + pth(fl, 'tp') + ell(fl[2][0], fl[2][1], fl[2][2] + .1, 2.6 * sz, 'hl') + star(fl[2][0], fl[2][1], fl[2][2] + .2, 1.2 * sz, 'l a'); },
+    // Term Champion: a trophy cup on a plinth; a glint slides across it with the cursor; tap lifts the cup in triumph
+    termgoal: (p = 1) => { const up = 4 * B(p), [X, Y] = S(0, 0, 16 + up), g = ax() * 5;
+      return box(-6, -6, 0, 12, 12, 4) + rev([[3, 4 + up], [1.4, 6 + up], [1.4, 10 + up], [2.4, 11 + up], [7, 15 + up], [7.6, 21 + up]], 'hl') + ell(0, 0, 21 + up, 7.6, 'tp') +
+        '<path class="l" d="M' + f(X - 9.6) + ' ' + f(Y - 3) + 'c-4 0 -4 6 1.6 7.4M' + f(X + 9.6) + ' ' + f(Y - 3) + 'c4 0 4 6 -1.6 7.4"/>' + '<path class="l a" d="M' + f(X + g - 1) + ' ' + f(Y - 3) + 'l1.4 6"/>'; },
+    // Buzzer Beater: a buzzer on its base; the button dips as the cursor nears; tap slams it with a burst
+    photo: (p = 1) => { const d = 1.5 * (AIM ? AIM.s * (.4 + .6 * Math.max(0, 1 - Math.abs(ax()))) : 0) + 1.8 * B(p);
+      return cyl(0, 0, 0, 11, 4) + cyl(0, 0, 4, 7, 4 - d) + ell(0, 0, 8 - d, 7, 'hl') + (p < 1 && p > .3 ? [200, 240, 270, 300, 340].map(a => ray(0, 0, 14, 8, 12, a)).join('') : '') + digits('0', 3, 9, 1, 2, 'y', 'l d'); },
+    // Perfect Month: a month grid with every day ticked; the day nearest the cursor lifts; tap ticks them in order
+    goalmonth: (p = 1) => { const cells = []; for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) cells.push([-12 + c * 4.2, -10 + r * 4.2]); const k = nearest(cells.map(([x, y]) => [x + 1.8, y + 1.8, 2]));
+      let s = box(-13.5, -11.5, 0, 27, 23, 1.5); cells.forEach(([x, y], i) => { const z = 1.5 + (i === k ? 1.6 * AIM.s : 0), on = p >= 1 || (i / 30) < E(p); s += box(x, y, z, 3.6, 3.6, .6, on ? 'hl' : ''); }); return s; },
+    // Check, Check: a to-do list with ten boxes; the row nearest the cursor brightens; tap checks them top to bottom
+    tasks10: (p = 1) => { const zs = Array.from({ length: 5 }, (_, i) => 19 - i * 3.8), k = nearest(zs.map(z => [0, 1, z])); let s = box(-9, -1, 0, 18, 2, 22);
+      zs.forEach((z, i) => { const on = p >= 1 || sq(p, i, 5, .4) > .4; for (const c of [-7, 1]) s += pth([[c, 1.05, z - 1.1], [c + 2.2, 1.05, z - 1.1], [c + 2.2, 1.05, z + 1.1], [c, 1.05, z + 1.1]], 'l') + (on ? line([[c + .3, 1.1, z], [c + .9, 1.1, z - .8], [c + 2.6, 1.1, z + 1.6]], 'l a') : '') + line([[c + 3.2, 1.05, z], [c + 6.6, 1.05, z]], i === k && AIM.s > .3 ? 'l a' : 'l d'); }); return s; },
+    // Exam Planner: a stack of exam papers with a date tab; the top paper slides toward the cursor; tap fans the stack
+    exams10: (p = 1) => { let s = ''; const fan = B(p), sl = ax() * 3; for (let k = 0; k < 4; k++) { const dx = (k === 3 ? sl : 0) + fan * (k - 1.5) * 2.4; s += box(-9 + dx, -11 + fan * (k - 1.5), k * 1.6, 18, 22, .8, k === 3 ? 'hl' : ''); }
+      return s + box(5 + sl, -11, 6.4, 4, 3, 1.2, 'tp') + digits('10', -5 + sl, 11.05, 1.8, 2.6, 'y', 'l a'); },
+    // Hat Trick: a top hat with three balls above; the ball nearest the cursor hops; tap juggles them in turn
+    g3: (p = 1) => { const k = nearest([[-5, 0, 18], [0, 0, 21], [5, 0, 18]]); return cyl(0, 0, 0, 10, 1.2) + cyl(0, 0, 1.2, 6, 10) + ell(0, 0, 11.2, 6, 'tp') + ell(0, 0, 3.6, 6.3, 'l a') +
+      [[-5, 18], [0, 21], [5, 18]].map(([x, z], i) => ball(x, 0, z + (i === k ? 2 * AIM.s : 0) + 5 * B(sq(p, i, 3, .5)), 2.2, 'hl')).join(''); },
+    // Seven Hits: a dartboard seen from above with seven darts in it; the dart nearest the cursor glows; tap lands them one by one
+    g7: (p = 1) => { const ds = Array.from({ length: 7 }, (_, i) => onRim(0, 0, 3, i ? 5.5 : 0, i * 60)), k = nearest(ds); let s = cyl(0, 0, 0, 12, 3) + ell(0, 0, 3, 8, 'l') + ell(0, 0, 3, 4, 'l');
+      ds.forEach((q, i) => { const t = p >= 1 ? 1 : E(sq(p, i, 7, .35)); if (t > .05) s += line([q, [q[0] - 2, q[1] - 2, q[2] + 4 + 8 * (1 - t)]], i === k && AIM.s > .3 ? 'l a w' : 'l a'); }); return s; },
+    // Clockwork: a gear wheel with a smaller one; the gears turn with the cursor; tap spins them
+    g30: (p = 1) => { const rot = ax() * 30 + 360 * E(p) * (p < 1 ? 1 : 0), G = (cx, cy, r, n, a0, cls) => pth(Array.from({ length: n * 4 }, (_, i) => onRim(cx, cy, 4, r + (i % 4 < 2 ? 1.6 : 0), a0 + i * 90 / n)), cls);
+      return cyl(-3, -1, 0, 8, 4, 1) + G(-3, -1, 8, 12, rot, 'hl') + ell(-3, -1, 4, 2.4, 'l') + cyl(9, 7, 0, 4.4, 4, 1) + G(9, 7, 4.4, 8, -rot * 1.8 + 11, 'tp') + ell(9, 7, 4, 1.2, 'l'); },
   };
   const inner = (id, p = 1, o = {}) => { YAW = (o.yaw || 0) * Math.PI / 180; AIM = o.aim && o.aim.s > 0.002 ? o.aim : null; const h = (ART[id](p, o.turn || 0) + (o.rich && id === 'first' && p > 0 && p < 1 ? trail(p) : '')).replace(/<(path|ellipse|circle)/g, '<$1 pathLength="1"'); YAW = 0; AIM = null; return h; };
   const svg = (id, p, o) => ART[id] ? '<svg class="ta" viewBox="6 5 52 52" aria-hidden="true">' + inner(id, p, o) + '</svg>' : '';
