@@ -141,7 +141,7 @@ test('animation fidelity follows the quality setting through one helper; reduced
   const lvl = (rm, q, auto) => { const ls = { t3dQuality: q, t3dAuto: auto }; return new Function('matchMedia', 'localStorage', src + 'return animLevel();')(() => ({ matches: rm }), ls); };
   assert.equal(lvl(true, 'high'), 0); assert.equal(lvl(false, 'low'), 1); assert.equal(lvl(false, 'medium'), 2); assert.equal(lvl(false, 'high'), 3);
   assert.equal(lvl(false, 'auto', '{"tier":"high"}'), 3); assert.equal(lvl(false, undefined), 2);
-  assert.match(js, /applyAnimLevel\(\); const m = T3D/); assert.match(js, /animLevel\(\) < 2\) return; const ph/);
+  assert.match(js, /if \(v === 'auto'\) tierAuto\(\); applyAnimLevel\(\);/); assert.match(js, /TrophyTier\.pick\(TrophyTier\.probe\(gl\)\)/); assert.doesNotMatch(js, /trophy3d|vendor\/three/); assert.match(js, /animLevel\(\) < 2\) return; const ph/);
   assert.match(css, /\[data-anim="1"\] \.g-comet/); assert.match(css, /\[data-anim="3"\] \.g-tail/);
 });
 

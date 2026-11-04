@@ -232,7 +232,7 @@ test('SEO: per-page titles/canonicals, robots, sitemap, og image, JSON-LD, compr
   const r = await g('/app.js', { 'Accept-Encoding': 'gzip, br' }); assert.equal(r.headers.get('content-encoding'), 'br'); assert.equal(r.headers.get('cache-control'), 'no-cache'); const et = r.headers.get('etag'); assert.ok(et);
   assert.equal((await g('/app.js', { 'If-None-Match': et })).status, 304);
   assert.equal((await g('/style.css', { 'Accept-Encoding': 'gzip' })).headers.get('content-encoding'), 'gzip');
-  assert.equal((await g('/vendor/three/three.module.min.js')).headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal((await g('/vendor/three/three.module.min.js')).status, 404, '3D renderer removed: trophies are SVG line art');
   assert.equal((await g('/sw.js')).headers.get('service-worker-allowed'), '/');
   assert.equal((await g('/api/me')).headers.get('x-robots-tag'), 'noindex');
   assert.match(await (await g('/terms/v1.0')).text(), /name="robots" content="noindex"/);

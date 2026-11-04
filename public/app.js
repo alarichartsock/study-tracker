@@ -828,24 +828,27 @@ function achIndicator(instant) { const bar = document.querySelector('.ach-cats')
   if (instant) { void ind.offsetWidth; ind.style.transition = ''; } bar.classList.add('has-ind'); on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 function achSwap() { const g = $('achGrid'); if (!g || !ACH) return render(); const { body } = achBody(localStorage.achCat || 'all', localStorage.achFilter || 'all');
   const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); clearTimeout(g._achT); g._achT = setTimeout(() => { g.classList.remove('in'); g.querySelectorAll('.trophy').forEach(t => { t.style.animationDelay = ''; }); }, 700); };
-  if (reduceMotion()) { g.innerHTML = body; TLP.scan(g); t3dHydrate(); return; }
+  if (reduceMotion()) { g.innerHTML = body; TLP.scan(g); return; }
   g.style.minHeight = g.offsetHeight + 'px'; const unlock = () => setTimeout(() => { g.style.minHeight = ''; }, 450);
   // No View Transitions here: WebKit crashed on repeated grid swaps in CI; the CSS fade below is used everywhere.
-  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); TLP.scan(g); t3dHydrate(); }, 120); }
+  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); TLP.scan(g); }, 120); }
 ACT.achCat = b => { localStorage.achCat = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); }); achIndicator(); achSwap(); };
 ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); achSwap(); };
 const achAll = A => [...A.global, ...A.personal];
 // 3D trophies (lazy-loaded module; one shared WebGL renderer; emoji stays as fallback)
-let T3D = null; const t3d = () => (T3D ||= import('/trophy3d.js').catch(() => null));
-function t3dHydrate() { if (!window.TrophySpec || !$('achGrid')) return; t3d().then(m => { if (m && m.hydrate($('achGrid')) === false) window.__t3dFallback = true; if (!m) window.__t3dFallback = true; }); }
+// Auto quality: hardware/browser hints only (TrophyTier.pick on a throwaway WebGL probe), cached per device; the drawings are SVG so no 3D benchmark is needed
+function tierAuto() { if (!window.TrophyTier) return null; let gl = null; try { const c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); } catch { /* ignore */ }
+  const p = TrophyTier.pick(TrophyTier.probe(gl)), a = { v: TrophyTier.V, tier: p.tier === 'none' ? 'low' : p.tier, why: p.why, at: Date.now() };
+  try { gl && gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* ignore */ } try { localStorage.t3dAuto = JSON.stringify(a); } catch { /* ignore */ } return a; }
+{ const q = localStorage.t3dQuality; if ((!q || q === 'auto') && !localStorage.t3dAuto) setTimeout(() => { if (tierAuto()) { applyAnimLevel(); cometSync(true); } }, 0); }
 // 3D quality tier: Auto (probe + benchmark, cached) or a per-device override, stored in localStorage
 const T3DQ = ['auto', 'low', 'medium', 'high'], capW = w => w[0].toUpperCase() + w.slice(1);
 function t3dInfo() { const ov = localStorage.t3dQuality; let a = null; try { a = JSON.parse(localStorage.t3dAuto || 'null'); } catch { /* ignore */ }
   if (T3DQ.includes(ov) && ov !== 'auto') return 'Forced to ' + capW(ov) + ' on this device.';
-  return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects on your first visit to Trophies.'; }
+  return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects from this device.'; }
 function t3dQualityRow() { const cur = T3DQ.includes(localStorage.t3dQuality) ? localStorage.t3dQuality : 'auto';
-  return '<div class="t3dq mt"><label>3D trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer tilt and trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
-async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; applyAnimLevel(); const m = T3D && await T3D; if (m) await m.refreshTier(); applyAnimLevel(); cometSync(true); }
+  return '<div class="t3dq mt"><label>Trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
+async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; applyAnimLevel(); if (v === 'auto') tierAuto(); applyAnimLevel(); cometSync(true); }
 ACT.nowSize = async b => { const v = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); localStorage.nowSize = v; if (S) S.settings.nowSize = v; applyNowSize(); try { await api('/api/settings', 'POST', { nowSize: v }); } catch { toast('Could not save card size'); } };
 ACT.t3dQ = async b => { const v = b.dataset.q; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); const p = setT3dQuality(v), i = $('t3dInfo'); if (i) i.textContent = v === 'auto' ? 'Re-detecting\u2026' : t3dInfo(); await p; if (i && i.isConnected) i.textContent = t3dInfo(); };
 ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.dataset.id); if (!x) return;
@@ -855,7 +858,7 @@ ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.data
     '<p class="muted small center t3d-hint">Drag to rotate</p><div class="row"><span class="sp"></span><button class="btn primary" value="cancel">Close</button></div>', () => {});
   if (window.TrophyArt && TrophyArt.has(x)) { TAI.popup($('t3dHost').querySelector('.t-art'), x.earned); const cl = $('dlg').querySelector('button[value=cancel]'); if (cl && document.activeElement && document.activeElement.closest('.t-art')) cl.focus({ preventScroll: true }); return; } if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
 $('main').addEventListener('keydown', e => { const t = e.target.closest && e.target.closest('.trophy[data-act]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ACT.trophyView(t); } });
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); TLP.scan($('achGrid')); t3dHydrate(); };
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); TLP.scan($('achGrid')); };
 // ---- achievement notifications: the server diffs earned vs. already-notified (per user, so each unlock is announced once) ----
 const achQ = []; let achBusy = false, achT = 0;
 function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }
@@ -876,7 +879,7 @@ function achNext() { if (achBusy || !achQ.length) return; achBusy = true; const 
   document.body.appendChild(el);
   { const n = $('nav'), r = n && n.getBoundingClientRect(); if (r && getComputedStyle(n).position === 'fixed' && r.top > innerHeight / 2) el.style.bottom = (innerHeight - r.top + 10) + 'px'; } // sit above the phone tab bar
   requestAnimationFrame(() => el.classList.add('show')); if (typeof beep === 'function') try { beep(); } catch { /* ignore */ }
-  if (a.spec && window.TrophySpec) t3d().then(m => m && m.thumbCanvas && m.thumbCanvas(a.spec)).then(c => { if (c && el.isConnected) { el.querySelector('.ach-ic').replaceChildren(c); } }).catch(() => {});
+  if (window.TrophyArt && TrophyArt.has(a)) { const ic = el.querySelector('.ach-ic'); ic.className = 'ach-ic t-art on'; if (a.kind === 'subject') ic.style.setProperty('--acc', color(a.key)); ic.innerHTML = TrophyArt.svg(TrophyArt.key(a)); }
   let done = false; const close = () => { if (done) return; done = true; clearTimeout(tm); el.classList.remove('show'); setTimeout(() => { el.remove(); achBusy = false; achNext(); }, reduceMotion() ? 0 : 300); };
   const tm = setTimeout(close, 7000);
   el.addEventListener('click', e => { if (e.target.closest('.ach-x')) return close(); close(); openTrophy(a.id); });
