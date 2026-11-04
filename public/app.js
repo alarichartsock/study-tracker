@@ -318,7 +318,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
-async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
+async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); NOW.draw(); cometSync(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -372,7 +372,25 @@ function tick() {
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
   document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : ME ? BRAND : LANDING_TITLE;
 }
-setInterval(() => { tick(); checkReminder(); }, 1000);
+// Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
+// shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard
+// (same confirm). Tapping it opens the timer. It can be minimized to a pill (remembered). Uses S.active and the existing ACT handlers.
+const NOW = (() => { let el = null, key = '';
+  const mk = () => { el = document.createElement('section'); el.id = 'nowCard'; el.className = 'now-card glass'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Session in progress');
+    el.addEventListener('click', e => { const b = e.target.closest('[data-now]'); if (!b) { if (el.classList.contains('min')) return set(false); return go('timer'); } e.stopPropagation(); const k = b.dataset.now;
+      if (k === 'min') return set(true); if (k === 'max') return set(false); Promise.resolve(ACT[k]()).catch(er => toast(er.message)); });
+    el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.querySelector('.now-body')) { e.preventDefault(); go('timer'); } }); document.body.appendChild(el); };
+  const set = m => { localStorage.nowMin = m ? '1' : ''; key = ''; draw(); };
+  const draw = () => { const a = S && S.active, show = !!(ME && a && view !== 'timer'); if (!show) { if (el) el.hidden = true; key = ''; return; } if (!el) mk(); el.hidden = false;
+    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, min, a.targetSec].join('|'), c = color(a.subject);
+    if (k !== key) { key = k; el.classList.toggle('min', min); el.classList.toggle('paused', !!a.paused); el.style.setProperty('--subj', c);
+      const ring = '<svg class="now-ring" viewBox="0 0 200 200" aria-hidden="true"><circle class="ring-bg" cx="100" cy="100" r="84"/>' + (a.paused ? '' : '<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ' + (2 * Math.PI * 84 - 60) + ';stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ' + (2 * Math.PI * 84 - 30) + '"/></g>') + '</svg>';
+      el.innerHTML = min ? '<button class="now-pill" data-now="max" aria-label="Show session card: ' + esc(a.subject) + '">' + ring + '<span class="dot" style="background:' + c + '"></span><b class="now-t"></b></button>'
+        : '<div class="now-body" tabindex="0" role="button" aria-label="Open the timer">' + ring + '<div class="now-txt"><span class="now-s"><span class="dot" style="background:' + c + '"></span>' + esc(a.subject) + (a.activity ? ' <span class="muted">\u00b7 ' + esc(a.activity) + '</span>' : '') + '</span><b class="now-t"></b><span class="muted small now-st">' + (a.paused ? 'Paused' : 'Studying') + '</span></div></div>' +
+          '<div class="now-btns">' + (a.paused ? '<button class="btn small" data-now="resume">Resume</button>' : '<button class="btn small" data-now="pause">Pause</button>') + '<button class="btn small primary" data-now="stop">Stop</button><button class="btn small danger ghost" data-now="discard">Discard</button><button class="icon now-x" data-now="min" aria-label="Minimize session card" title="Minimize">\u2013</button></div>'; }
+    const t = el.querySelector('.now-t'); if (t) { const l = live(), v = a.targetSec ? Math.max(0, a.targetSec - l) : l; t.textContent = fmtClock(v); } };
+  return { draw }; })();
+setInterval(() => { tick(); checkReminder(); NOW.draw(); }, 1000);
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
@@ -387,17 +405,22 @@ ACT.start = async () => {
   if (mode === 'pomodoro') { body.targetSec = S.settings.pomodoro.focusMin * 60; UI.pomo = { cycle: (UI.pomo?.cycle || 0) % S.settings.pomodoro.cycles + 1, phase: 'focus' }; savePomo(); }
   await api('/api/timer/start', 'POST', body); track('study_session_start', { mode, subject: subjParam(sel) }); keepAwake(true); await refresh();
 };
-ACT.pause = async () => { await api('/api/timer/pause', 'POST'); await refresh(); };
-ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); await refresh(); };
+ACT.pause = async () => { await api('/api/timer/pause', 'POST'); timerPing(); await refresh(); };
+ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); timerPing(); await refresh(); };
+async function timerFinish() { UI.pomo = null; savePomo(); keepAwake(false); exitFs(); timerPing(); }
+// tell other tabs the session changed (they refresh and the now-studying card follows)
+const timerPing = () => { try { localStorage.shTimerPing = Date.now(); } catch { /* ignore */ } };
+window.addEventListener('storage', e => { if (e.key === 'shTimerPing' && ME) refresh().catch(() => {}); });
+ACT.discard = async () => { if (!S.active || !confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await timerFinish(); await refresh(); toast('Session discarded'); };
 ACT.stop = async () => { const f = tFields(), a = S.active; if (!a) return;
   const secs = (a.accum || 0) + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000), short = secs < 30;
-  const finish = async () => { UI.pomo = null; savePomo(); keepAwake(false); exitFs(); };
+  const finish = timerFinish;
   dialog(`<h3>Save this session?</h3><p class="muted">${esc(sel || a.subject || '')} \u00b7 ${fmtH(secs)}${short ? ' \u00b7 under 30 seconds, too short to save' : ''}</p>
     ${short ? '' : `<div class="row"><div><label>Focus</label>${stars('focus', null)}</div><div><label>Progress</label>${stars('progress', null)}</div></div>`}
     <div class="row wrap"><button class="btn danger" value="discard">Discard</button><span class="sp"></span><button class="btn" value="cancel">Keep going</button>${short ? '' : '<button class="btn primary" value="save">Save</button>'}</div>`,
   async (v, fm) => {
-    if (v === 'discard') { if (!confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await finish(); await refresh(); return toast('Session discarded'); }
-    const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
+    if (v === 'discard') return ACT.discard();
+    const r = await api('/api/timer/stop', 'POST', { note: f.note || a.note || '', activity: f.activity || a.activity || '', subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
     if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: 'timer' });
     await finish(); await refresh(); checkAchievements(); if (r.session) toast(`Saved ${fmtH(dur(r.session))} of ${r.session.subject}`); });
 };
@@ -408,7 +431,7 @@ function rateSession(s) {
   async (_, f) => { await api('/api/sessions/' + s.id, 'PUT', { focus: +f.focus.value || null, progress: +f.progress.value || null }); refresh(); });
 }
 async function finishTarget() {
-  const a = S.active, f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: a.subject });
+  const a = S.active, f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note || a.note || '', activity: f.activity || a.activity || '', subject: a.subject });
   if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: a.mode || 'timer' });
   if (a.mode === 'pomodoro') {
     const pc = S.settings.pomodoro, long = (UI.pomo?.cycle || 1) >= pc.cycles, len = (long ? pc.longMin : pc.shortMin) * 60;
@@ -1285,7 +1308,7 @@ function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDef
 // ---------- periodic refresh ----------
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
 setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
-document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && view === 'timer') refresh().catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && (view === 'timer' || (S && S.active))) refresh().catch(() => {}); });
 boot().catch(e => { console.error('boot', e); if (ME) { toast('Something went wrong loading your data. Please refresh.'); return; } // never wipe the page: fall back to the signed-out landing
   document.documentElement.classList.remove('authed'); $('app').classList.add('hid'); $('auth').classList.add('hid'); $('landing').classList.remove('hid'); });
 

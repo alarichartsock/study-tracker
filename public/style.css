@@ -767,3 +767,17 @@ html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
 #heatS rect.tip-hot{stroke:var(--text);stroke-width:1.5}
 #heatS circle{stroke:color-mix(in srgb,var(--card) 75%,transparent);stroke-width:.9;pointer-events:none}
 .sc-note{margin-left:6px;font-size:12px;color:var(--acc)}
+
+/* Now-studying card (off the timer page): compact glass card, bottom-right; above the tab bar on mobile; minimizes to a pill */
+.now-card{background:color-mix(in srgb,var(--card) 94%,transparent);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--line);position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));z-index:40;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:18px;width:min(300px,calc(100vw - 24px));box-shadow:0 12px 32px -12px rgba(10,20,50,.35);animation:now-in .25s var(--ease) both}
+.now-card[hidden]{display:none}.now-card.min{width:auto;padding:4px;border-radius:999px}
+@keyframes now-in{from{opacity:0;transform:translateY(8px)}}
+html[data-anim="0"] .now-card{animation:none}
+.now-body{display:flex;align-items:center;gap:10px;cursor:pointer;border-radius:12px;outline:none}.now-body:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 40%,transparent)}
+.now-ring{width:40px;height:40px;flex:none;transform:rotate(-90deg)}.now-ring .ring-bg{fill:none;stroke:color-mix(in srgb,var(--subj,var(--acc)) 30%,transparent);stroke-width:14}
+.now-ring .g-comet{opacity:1}.now-ring .g-comet circle{stroke:var(--text);stroke-width:14;opacity:.35}
+.now-txt{display:flex;flex-direction:column;min-width:0;line-height:1.25}.now-s{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.now-s .dot{margin-right:6px}
+.now-t{font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:.01em}.paused .now-t{opacity:.6}
+.now-btns{display:flex;gap:6px;align-items:center}.now-btns .btn{padding:6px 10px;font-size:13px}.now-btns .now-x{margin-left:auto}
+.now-pill{display:flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;border-radius:999px;background:none;border:0;color:inherit;cursor:pointer}.now-pill .now-ring{width:28px;height:28px}.now-pill .now-t{font-size:14px}
+@media(max-width:699px){.now-card{right:12px;bottom:calc(88px + env(safe-area-inset-bottom))}}

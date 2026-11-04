@@ -173,3 +173,11 @@ test('subject colours are clamped for readability: >= 3:1 on both card themes, n
   const sv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8'), js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
   assert.match(sv, /meta\.color = SubjectColor\.color\(j\.color\)/); assert.match(js, /SubjectColor\.color\(c\)/); assert.match(js, /Adjusted for readability/);
 });
+
+test('now-studying card: off-timer only, reuses timer actions (stop flow, shared discard confirm), cross-tab, minimizable, accessible', () => {
+  const fs = require('node:fs'), path = require('node:path'), js = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+  assert.match(js, /const NOW = /); assert.match(js, /show = !!\(ME && a && view !== 'timer'\)/); assert.match(js, /Promise\.resolve\(ACT\[k\]\(\)\)/);
+  assert.match(js, /ACT\.discard = async \(\) => \{ if \(!S\.active \|\| !confirm\('Discard this session\? It will not be saved\.'\)\)/); assert.match(js, /if \(v === 'discard'\) return ACT\.discard\(\);/);
+  assert.equal((js.match(/\/api\/timer\/discard/g) || []).length, 1); assert.match(js, /e\.key === 'shTimerPing'/); assert.match(js, /localStorage\.nowMin/);
+  assert.match(js, /role', 'region'\); el\.setAttribute\('aria-label', 'Session in progress'\)/); assert.match(css, /@media\(max-width:699px\)\{\.now-card\{right:12px;bottom:calc\(88px/);
+});
