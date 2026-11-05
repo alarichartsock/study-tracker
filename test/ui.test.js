@@ -249,13 +249,18 @@ test('every public script parses (guards against a stray line comment swallowing
   for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.js'))) assert.doesNotThrow(() => new vm.Script(fs.readFileSync(path.join(dir, f), 'utf8'), { filename: f }), f);
 });
 
-test('tab favicon follows the accent via an SVG data URI; PNG/ICO and home-screen icons stay brand', () => {
-  const fs = require('fs'), path = require('path'), app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+test('tab favicon follows the accent; Safari snapshots a same-origin SVG before parse ends; home-screen icons stay brand', () => {
+  const fs = require('fs'), path = require('path'), app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8'), sw = fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8');
   assert.match(html, /<link rel="icon" id="favSvg" href="\/favicon\.svg\?v=3"/); assert.match(html, /favicon-32\.png/); assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/); assert.match(html, /manifest\.webmanifest/);
-  assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /'data:image\/svg\+xml,'/);
+  assert.match(html, /window\.__shTabSnap=''/); assert.match(html, /localStorage\.shTabIcon/); assert.match(html, /\/accent-icon\/'\+t\.slice\(1\)\+'\.svg'/);
+  assert.match(html, /querySelectorAll\('link\[rel~="icon"\]'\)/); assert.match(html, /if\(l\.id!=='favSvg'\)l\.remove\(\)/);
+  assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /\/accent-icon\/' \+ h\.slice\(1\) \+ '\.svg'/);
   assert.match(app, /querySelectorAll\('link\[rel~="icon"\]'\)/); assert.match(app, /if \(l\.id !== 'favSvg'\) l\.remove\(\)/);
-  assert.match(app, /old\.getAttribute\('href'\) === href/); assert.match(app, /l\.type = 'image\/svg\+xml'/); assert.match(app, /old\.replaceWith\(l\)/); assert.match(app, /set\('\/favicon\.svg\?v=3'\)/);
+  assert.match(app, /old\.getAttribute\('href'\) !== href/); assert.match(app, /l\.type = 'image\/svg\+xml'/); assert.match(app, /old\.replaceWith\(l\)/); assert.match(app, /'\/favicon\.svg\?v=3'/);
+  assert.match(app, /localStorage\.shTabIcon = hex/); assert.match(app, /window\.__shTabSnap === hex \|\| \(S && S\.active\)\) return/);
+  assert.match(app, /sessionStorage\.shTabReload === hex\) return/); assert.match(app, /CriOS\|EdgiOS\|FxiOS\|OPiOS/); assert.match(app, /S && S\.active\)\) return/); assert.match(app, /location\.reload\(\)/);
+  assert.match(sw, /pathname\.startsWith\('\/accent-icon\/'\)/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
 

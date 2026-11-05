@@ -293,13 +293,23 @@ function applyNowSize() { document.documentElement.dataset.now = nowSize(); }
 // recolours the page live, and becomes the account accent at sign-up / first sign-in, but never replaces an accent the account already has.
 const ACCENTS = [['#4c6ef5', 'Blue'], ['#7048e8', 'Violet'], ['#d6336c', 'Raspberry'], ['#e8590c', 'Orange'], ['#f08c00', 'Amber'], ['#2b8a3e', 'Green'], ['#0c8599', 'Teal'], ['#495057', 'Graphite']];
 const localAccent = () => { try { const a = localStorage.shAccent; return /^#[0-9a-f]{6}$/i.test(a || '') ? a.toLowerCase() : ''; } catch { return ''; } };
-// Tab favicon follows the live accent (selected subject, else the Settings accent): an SVG data URI with the accent tile and a contrasting wave.
+// Tab favicon follows the live accent (selected subject, else the Settings accent): accent tile + contrasting wave.
 // A sized PNG/ICO <link rel=icon> outranks that SVG in the tab, so those links are removed. The files, apple-touch-icon and manifest stay the brand home-screen icons.
-// Chrome often ignores an href change on an existing icon <link>, so a fresh element replaces it each time.
-function accentFavicon(a) { document.querySelectorAll('link[rel~="icon"]').forEach(l => { if (l.id !== 'favSvg') l.remove(); }); const old = document.getElementById('favSvg'); if (!old) return; const set = href => { if (old.getAttribute('href') === href) return; const l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/svg+xml'; l.id = 'favSvg'; l.href = href; old.replaceWith(l); }; if (!/^#[0-9a-f]{6}$/i.test(a || '')) { set('/favicon.svg?v=3'); return; }
-  const n = parseInt(a.slice(1), 16), lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }, L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  const wave = (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0535) ? '#ffffff' : '#0b0d18';
-  set('data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${a}"/><path d="M4 16c2-7 4-7 6 0s4 7 6 0 4-7 6 0 4 7 6 0" fill="none" stroke="${wave}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`)); }
+// Chrome ignores an href-only change, so a fresh <link> replaces the old one. Safari snapshots icons once, when parsing finishes, and ignores
+// later edits (including SVG data URIs). The icon is a same-origin SVG the head script can point at before that snapshot; a new color reloads Safari once.
+const tabIconHref = h => '/accent-icon/' + h.slice(1) + '.svg';
+function accentFavicon(a) {
+  document.querySelectorAll('link[rel~="icon"]').forEach(l => { if (l.id !== 'favSvg') l.remove(); });
+  const hex = /^#[0-9a-f]{6}$/i.test(a || '') ? a.toLowerCase() : '';
+  try { if (hex) localStorage.shTabIcon = hex; else localStorage.removeItem('shTabIcon'); } catch { /* ignore */ }
+  const href = hex ? tabIconHref(hex) : '/favicon.svg?v=3', old = document.getElementById('favSvg'); if (!old) return;
+  if (old.getAttribute('href') !== href) { const l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/svg+xml'; l.id = 'favSvg'; l.href = href; old.replaceWith(l); }
+  const ua = navigator.userAgent || '', webkit = /AppleWebKit/.test(ua) && !(/Chrome\/|Chromium\/|Edg\/|OPR\//.test(ua) && !/CriOS|EdgiOS|FxiOS|OPiOS/.test(ua));
+  // A reload would drop an in-progress session's unsaved note. The icon catches up on the next load once the timer is stopped.
+  if (!webkit || window.__shTabSnap === hex || (S && S.active)) return;
+  try { if (sessionStorage.shTabReload === hex) return; sessionStorage.shTabReload = hex; } catch { return; }
+  location.reload();
+}
 function applyLocalAccent() { if (ME) return; const a = localAccent(), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } document.documentElement.classList.toggle('acc-local', !!a); accentFavicon(a); accPick.sync(); }
 const accPick = (() => { const root = $('accTop'), trig = root && root.querySelector('.acc-trig'), pop = root && root.querySelector('.acc-pop'); if (!pop) return { sync() {} };
   pop.innerHTML = ACCENTS.map(([c, n]) => '<button type="button" role="radio" class="acc-sw" data-c="' + c + '" style="--sw:' + c + '" aria-label="' + n + '" title="' + n + '"></button>').join('') + '<button type="button" class="acc-sw acc-def" data-c="" aria-label="Default" title="Default">\u21ba</button>';
