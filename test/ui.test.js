@@ -243,6 +243,7 @@ test('tab favicon follows the accent via an SVG data URI; PNG/ICO and home-scree
   assert.match(html, /apple-touch-icon\.png/); assert.match(html, /manifest\.webmanifest/);
   assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /'data:image\/svg\+xml,'/);
   assert.match(app, /querySelectorAll\('link\[rel~="icon"\]'\)/); assert.match(app, /if \(l\.id !== 'favSvg'\) l\.remove\(\)/);
+  assert.match(app, /old\.getAttribute\('href'\) === href/); assert.match(app, /l\.type = 'image\/svg\+xml'/); assert.match(app, /old\.replaceWith\(l\)/); assert.match(app, /set\('\/favicon\.svg\?v=3'\)/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
 
