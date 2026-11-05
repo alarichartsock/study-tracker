@@ -258,9 +258,14 @@ test('tab favicon follows the accent; Safari snapshots a same-origin SVG before 
   assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /\/accent-icon\/' \+ h\.slice\(1\) \+ '\.svg'/);
   assert.match(app, /querySelectorAll\('link\[rel~="icon"\]'\)/); assert.match(app, /if \(l\.id !== 'favSvg'\) l\.remove\(\)/);
   assert.match(app, /old\.getAttribute\('href'\) !== href/); assert.match(app, /l\.type = 'image\/svg\+xml'/); assert.match(app, /old\.replaceWith\(l\)/); assert.match(app, /'\/favicon\.svg\?v=3'/);
-  assert.match(app, /localStorage\.shTabIcon = hex/); assert.match(app, /window\.__shTabSnap === hex \|\| \(S && S\.active\)\) return/);
-  assert.match(app, /sessionStorage\.shTabReload === hex\) return/); assert.match(app, /CriOS\|EdgiOS\|FxiOS\|OPiOS/); assert.match(app, /S && S\.active\)\) return/); assert.match(app, /location\.reload\(\)/);
+  assert.match(app, /localStorage\.shTabIcon = hex/); assert.match(app, /old\.replaceWith\(l\); \}/);
+  assert.doesNotMatch(app.slice(app.indexOf('function accentFavicon'), app.indexOf('function applyLocalAccent')), /location\.reload|shTabReload|CriOS/);
   assert.match(sw, /pathname\.startsWith\('\/accent-icon\/'\)/);
+  const wash = pub('style.css').match(/body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\)\{[\s\S]*?\}/);
+  assert.ok(wash, 'app wash rule');
+  assert.match(wash[0], /inset:-30vh -12vw -45vh/); assert.match(wash[0], /rgb\(from var\(--wp1\) r g b \/ 75%\)/);
+  assert.match(wash[0], /rgb\(from var\(--wp3\) r g b \/ 0\)/); assert.doesNotMatch(wash[0], /transparent|filter:/);
+  assert.match(pub('style.css'), /body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\) i\{display:none\}/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
 

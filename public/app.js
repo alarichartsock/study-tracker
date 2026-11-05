@@ -296,7 +296,8 @@ const localAccent = () => { try { const a = localStorage.shAccent; return /^#[0-
 // Tab favicon follows the live accent (selected subject, else the Settings accent): accent tile + contrasting wave.
 // A sized PNG/ICO <link rel=icon> outranks that SVG in the tab, so those links are removed. The files, apple-touch-icon and manifest stay the brand home-screen icons.
 // Chrome ignores an href-only change, so a fresh <link> replaces the old one. Safari snapshots icons once, when parsing finishes, and ignores
-// later edits (including SVG data URIs). The icon is a same-origin SVG the head script can point at before that snapshot; a new color reloads Safari once.
+// later edits (including SVG data URIs). The icon is a same-origin SVG the head script points at before that snapshot on the next real page load.
+// Do not reload to chase the snapshot: a subject tap must not refresh the app. A stale Safari tab icon is the tradeoff.
 const tabIconHref = h => '/accent-icon/' + h.slice(1) + '.svg';
 function accentFavicon(a) {
   document.querySelectorAll('link[rel~="icon"]').forEach(l => { if (l.id !== 'favSvg') l.remove(); });
@@ -304,11 +305,6 @@ function accentFavicon(a) {
   try { if (hex) localStorage.shTabIcon = hex; else localStorage.removeItem('shTabIcon'); } catch { /* ignore */ }
   const href = hex ? tabIconHref(hex) : '/favicon.svg?v=3', old = document.getElementById('favSvg'); if (!old) return;
   if (old.getAttribute('href') !== href) { const l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/svg+xml'; l.id = 'favSvg'; l.href = href; old.replaceWith(l); }
-  const ua = navigator.userAgent || '', webkit = /AppleWebKit/.test(ua) && !(/Chrome\/|Chromium\/|Edg\/|OPR\//.test(ua) && !/CriOS|EdgiOS|FxiOS|OPiOS/.test(ua));
-  // A reload would drop an in-progress session's unsaved note. The icon catches up on the next load once the timer is stopped.
-  if (!webkit || window.__shTabSnap === hex || (S && S.active)) return;
-  try { if (sessionStorage.shTabReload === hex) return; sessionStorage.shTabReload = hex; } catch { return; }
-  location.reload();
 }
 function applyLocalAccent() { if (ME) return; const a = localAccent(), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } document.documentElement.classList.toggle('acc-local', !!a); accentFavicon(a); accPick.sync(); }
 const accPick = (() => { const root = $('accTop'), trig = root && root.querySelector('.acc-trig'), pop = root && root.querySelector('.acc-pop'); if (!pop) return { sync() {} };
