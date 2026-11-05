@@ -267,8 +267,11 @@ test('tab favicon follows the accent; Safari snapshots a same-origin SVG before 
   assert.match(wash[0], /rgb\(from var\(--wp3\) r g b \/ 0\)/); assert.doesNotMatch(wash[0], /transparent|filter:/);
   assert.match(css, /body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\) i\{display:none\}/);
   assert.doesNotMatch(css, /body:has\(#app:not\(\.hid\)\)\{overflow-x:clip/);
-  assert.match(css, /html\.ios:has\(#app:not\(\.hid\)\)\{background-color:var\(--bg\);background-image:/);
-  assert.match(css, /background-attachment:fixed/); assert.match(css, /env\(safe-area-inset-bottom, 0px\) \+ 160px/);
+  assert.match(css, /html\.ios\{--wash-edge:color-mix\(in srgb, var\(--wp2\)/);
+  assert.match(css, /html\.ios:has\(#app:not\(\.hid\)\)::before\{content:"";position:absolute/);
+  assert.match(css, /html\.ios:has\(#app:not\(\.hid\)\)\{position:relative;background-color:var\(--wash-edge\)/);
+  assert.match(css, /html\.ios:has\(#app:not\(\.hid\)\) \.wallpaper\{overflow:visible;background-color:var\(--wash-edge\)\}/);
+  assert.doesNotMatch(css, /html\.ios:has\(#app:not\(\.hid\)\)\{[^}]*background-attachment:fixed/);
   assert.match(html, /documentElement\.classList\.add\('ios'\)/);
   assert.match(app, /function pinIosWash\(\)/); assert.match(app, /window\.visualViewport/); assert.match(app, /vv\.height/); assert.match(app, /pinIosWash\(\); \}/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);

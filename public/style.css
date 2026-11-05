@@ -140,16 +140,24 @@ body:has(#app:not(.hid)) .wallpaper:not(.mix){inset:-30vh -12vw -45vh;overflow:v
   var(--bg)}
 body:has(#app:not(.hid)) .wallpaper:not(.mix) i{display:none}
 body:has(#app:not(.hid)){min-height:100lvh}
-/* iPhone Safari sizes position:fixed;bottom:0 to the top of the toolbar and paints the root
-   background in the strip above the URL bar. Negative inset on .wallpaper is clipped, so the
-   strip was flat --bg. The root itself carries the same unfiltered wash, fixed to the viewport,
-   and the layer is taller than the large viewport by the safe area plus the toolbar hole. */
-html.ios:has(#app:not(.hid)){background-color:var(--bg);background-image:
+/* iPhone Safari does not paint a fixed layer's background-image in the strip above the URL bar.
+   It fills that strip with the fixed element's background-color, which was --bg (#eef1f8) — the
+   hard off-white band. The strip is document pixels, so an absolute (not fixed) wash paints it,
+   and the color Safari samples is the same edge color the gradient fades into. Study-mix included:
+   its orbs are not :not(.mix), and overflow:hidden was clipping them on this edge. */
+html.ios{--wash-edge:color-mix(in srgb, var(--wp2) 26%, color-mix(in srgb, var(--wp3) 34%, var(--bg)))}
+html.ios:has(#app:not(.hid)){position:relative;background-color:var(--wash-edge);min-height:100%;min-height:100lvh}
+html.ios:has(#app:not(.hid))::before{content:"";position:absolute;z-index:-1;left:-10vw;right:-10vw;top:0;height:calc(100lvh + env(safe-area-inset-bottom, 0px) + 220px);pointer-events:none;background:
   radial-gradient(75vmax 60vmax at 12vw 8vh,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
-  radial-gradient(70vmax 60vmax at 92vw 38vh,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
-  radial-gradient(80vmax 60vmax at 40vw 100lvh,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%);
-  background-repeat:no-repeat;background-attachment:fixed;min-height:100%;min-height:100lvh}
-html.ios:has(#app:not(.hid)) .wallpaper:not(.mix){top:0;right:0;bottom:auto;left:0;height:calc(100lvh + env(safe-area-inset-bottom, 0px) + 160px);min-height:calc(100dvh + env(safe-area-inset-bottom, 0px) + 160px)}
+  radial-gradient(70vmax 60vmax at 92vw 36vh,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
+  radial-gradient(90vmax 70vmax at 42vw calc(100lvh - 2vh),rgb(from var(--wp3) r g b / 55%),rgb(from var(--wp3) r g b / 0) 80%),
+  var(--wash-edge)}
+html.ios:has(#app:not(.hid)) .wallpaper{overflow:visible;background-color:var(--wash-edge)}
+html.ios:has(#app:not(.hid)) .wallpaper:not(.mix){background-image:
+  linear-gradient(to bottom, rgb(from var(--wash-edge) r g b / 0) 70%, var(--wash-edge) 100%),
+  radial-gradient(75vmax 60vmax at 12% 8%,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
+  radial-gradient(70vmax 60vmax at 92% 38%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
+  radial-gradient(80vmax 60vmax at 40% 115%,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%)}
 .wallpaper i:nth-child(1){background:var(--wp1);left:-15vmax;top:-20vmax}
 .wallpaper i:nth-child(2){background:var(--wp2);right:-20vmax;top:10vh}
 .wallpaper i:nth-child(3){background:var(--wp3);left:20vw;bottom:-30vmax;opacity:.4}
