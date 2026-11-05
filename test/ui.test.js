@@ -19,6 +19,18 @@ test('glass styles include accessibility fallbacks', () => {
   assert.match(c, /prefers-reduced-motion/);
   assert.match(c, /backdrop-filter/);
 });
+test('affiliate page wash is an unfiltered gradient Safari can paint', () => {
+  assert.match(pub('affiliates.html'), /<body class="aff-page">/);
+  const css = pub('style.css');
+  const wash = css.match(/body\.aff-page::before\{[\s\S]*?\}/);
+  assert.ok(wash, 'affiliate wash rule');
+  assert.match(wash[0], /radial-gradient\(75vmax 60vmax at 12% 8%,rgb\(from var\(--wp1\)/);
+  assert.match(wash[0], /rgb\(from var\(--wp2\) r g b \/ 0\)/);
+  assert.match(wash[0], /rgb\(from var\(--wp3\) r g b \/ 0\)/);
+  assert.doesNotMatch(wash[0], /transparent|color-mix|oklch|filter:/);
+  assert.match(css, /body\.aff-page \.wallpaper\{display:none\}/);
+  assert.match(css, /body\.aff-page \.card\.glass\{-webkit-backdrop-filter:none;backdrop-filter:none\}/);
+});
 test('served files have no mojibake', () => {
   for (const f of ['index.html', 'app.js', 'style.css', 'sw.js']) assert.doesNotMatch(pub(f), /\u00c2|\u00e2\u20ac/, f);
 });
