@@ -7,6 +7,7 @@ const mix = require('./public/mix.js');
 const MCAT = require('./public/mcat.js');
 const PRACTICE = require('./public/practice.js');
 const { Store, PALETTE, TEMPLATES } = require('./lib/store');
+const SubjectColor = require('./public/color-clamp.js');
 const oauthLib = require('./lib/oauth');
 const billing = require('./lib/billing');
 
@@ -31,8 +32,8 @@ const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
 const EXAMS = require('./lib/exams');
-const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy3d.js': 'trophy3d.js', '/trophy3d-hq.js': 'trophy3d-hq.js', '/trophy-tier.js': 'trophy-tier.js',
-  '/vendor/three/three.module.min.js': 'vendor/three/three.module.min.js', '/vendor/three/three.core.min.js': 'vendor/three/three.core.min.js', '/vendor/three/LICENSE': 'vendor/three/LICENSE', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
+const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy-tier.js': 'trophy-tier.js', '/trophy-art.js': 'trophy-art.js', '/color-clamp.js': 'color-clamp.js',
+  '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '': 'text/plain; charset=utf-8' };
@@ -313,19 +314,6 @@ function createApp(opts = {}) {
       if (Array.isArray(ud.achNotified) && !ud.achNotified.includes('onboard')) ud.achNotified.push('onboard'); } // silent: already "notified"
     store.db.config.readyRoomGrant = { at: new Date().toISOString(), users: n }; store.save(); if (n && !opts.quiet) console.log('Granted Ready Room to ' + n + ' existing user(s)'); }
 
-  async function busy(ud, text) { // Busy Bar HTTP API; never throws
-    const { busyIp, busyToken } = ud.settings; if (!busyIp || !fetchImpl) return false;
-    const base = 'http://' + busyIp, headers = { 'Content-Type': 'application/json' };
-    if (busyToken) headers['X-API-Token'] = busyToken;
-    try {
-      const signal = AbortSignal.timeout(3000);
-      if (text === null) await fetchImpl(base + '/api/display/draw?app_id=mcat', { method: 'DELETE', headers, signal });
-      else await fetchImpl(base + '/api/display/draw', { method: 'POST', headers, signal, body: JSON.stringify({
-        app_id: 'mcat', elements: [{ id: 't', type: 'text', text, x: 0, y: 0, display: 'front' }] }) });
-      return true;
-    } catch { return false; }
-  }
-
   const send = (res, code, body, type = 'application/json', extra = {}) => {
     if (code >= 400 && res.log && body && typeof body === 'object' && body.error && !res.log.err) res.log.err = String(body.error);
     res.writeHead(code, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Referrer-Policy': 'same-origin', ...extra });
@@ -355,7 +343,7 @@ function createApp(opts = {}) {
   const emailTaken = (e, exceptId) => store.db.users.some(x => x.id !== exceptId && [x.email, ...(x.identities || []).map(i => i.email)].some(m => m && String(m).toLowerCase() === e));
   const EMAIL_BAD = 'Enter a valid email address', EMAIL_TAKEN = 'That email is already used by another account';
   const maskedState = ud => { const { athenifyFeed, ...rest } = ud; void athenifyFeed; const { feedToken, ...settings } = ud.settings; void feedToken;
-    return { ...rest, settings: { ...settings, busyToken: ud.settings.busyToken ? '********' : '' } }; };
+    return { ...rest, settings: (({ busyIp, busyToken, ...x }) => x)(settings) } /* Busy Bar removed: stored values are kept but never read or returned */; };
   const ensureSubject = (ud, name) => { if (name && !ud.subjects.includes(name)) { ud.subjects.push(name); ud.subjectMeta[name] ||= { color: PALETTE[(ud.subjects.length - 1) % PALETTE.length], weeklyGoalMin: 0, credits: 0 }; } };
   // Exam templates: set a user's study template. On a fresh account the lists are replaced; on a switch, subjects and
   // activities that past sessions/tasks still use are kept (appended) so no history is orphaned. Sessions never change.
@@ -618,11 +606,11 @@ function createApp(opts = {}) {
         if (!ud.active) ud.active = { subject: str(j.subject || ud.subjects[0] || 'Study', 60), activity: str(j.activity, 60), note: str(j.note, 1000), start: new Date().toISOString(), accum: 0, paused: false,
           mode: ['stopwatch', 'pomodoro', 'countdown'].includes(j.mode) ? j.mode : 'stopwatch', targetSec: j.targetSec ? Math.round(numIn(j.targetSec, 60, 86400)) : null, breakSec: 0, pausedAt: null };
         else if (ud.active.paused) { if (ud.active.pausedAt) ud.active.breakSec += 0; ud.active.start = new Date().toISOString(); ud.active.paused = false; ud.active.pausedAt = null; }
-        save(); busy(ud, 'Studying ' + ud.active.subject); return send(res, 200, ud.active);
+        save(); return send(res, 200, ud.active);
       }
       if (p === '/api/timer/pause' && M === 'POST') {
         if (!ud.active || ud.active.paused) return send(res, 409, { error: 'Timer not running' });
-        ud.active.accum += (Date.now() - new Date(ud.active.start)) / 1000; ud.active.paused = true; ud.active.pausedAt = new Date().toISOString(); save(); busy(ud, j.reason === 'break' ? 'Break' : 'Paused'); return send(res, 200, ud.active);
+        ud.active.accum += (Date.now() - new Date(ud.active.start)) / 1000; ud.active.paused = true; ud.active.pausedAt = new Date().toISOString(); save(); return send(res, 200, ud.active);
       }
       if (p === '/api/timer/stop' && M === 'POST') {
         const a = ud.active; if (!a) return send(res, 409, { error: 'Timer not running' });
@@ -633,9 +621,9 @@ function createApp(opts = {}) {
           session = { id: ud.nextId++, subject: a.subject, activity: a.activity || '', note: a.note, start: new Date(+end - secs * 1000).toISOString(), end: end.toISOString(), breakSec: 0, mode: a.mode || 'stopwatch',
             focus: j.focus ? Math.round(numIn(j.focus, 1, 5)) : null, progress: j.progress ? Math.round(numIn(j.progress, 1, 5)) : null };
           ud.sessions.push(session); ensureSubject(ud, a.subject); ensureActivity(ud, a.activity); }
-        if (session) rewardReferral(user); ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true, session });
+        if (session) rewardReferral(user); ud.active = null; save(); return send(res, 200, { ok: true, session });
       }
-      if (p === '/api/timer/discard' && M === 'POST') { ud.active = null; save(); busy(ud, null); return send(res, 200, { ok: true }); }
+      if (p === '/api/timer/discard' && M === 'POST') { ud.active = null; save(); return send(res, 200, { ok: true }); }
 
       // ---- sessions ----
       if (p === '/api/sessions' && M === 'GET') return send(res, 200, ud.sessions);
@@ -661,7 +649,7 @@ function createApp(opts = {}) {
       if (p === '/api/subjects' && M === 'PUT') { // update meta and/or rename (renames past sessions too)
         const name = str(j.name, 60); if (!ud.subjects.includes(name)) return send(res, 404, { error: 'unknown subject' });
         const meta = ud.subjectMeta[name] ||= {};
-        if (j.color !== undefined) { if (!COLOR.test(j.color)) return send(res, 400, { error: 'color must be #rrggbb' }); meta.color = j.color; }
+        if (j.color !== undefined) { if (!COLOR.test(j.color)) return send(res, 400, { error: 'color must be #rrggbb' }); meta.color = SubjectColor.color(j.color); } // nothing too light or too dark (>= 3:1 on both card themes)
         if (j.weeklyGoalMin !== undefined) meta.weeklyGoalMin = Math.round(numIn(j.weeklyGoalMin, 0, 10080));
         if (j.credits !== undefined) meta.credits = numIn(j.credits, 0, 100);
         const nn = str(j.rename, 60);
@@ -717,15 +705,13 @@ function createApp(opts = {}) {
         if (j.timezone !== undefined) { if (!stats.TZ.valid(j.timezone)) return send(res, 400, { error: 'unknown time zone' }); s.timezone = j.timezone; }
         if (j.dayStartHour !== undefined) s.dayStartHour = Math.round(numIn(j.dayStartHour, 0, 6));
         if (Array.isArray(j.quickDurations)) s.quickDurations = j.quickDurations.slice(0, 6).map(x => Math.round(numIn(x, 1, 600)));
+        if (j.nowSize !== undefined) { if (!['s', 'm', 'l'].includes(j.nowSize)) return send(res, 400, { error: 'nowSize must be s, m or l' }); s.nowSize = j.nowSize; }
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }
         if (j.background !== undefined) { if (!j.background || typeof j.background !== 'object' || Array.isArray(j.background)) return send(res, 400, { error: 'background must be an object' });
           try { s.background = mix.cleanBackground(j.background, s.background); } catch (e) { return send(res, 400, { error: e.message }); } }
         if (j.lang !== undefined) { if (j.lang && !i18n.LANGS.includes(j.lang)) return send(res, 400, { error: 'unsupported language' }); s.lang = j.lang || ''; }
-        if (j.busyIp !== undefined) s.busyIp = String(j.busyIp).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').slice(0, 100);
-        if (j.busyToken !== undefined && j.busyToken !== '********') s.busyToken = String(j.busyToken).trim().slice(0, 300);
         save(); return send(res, 200, { ok: true });
       }
-      if (p === '/api/busybar/test' && M === 'POST') return send(res, 200, { ok: await busy(ud, 'MCAT tracker test') });
 
       // ---- bug reports (any user submits; only admins review) ----
       if (p === '/api/reports' && M === 'POST') {

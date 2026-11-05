@@ -93,7 +93,7 @@ test('subjects meta/rename, activities, goals/settings validation, plan, exams, 
   await c('/api/sessions', 'POST', { subject: 'CARS', start: '2026-10-01T16:00:00Z', end: '2026-10-01T17:00:00Z' });
   assert.equal((await c('/api/subjects', 'PUT', { name: 'CARS', color: 'red' })).status, 400);
   const sm = (await c('/api/subjects', 'PUT', { name: 'CARS', color: '#112233', weeklyGoalMin: 300, credits: 3, rename: 'Critical Analysis' })).body;
-  assert.ok(sm.subjects.includes('Critical Analysis')); assert.equal(sm.subjectMeta['Critical Analysis'].color, '#112233');
+  assert.ok(sm.subjects.includes('Critical Analysis')); assert.equal(sm.subjectMeta['Critical Analysis'].color, '#55697d'); // too dark: clamped to the nearest readable shade
   assert.equal((await c('/api/sessions')).body[0].subject, 'Critical Analysis');
   assert.equal((await c('/api/subjects', 'PUT', { name: 'Critical Analysis', rename: 'Chem/Phys' })).status, 409);
   assert.ok((await c('/api/activities', 'POST', { name: 'UWorld' })).body.includes('UWorld'));
@@ -180,4 +180,10 @@ test('settings: background mode/window/motion are validated and persisted', asyn
   assert.equal((await c('/api/settings', 'POST', { background: { window: 'month' } })).status, 200);
   assert.deepEqual((await c('/api/state')).body.settings.background, { mode: 'subject', window: 'month', motion: false });
   assert.equal((await c('/mix.js')).status, 200);
+});
+test('settings: session card size (nowSize) validates and persists', async t => {
+  const app = await start(); t.after(app.close); const { user } = app;
+  assert.equal((await user('/api/settings', 'POST', { nowSize: 'xl' })).status, 400);
+  assert.equal((await user('/api/settings', 'POST', { nowSize: 'l' })).status, 200);
+  assert.equal((await user('/api/state')).body.settings.nowSize, 'l');
 });

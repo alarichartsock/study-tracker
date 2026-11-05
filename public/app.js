@@ -60,9 +60,35 @@ function toast(msg, action, fn) {
   $('toastAct').onclick = async () => { t.classList.remove('show'); if (fn) await fn(); };
   t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), action ? 6000 : 2400);
 }
-const color = name => (S && S.subjectMeta[name] && S.subjectMeta[name].color) || '#868e96';
+const color = name => { const c = (S && S.subjectMeta[name] && S.subjectMeta[name].color) || '#868e96'; return window.SubjectColor ? SubjectColor.color(c) : c; }; // stored colours are clamped for readability at display time
 const opt = (list, cur, blank) => (blank !== undefined ? `<option value="">${esc(blank)}</option>` : '') + list.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('');
-const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}"/>`; };
+// Goal rings on the dashboard: ease from the last shown value (0 on first load) to the current one, count the % with it,
+// draw a check once a goal completes, and keep every ring live (with a circling hairline) while a timer runs. Reduced motion: values jump, nothing moves.
+// Animation fidelity follows the 3D quality setting in Settings (one helper, read everywhere). OS reduced motion always wins (level 0).
+// 0 = no motion (end states) · 1 Low = one-shot fills only · 2 Medium = default · 3 High = richer feature motion, Liftoff exhaust trail, comet tail (never whole-drawing tilt)
+function animLevel() { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return 0; let q = localStorage.t3dQuality;
+  if (!q || q === 'auto') { try { q = (JSON.parse(localStorage.t3dAuto || 'null') || {}).tier; } catch { q = null; } } return q === 'low' ? 1 : q === 'high' ? 3 : 2; }
+function applyAnimLevel() { document.documentElement.dataset.anim = animLevel(); }
+applyAnimLevel(); matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', applyAnimLevel);
+const GA = (() => { const last = new Map(), still = () => animLevel() < 1, C = 2 * Math.PI * 84, clamp = v => Math.min(1, Math.max(0, v));
+  const set = (el, p) => { const fg = el.querySelector('.ring-fg'); if (fg) { fg.style.strokeDashoffset = C * (1 - clamp(p)); fg.style.opacity = p > 0.001 ? '' : '0'; } }; // no lone round-cap dot at 0%
+  const count = (el, a, b) => { const t = el.querySelector('.g-pct'); if (!t) return; if (still() || Math.round(a * 100) === Math.round(b * 100)) { t.textContent = Math.round(b * 100) + '%'; return; }
+    const t0 = performance.now(), D = 700, e = x => 1 - Math.pow(1 - x, 3); const f = now => { const k = Math.min(1, (now - t0) / D); if (!t.isConnected) return; t.textContent = Math.round((a + (b - a) * e(k)) * 100) + '%'; if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); };
+  return {
+    from: (k, p) => still() ? p : last.has(k) ? last.get(k) : 0,
+    play() { const els = [...document.querySelectorAll('.goal-ring[data-gk]')]; requestAnimationFrame(() => requestAnimationFrame(() => els.forEach((el, i) => { const k = el.dataset.gk, p = +el.dataset.p, a = still() ? p : last.has(k) ? last.get(k) : 0;
+      el.style.setProperty('--gd', i * 70 + 'ms'); set(el, p); count(el, a, p); if (p >= 1 && a < 1 && !still()) el.classList.add('g-new'); last.set(k, p); }))); },
+    // every goal ring with a running timer stays live: base (saved) seconds + the active session
+    live() { if (!S.active || !UI.gaBase) return; document.querySelectorAll('.goal-ring[data-gk]').forEach(el => { const k = el.dataset.gk, g = UI.gaBase[k]; if (!g || !g.goal) return; const d = g.done + live(), p = d / g.goal; if (Math.abs(p - +el.dataset.p) < 0.0005) return;
+      const was = +el.dataset.p; el.dataset.p = p; set(el, p); const t = el.querySelector('.g-pct'); if (t) t.textContent = Math.round(p * 100) + '%'; const dt = el.querySelector('.g-done-t'); if (dt) dt.textContent = fmtH(d).length > 7 ? (d / 3600).toFixed(1) + 'h' : fmtH(d);
+      if (p >= 1 && was < 1) { el.dataset.done = ''; el.classList.add('g-new'); } last.set(k, p); }); } }; })();
+document.addEventListener('visibilitychange', () => { document.documentElement.classList.toggle('tab-hidden', document.hidden); if (!document.hidden) cometSync(true); });
+// One shared clock for every circling line (goal rings + timer ring): phase = ((now - session start) / period) mod 1, so they stay in lockstep
+// across re-renders, views and tabs. Each new line is anchored once; returning to a hidden tab restarts them at the synced angle.
+const COMET_S = 9;
+function cometSync(force) { const a = S && S.active; if (!a || a.paused || animLevel() < 2) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S;
+  document.querySelectorAll('.g-comet').forEach(el => { const k = String(a.start), re = force || (el.dataset.sync && el.dataset.sync !== k); if (el.dataset.sync === k && !force) return; el.dataset.sync = k; if (re) { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; } el.style.animationDelay = -ph.toFixed(3) + 's'; }); }
+const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}${pct > 0.001 ? '' : ';opacity:0'}"/>`; };
 const statCards = items => `<div class="grid4">${items.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
 
 // ---------- notifications, sound, wake lock ----------
@@ -198,7 +224,7 @@ function refOffer() { const c = refCode(); if (!c || refOffer.done) return; refO
     const n = document.querySelector('.hero-note'); if (n) n.textContent = 'A friend invited you, so your free trial is ' + r.trialDays + ' days. No card required.';
     const m = $('authMsg'); if (m && authMode === 'register') m.textContent = 'Create an account: ' + r.trialDays + '-day free trial from your friend'; }).catch(() => {}); }
 refOffer();
-async function showAuth(me) {
+async function showAuth(me) { queueMicrotask(applyLocalAccent);
   me = me || await api('/api/me').catch(() => ME_FALLBACK);
   document.documentElement.classList.remove('authed'); try { localStorage.removeItem('shAuthed'); } catch { /* ignore */ }
   $('app').classList.add('hid');
@@ -261,7 +287,35 @@ $('authForm').onsubmit = async e => {
 };
 $('logoutBtn').onclick = async () => { await api('/api/logout', 'POST'); ME = null; authMode = 'login'; landingDone = false; showAuth(); };
 $('themeBtn').onclick = () => { SHTheme.set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); if (view === 'set') render(); };
-function applyAccent() { queueMicrotask(applyWallpaper); const a = S?.settings.accent || (S && sel && S.subjectMeta[sel]?.color), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } }
+const nowSize = () => ['s', 'm', 'l'].includes(S?.settings?.nowSize) ? S.settings.nowSize : (localStorage.nowSize || 'm');
+function applyNowSize() { document.documentElement.dataset.now = nowSize(); }
+// Accent swatches: the same choices in Settings and on the landing page. Signed out, a pick is saved locally (localStorage.shAccent),
+// recolours the page live, and becomes the account accent at sign-up / first sign-in, but never replaces an accent the account already has.
+const ACCENTS = [['#4c6ef5', 'Blue'], ['#7048e8', 'Violet'], ['#d6336c', 'Raspberry'], ['#e8590c', 'Orange'], ['#f08c00', 'Amber'], ['#2b8a3e', 'Green'], ['#0c8599', 'Teal'], ['#495057', 'Graphite']];
+const localAccent = () => { try { const a = localStorage.shAccent; return /^#[0-9a-f]{6}$/i.test(a || '') ? a.toLowerCase() : ''; } catch { return ''; } };
+// Tab favicon follows the live accent (selected subject, else the Settings accent): an SVG data URI with the accent tile and a contrasting wave.
+// A sized PNG/ICO <link rel=icon> outranks that SVG in the tab, so those links are removed. The files, apple-touch-icon and manifest stay the brand home-screen icons.
+function accentFavicon(a) { document.querySelectorAll('link[rel~="icon"]').forEach(l => { if (l.id !== 'favSvg') l.remove(); }); const l = document.getElementById('favSvg'); if (!l) return; if (!/^#[0-9a-f]{6}$/i.test(a || '')) { l.href = '/favicon.svg?v=3'; return; }
+  const n = parseInt(a.slice(1), 16), lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }, L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  const wave = (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0535) ? '#ffffff' : '#0b0d18';
+  l.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${a}"/><path d="M4 16c2-7 4-7 6 0s4 7 6 0 4-7 6 0 4 7 6 0" fill="none" stroke="${wave}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`); }
+function applyLocalAccent() { if (ME) return; const a = localAccent(), st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } document.documentElement.classList.toggle('acc-local', !!a); accentFavicon(a); accPick.sync(); }
+const accPick = (() => { const root = $('accTop'), trig = root && root.querySelector('.acc-trig'), pop = root && root.querySelector('.acc-pop'); if (!pop) return { sync() {} };
+  pop.innerHTML = ACCENTS.map(([c, n]) => '<button type="button" role="radio" class="acc-sw" data-c="' + c + '" style="--sw:' + c + '" aria-label="' + n + '" title="' + n + '"></button>').join('') + '<button type="button" class="acc-sw acc-def" data-c="" aria-label="Default" title="Default">\u21ba</button>';
+  const sws = () => [...pop.querySelectorAll('.acc-sw')];
+  const sync = () => { const a = localAccent(); sws().forEach(b => { const on = b.dataset.c === a; b.setAttribute('aria-checked', on); b.tabIndex = on || (!a && !b.dataset.c) ? 0 : -1; }); };
+  const open = v => { pop.hidden = !v; trig.setAttribute('aria-expanded', v); if (v) { sync(); (pop.querySelector('[tabindex="0"]') || sws()[0]).focus(); } };
+  const pick = c => { try { if (c) localStorage.shAccent = c; else localStorage.removeItem('shAccent'); } catch { /* ignore */ } applyLocalAccent(); };
+  trig.addEventListener('click', () => open(pop.hidden));
+  pop.addEventListener('click', e => { const b = e.target.closest('.acc-sw'); if (b) { pick(b.dataset.c); b.focus(); } });
+  pop.addEventListener('keydown', e => { const l = sws(), i = l.indexOf(document.activeElement); if (e.key === 'Escape') { open(false); trig.focus(); } else if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key) && i >= 0) { e.preventDefault(); const n = l[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : l.length - 1)) % l.length]; n.focus(); pick(n.dataset.c); } });
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !root.contains(e.target)) open(false); });
+  root.addEventListener('focusout', e => { if (!pop.hidden && !root.contains(e.relatedTarget)) open(false); });
+  sync(); return { sync }; })();
+// first signed-in load: carry a locally chosen accent over to an account that has none (once per user; never overwrites)
+async function carryAccent() { const a = localAccent(); if (!a || !S || S.settings.accent || !ME) return; const k = 'shAccentDone:' + (ME.id || ME.username || ''); try { if (localStorage[k]) return; localStorage[k] = '1'; } catch { return; }
+  try { await api('/api/settings', 'POST', { accent: a }); S.settings.accent = a; applyAccent(); } catch { /* ignore */ } }
+function applyAccent() { queueMicrotask(applyWallpaper); if (ME) document.documentElement.classList.remove('acc-local'); { const tc = S && sel && S.subjectMeta[sel] ? color(sel) : '', rs = document.documentElement.style; if (tc) rs.setProperty('--tro', tc); else rs.removeProperty('--tro'); } /* site-wide trophies follow the selected subject, else the accent */ const a = (S && sel && S.subjectMeta[sel]?.color && color(sel)) || S?.settings.accent, /* whole-app accent follows the selected subject (clamped), else the Settings accent; the stored accent is untouched */ st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } accentFavicon(a); }
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
@@ -287,7 +341,7 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); syncTplNav(); tzBackfill(); }
+async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); }
 async function refresh() { await load(); render(); }
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -298,7 +352,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
-async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); }
+async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); NOW.draw(); cometSync(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -308,6 +362,7 @@ function dialog(html, onSubmit) {
   const d = $('dlg'), f = $('dlgForm'); f.innerHTML = html; d.returnValue = '';
   f.onclick = e => { const b = e.target.closest('[data-dact]'); if (b && dialog.acts[b.dataset.dact]) dialog.acts[b.dataset.dact](b, e); };
   d.onclose = async () => { if (d.returnValue && d.returnValue !== 'cancel') { try { await onSubmit(d.returnValue, f); } catch (e) { toast(e.message); } } };
+  d.onclick = e => { if (e.target !== d) return; const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close('cancel'); };
   d.showModal();
 }
 dialog.acts = {};
@@ -323,7 +378,7 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color((a && a.subject) || sel)}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg>
+    <div class="ring-box tring" style="--subj:${color((a && a.subject) || sel)}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
@@ -337,6 +392,7 @@ VIEWS.timer = () => {
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
 function tick() {
+  if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
   if (!S || view !== 'timer' || !$('clock')) return;
   const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
@@ -351,7 +407,25 @@ function tick() {
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
   document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : ME ? BRAND : LANDING_TITLE;
 }
-setInterval(() => { tick(); checkReminder(); }, 1000);
+// Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
+// shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard
+// (same confirm). Tapping it opens the timer. It can be minimized to a pill (remembered). Uses S.active and the existing ACT handlers.
+const NOW = (() => { let el = null, key = '';
+  const mk = () => { el = document.createElement('section'); el.id = 'nowCard'; el.className = 'now-card glass'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Session in progress');
+    el.addEventListener('click', e => { const b = e.target.closest('[data-now]'); if (!b) { if (el.classList.contains('min')) return set(false); return go('timer'); } e.stopPropagation(); const k = b.dataset.now;
+      if (k === 'min') return set(true); if (k === 'max') return set(false); Promise.resolve(ACT[k]()).catch(er => toast(er.message)); });
+    el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.querySelector('.now-body')) { e.preventDefault(); go('timer'); } }); document.body.appendChild(el); };
+  const set = m => { localStorage.nowMin = m ? '1' : ''; key = ''; draw(); };
+  const draw = () => { const a = S && S.active, show = !!(ME && a && view !== 'timer'); if (!show) { if (el) el.hidden = true; key = ''; return; } if (!el) mk(); el.hidden = false;
+    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, min, a.targetSec].join('|'), c = color(a.subject);
+    if (k !== key) { key = k; el.classList.toggle('min', min); el.classList.toggle('paused', !!a.paused); el.style.setProperty('--subj', c);
+      const ring = '<svg class="now-ring" viewBox="0 0 200 200" aria-hidden="true"><circle class="ring-bg" cx="100" cy="100" r="84"/>' + (a.paused ? '' : '<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ' + (2 * Math.PI * 84 - 60) + ';stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ' + (2 * Math.PI * 84 - 30) + '"/></g>') + '</svg>';
+      el.innerHTML = min ? '<button class="now-pill" data-now="max" aria-label="Show session card: ' + esc(a.subject) + '">' + ring + '<span class="dot" style="background:' + c + '"></span><b class="now-t"></b></button>'
+        : '<div class="now-body" tabindex="0" role="button" aria-label="Open the timer">' + ring + '<div class="now-txt"><span class="now-s"><span class="dot" style="background:' + c + '"></span>' + esc(a.subject) + (a.activity ? ' <span class="muted">\u00b7 ' + esc(a.activity) + '</span>' : '') + '</span><b class="now-t"></b><span class="muted small now-st">' + (a.paused ? 'Paused' : 'Studying') + '</span></div></div>' +
+          '<div class="now-btns">' + (a.paused ? '<button class="btn small" data-now="resume">Resume</button>' : '<button class="btn small" data-now="pause">Pause</button>') + '<button class="btn small primary" data-now="stop">Stop</button><button class="btn small danger ghost" data-now="discard">Discard</button><button class="icon now-x" data-now="min" aria-label="Minimize session card" title="Minimize">\u2013</button></div>'; }
+    const t = el.querySelector('.now-t'); if (t) { const l = live(), v = a.targetSec ? Math.max(0, a.targetSec - l) : l; t.textContent = fmtClock(v); } };
+  return { draw }; })();
+setInterval(() => { tick(); checkReminder(); NOW.draw(); }, 1000);
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
@@ -366,17 +440,22 @@ ACT.start = async () => {
   if (mode === 'pomodoro') { body.targetSec = S.settings.pomodoro.focusMin * 60; UI.pomo = { cycle: (UI.pomo?.cycle || 0) % S.settings.pomodoro.cycles + 1, phase: 'focus' }; savePomo(); }
   await api('/api/timer/start', 'POST', body); track('study_session_start', { mode, subject: subjParam(sel) }); keepAwake(true); await refresh();
 };
-ACT.pause = async () => { await api('/api/timer/pause', 'POST'); await refresh(); };
-ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); await refresh(); };
+ACT.pause = async () => { await api('/api/timer/pause', 'POST'); timerPing(); await refresh(); };
+ACT.resume = async () => { await api('/api/timer/start', 'POST', {}); timerPing(); await refresh(); };
+async function timerFinish() { UI.pomo = null; savePomo(); keepAwake(false); exitFs(); timerPing(); }
+// tell other tabs the session changed (they refresh and the now-studying card follows)
+const timerPing = () => { try { localStorage.shTimerPing = Date.now(); } catch { /* ignore */ } };
+window.addEventListener('storage', e => { if (e.key === 'shTimerPing' && ME) refresh().catch(() => {}); });
+ACT.discard = async () => { if (!S.active || !confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await timerFinish(); await refresh(); toast('Session discarded'); };
 ACT.stop = async () => { const f = tFields(), a = S.active; if (!a) return;
   const secs = (a.accum || 0) + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000), short = secs < 30;
-  const finish = async () => { UI.pomo = null; savePomo(); keepAwake(false); exitFs(); };
+  const finish = timerFinish;
   dialog(`<h3>Save this session?</h3><p class="muted">${esc(sel || a.subject || '')} \u00b7 ${fmtH(secs)}${short ? ' \u00b7 under 30 seconds, too short to save' : ''}</p>
     ${short ? '' : `<div class="row"><div><label>Focus</label>${stars('focus', null)}</div><div><label>Progress</label>${stars('progress', null)}</div></div>`}
     <div class="row wrap"><button class="btn danger" value="discard">Discard</button><span class="sp"></span><button class="btn" value="cancel">Keep going</button>${short ? '' : '<button class="btn primary" value="save">Save</button>'}</div>`,
   async (v, fm) => {
-    if (v === 'discard') { if (!confirm('Discard this session? It will not be saved.')) return; await api('/api/timer/discard', 'POST', {}); await finish(); await refresh(); return toast('Session discarded'); }
-    const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
+    if (v === 'discard') return ACT.discard();
+    const r = await api('/api/timer/stop', 'POST', { note: f.note || a.note || '', activity: f.activity || a.activity || '', subject: sel, focus: +fm.focus.value || null, progress: +fm.progress.value || null });
     if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: 'timer' });
     await finish(); await refresh(); checkAchievements(); if (r.session) toast(`Saved ${fmtH(dur(r.session))} of ${r.session.subject}`); });
 };
@@ -387,7 +466,7 @@ function rateSession(s) {
   async (_, f) => { await api('/api/sessions/' + s.id, 'PUT', { focus: +f.focus.value || null, progress: +f.progress.value || null }); refresh(); });
 }
 async function finishTarget() {
-  const a = S.active, f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note, activity: f.activity, subject: a.subject });
+  const a = S.active, f = tFields(); const r = await api('/api/timer/stop', 'POST', { note: f.note || a.note || '', activity: f.activity || a.activity || '', subject: a.subject });
   if (r.session) track('study_session_log', { duration_min: Math.round(dur(r.session) / 60), subject: subjParam(r.session.subject), source: a.mode || 'timer' });
   if (a.mode === 'pomodoro') {
     const pc = S.settings.pomodoro, long = (UI.pomo?.cycle || 1) >= pc.cycles, len = (long ? pc.longMin : pc.shortMin) * 60;
@@ -415,13 +494,14 @@ document.addEventListener('keydown', e => { if (view !== 'timer' || /INPUT|TEXTA
 VIEWS.dash = () => {
   const l = live(), G = ST.goals, t = S.settings.term;
   const ringH = sec => { const t = fmtH(sec), m = Math.round(sec / 60); if (sec >= 3600 && m % 60 === 0) return Math.round(m / 60) + 'h'; return t.length > 7 ? (sec / 3600).toFixed(sec >= 360000 ? 0 : 1) + 'h' : t; };
-  const goalTile = (lbl, g, extra = '') => g ? `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + (g.goal ? Math.round(g.done / g.goal * 100) : 0) + "%)")}><svg viewBox="0 0 200 200" class="ring">${ring(84, g.goal ? g.done / g.goal : 0)}</svg><div class="ring-center"><b class="g-pct">${g.goal ? Math.round(g.done / g.goal * 100) : 0}%</b><span class="g-sub"><span>${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>` : '';
+  const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = S.active && !S.active.paused, c = 2 * Math.PI * 84;
+    return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
   const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
   return `${statCards([[fmtH(ST.today + l), 'Today'], [fmtH(ST.week + l), 'This week'], [fmtH(ST.month + l), 'This month'], [`${ST.streak}d <small class="muted">best ${ST.bestStreak}d</small>`, 'Streak']])}
-  <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings')}
-    ${goalTile('This week', G.week, paceTxt(G.week))}${goalTile('This month', G.month, paceTxt(G.month))}${goalTile(esc(t.name || 'Term'), G.term, paceTxt(G.term))}</div>
+  <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', (UI.gaBase = { day: G.day.goal ? { done: G.day.done, goal: G.day.goal } : null, week: G.week, month: G.month, term: G.term }).day && { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings', 'day')}
+    ${goalTile('This week', G.week && { ...G.week, done: G.week.done + l }, paceTxt(G.week), 'week')}${goalTile('This month', G.month && { ...G.month, done: G.month.done + l }, paceTxt(G.month), 'month')}${goalTile(esc(t.name || 'Term'), G.term && { ...G.term, done: G.term.done + l }, paceTxt(G.term), 'term')}</div>
     ${!G.week && !G.month ? '<p class="muted small">Add weekly, monthly or term goals in Settings to see pace and forecasts.</p>' : ''}</div>
   ${isMcat() ? pxHomeCard() : gpxHomeCard()}
   ${todoCard()}
@@ -435,7 +515,7 @@ VIEWS.dash = () => {
   <div class="card"><h3>Study calendar</h3><div class="heat-scroll" id="heatS">${heatmap(ST.byDay)}</div>
     <div class="heat-key muted small">Less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> More · dots = medal days</div></div>`;
 };
-AFTER.dash = () => { const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
+AFTER.dash = () => { GA.play(); cometSync(); const h = $('heatS'); if (h) h.scrollLeft = 1e5; todoFit(); requestAnimationFrame(todoFit); };
 function stackChart() {
   const days = [...Array(14)].map((_, i) => addD(k2d(ST.todayKey), i - 13)), bd = ST.byDaySubject, subs = new Set();
   days.forEach(d => Object.keys(bd[dk(d)] || {}).forEach(s => subs.add(s)));
@@ -635,10 +715,14 @@ function achBody(cat, filt) { const { A, seen } = ACH, keep = x => filt === 'all
   const inCat = id => id === 'all' ? [...A.global, ...A.personal] : id === 'mine' ? A.personal : A.global.filter(x => x.cat === id);
   const prog = x => x.unit === 'h' ? fmtH(x.value) + ' / ' + fmtH(x.target) : x.value + ' / ' + x.target + (x.unit === 'd' ? ' days' : '');
   const TT = ACH.tiers ||= window.TrophySpec ? TrophySpec.tiers(achAll(A)) : {}, spec = x => window.TrophySpec ? ' data-spec="' + esc(JSON.stringify(TrophySpec.spec(x, TT[x.id], x.kind === 'subject' ? color(x.key) : null))) + '"' : '';
-  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + '" data-act="trophyView" data-id="' + esc(x.id) + '" role="button" tabindex="0" aria-label="' + esc(x.name + (x.earned ? ', earned' : ', locked')) + ' - open 3D view"><div class="t-ic"' + spec(x) + '>' + (x.earned ? '&#127942;' : '&#128274;') + '</div><b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
+  const lp = x => window.TrophyArt && TrophyArt.has(x) ? ' t-lp' + (x.earned && !seen.has(x.id) ? ' t-new' : '') : '';
+  const card = x => '<div class="trophy ' + (x.earned ? 'on' : '') + lp(x) + '" data-act="trophyView" data-id="' + esc(x.id) + '"' + (x.kind === 'subject' ? ' style="--acc:' + esc(color(x.key)) + ';--tro:' + esc(color(x.key)) + '"' : '') + ' role="button" tabindex="0" aria-label="' + esc(x.name + (x.earned ? ', earned' : ', locked')) + ' - open">' + (window.TrophyArt && TrophyArt.has(x) ? '<div class="t-ic t-art" data-tid="' + esc(TrophyArt.key(x)) + '">' + TrophyArt.svg(TrophyArt.key(x)) + '</div>' : '<div class="t-ic"' + spec(x) + '>' + (x.earned ? '&#127942;' : '&#128274;') + '</div>') + (x.earned && window.TrophyArt && TrophyArt.has(x) ? '<svg class="t-line" aria-hidden="true"><rect x="0.5" y="0.5" rx="12" pathLength="100"/></svg><i class="t-sheen" aria-hidden="true"></i>' : '') + '<b>' + esc(x.name) + '</b>' + (x.earned && !seen.has(x.id) ? ' <span class="pill approved">new</span>' : '') +
     '<div class="muted small">' + esc(x.desc) + '</div>' + (x.earned ? '' : '<div class="bar t-prog"><i style="width:' + Math.round((x.progress || 0) * 100) + '%"></i></div><div class="muted small">' + prog(x) + '</div>') +
     (x.earnedBy ? '<div class="t-by small">Earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') + ' (' + x.earnedBy.pct + '%)</div>' : '') + '</div>';
-  const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4><div class="trophies">' + list.map(card).join('') + '</div>' : ''; };
+  // Launch Pad: the outer card is a static hit box (hover/focus/click); the visible face inside it lifts and tilts, so the hit area never
+  // moves out from under the cursor (no enter/leave flicker at the edges)
+  const face = (x, h) => { if (!(window.TrophyArt && TrophyArt.has(x))) return h; /* every line-art (.t-lp) card needs its .t-face: the outer box is invisible */ const i = h.indexOf('>') + 1; return h.slice(0, i) + '<div class="t-face">' + h.slice(i, -6) + '</div></div>'; };
+  const section = (title, list) => { list = list.filter(keep); return list.length ? '<h4 class="t-head">' + esc(title) + ' <span class="muted small">' + list.filter(x => x.earned).length + '/' + list.length + '</span></h4><div class="trophies">' + list.map(x => face(x, card(x))).join('') + '</div>' : ''; };
   const personal = () => { const groups = {}; for (const x of A.personal) (groups[x.kind + '|' + x.key] ||= []).push(x);
     const out = ['activity', 'subject'].map(k => Object.entries(groups).filter(([g]) => g.startsWith(k + '|')).map(([g, l]) => section((k === 'activity' ? 'Activity: ' : 'Subject: ') + g.slice(k.length + 1), l)).join('')).join('');
     return out || '<p class="muted small">Log sessions with an activity to unlock badges for each of your own tasks and subjects.</p>'; };
@@ -657,38 +741,132 @@ VIEWS.trophy = async () => {
     '<div class="tabs ach-filter">' + ['all', 'earned', 'locked'].map(v => '<button data-act="achFilter" data-v="' + v + '" class="' + (filt === v ? 'on' : '') + '">' + v[0].toUpperCase() + v.slice(1) + '</button>').join('') + '</div><div id="achGrid">' + body + '</div></div>';
 };
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Launch Pad trophies: when one first scrolls into view, an earned card's hairline outline draws itself once (and a new one lifts off once),
+// a locked card's progress fills in like the goal rings; a sheen crosses an earned card once per hover/tap. Nothing idles. Reduced motion: all static.
+const TLP = (() => { const done = new Set(); let io = null;
+  const go = el => { const id = el.dataset.id; if (done.has(id)) return el.classList.add('t-shown'); done.add(id); el.classList.add('t-play'); setTimeout(() => el.classList.add('t-shown'), 1600); };
+  return { scan(root) { if (!root) return; const els = root.querySelectorAll('.trophy.t-lp'); if (animLevel() < 1 || !('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('t-shown')); return; }
+    io ||= new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); go(e.target); } }), { threshold: 0.4 });
+    els.forEach(el => { if (done.has(el.dataset.id)) el.classList.add('t-shown'); else io.observe(el); }); },
+    sheen(el) { const now = performance.now(); if (now - (el._shT || 0) < 600) return; el._shT = now; if (animLevel() < 2 || !el.classList.contains('on')) return; el.classList.remove('t-sh'); void el.offsetWidth; el.classList.add('t-sh'); } }; })();
+// Logo tile contrast: solid accent gradient tile; the wave is white or near-black, whichever has the better worst-case WCAG
+// contrast against both gradient stops (>= 4.5:1 for nearly every accent). Re-run whenever the accent or theme changes.
+// Logo tile: the wave follows the resolved theme (light theme: white wave; dark theme: near-black wave, the dark background ink),
+// including System and live OS changes. If the accent would make the wave hard to see (< 3:1 against either gradient stop), only the
+// tile is shifted: darkened in light mode, lightened in dark mode. The wave colour never changes with the accent.
+function logoInk() { const r = document.documentElement, cs = getComputedStyle(r), hex = cs.getPropertyValue('--acc').trim();
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex) || /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex); if (!m) return;
+  const rgb = m.length === 2 ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : m.slice(1).map(c => parseInt(c + c, 16));
+  const lum = c => { const [R, G, B] = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * R + .7152 * G + .0722 * B; };
+  const cr = (a, l) => (Math.max(a, l) + .05) / (Math.min(a, l) + .05), dark = r.dataset.theme === 'dark', inkRgb = dark ? [11, 13, 24] : [255, 255, 255], ink = dark ? '#0b0d18' : '#fff', LI = lum(inkRgb);
+  const mix = (c, t, k) => c.map((v, i) => Math.round(v + (t[i] - v) * k)), hx = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  let a = rgb, b = mix(rgb, [0x2f, 0xd3, 0xb4], .38); const to = dark ? [255, 255, 255] : [0, 0, 0];
+  for (let k = 0; k < 12 && Math.min(cr(LI, lum(a)), cr(LI, lum(b))) < 3; k++) { a = mix(a, to, .12); b = mix(b, to, .12); }
+  const set = (n, v) => { if (r.style.getPropertyValue(n) !== v) r.style.setProperty(n, v); };
+  set('--logo-a', hx(a)); set('--acc-b', hx(b)); set('--logo-ink', ink);
+  // write the stops as plain colours too: some engines (Safari) don't repaint an SVG gradient whose stop-color is a var() when only the variable changes
+  if (document.querySelectorAll) document.querySelectorAll('.sh-mark linearGradient').forEach(g => { const st = g.querySelectorAll('stop'); if (st[0] && st[0].style.stopColor !== hx(a)) st[0].style.stopColor = hx(a); if (st[1] && st[1].style.stopColor !== hx(b)) st[1].style.stopColor = hx(b); }); }
+new MutationObserver(() => logoInk()).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] }); logoInk();
+// In-app logo mark: a hairline wave in an accent tile. Draws itself once on load; while hovered the wave is a travelling sine
+// (amplitude follows the pointer a little), easing back to rest in ~300ms on leave (a tap plays ~1.5s); while a timer runs it travels on
+// the shared session clock (same 9s period/phase as the ring lines). Lowest quality: static. Low: no running motion. rAF only while needed.
+const mkLogo = el => { const w = el && el.querySelector('.sh-wave'); if (!w) return { kick() {} };
+  let raf = 0, hov = false, until = 0, A = 5, tA = 5, ph = 0, hp = 0, last = 0, base = 0;
+  const path = (amp, phi) => { let d = ''; for (let i = 0; i <= 44; i++) { const x = 5 + i * .5, y = 16 - amp * Math.sin((x - 5) / 22 * 4 * Math.PI - phi); d += (i ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2); } return d; };
+  const running = () => S && S.active && !S.active.paused && animLevel() >= 2;
+  const clock = () => (((Date.now() - new Date(S.active.start)) / 1000) % COMET_S) / COMET_S * 2 * Math.PI;
+  const frame = now => { raf = 0; const dt = Math.min(64, now - (last || now)); last = now; const live = hov || now < until, run = running(); if (!live && until && now >= until) { until = 0; wrap(); }
+    if (live) hp += dt / 1000 * 5; else hp *= Math.pow(0.002, dt / 300); A += ((live ? tA : 5) - A) * Math.min(1, dt / 90);
+    base = run ? clock() : base * Math.pow(0.001, dt / 300 / 3);
+    w.setAttribute('d', path(A, base + hp)); const settled = !live && !run && Math.abs(hp) < .01 && Math.abs(base) < .01 && Math.abs(A - 5) < .02;
+    if (settled) { w.setAttribute('d', path(5, 0)); hp = base = 0; last = 0; return; } raf = requestAnimationFrame(frame); };
+  const kick = () => { if (!raf && animLevel() >= 2 && !document.hidden) { last = 0; raf = requestAnimationFrame(frame); } };
+  el.addEventListener('pointerenter', e => { if (e.pointerType === 'touch' || animLevel() < 2) return; hov = true; kick(); });
+  el.addEventListener('pointermove', e => { if (!hov) return; const r = el.getBoundingClientRect(); tA = 3.2 + 3.6 * (1 - Math.abs((e.clientY - r.top) / r.height - .5) * 2); });
+  const wrap = () => { hp = ((hp + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; }; // ease back the short way
+  el.addEventListener('pointerleave', () => { hov = false; tA = 5; wrap(); });
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && animLevel() >= 2) { until = performance.now() + 1500; tA = 5.5; kick(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+  w.setAttribute('d', path(5, 0)); return { kick }; };
+// Landing tour > Trophies: the same hairline drawings as the app (accent colour, feature-only hover, draw once when shown).
+// Falls back to the plain medal discs when a drawing is missing.
+(() => { const g = $('pvTrophies'); if (!g || !window.TrophyArt) return; let any = false;
+  g.querySelectorAll('.pv-tro[data-tid]').forEach(c => { const id = c.dataset.tid; if (!TrophyArt.has(id)) return; any = true; const on = !c.classList.contains('lock');
+    c.querySelector('.medal-c').outerHTML = '<div class="t-ic t-art' + (on ? ' on' : '') + '" data-tid="' + id + '">' + TrophyArt.svg(id) + '</div>'; });
+  if (!any) return; g.classList.add('pv-art'); g.addEventListener('click', e => { const a = e.target.closest('.t-art[data-tid]'); if (a && typeof TAI !== 'undefined') TAI.play(a); }); // tap: the drawing's one action
+  const play = () => { if (animLevel() >= 1) { g.classList.add('pv-play'); setTimeout(() => g.classList.add('pv-shown'), 1700); } else g.classList.add('pv-shown'); };
+  if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); play(); } }, { threshold: .5 }); io.observe(g); } else play(); })();
+const LOGO = mkLogo(document.querySelector('#app .sh-mark')); mkLogo(document.querySelector('#landing .sh-mark')); mkLogo(document.querySelector('#auth .sh-mark')); // landing: same hairline wave (no session clock there)
+// Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
+// click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
+// isometric view a few degrees. Reduced motion: no lean, actions show their end state.
+const TAI = (() => { const turn = {}, run = new WeakMap(), still = () => animLevel() < 2;
+  const draw = (el, p, o = {}) => { const id = el.dataset.tid, svg = el.querySelector('.ta'); if (svg) svg.innerHTML = TrophyArt.inner(id, p, { turn: turn[id] || 0, yaw: +el.dataset.yaw || 0, rich: animLevel() > 2, ...o }); };
+  // No whole-drawing or whole-card rotation/tilt/parallax (too disorienting): only each trophy's own feature tracks the cursor (aimAt)
+  const lean = () => {};
+  const rest = el => { ['--tx', '--ty', '--px', '--py'].forEach(v => el.style.removeProperty(v)); const card = el.closest('.trophy.t-lp'); if (card) { card.style.removeProperty('--cx'); card.style.removeProperty('--cy'); } el.classList.remove('ta-lean'); };
+  const play = el => { const id = el.dataset.tid; if (!id || run.get(el)) return; if (id === 'tinker') { const a = turn[id] || 0; turn[id] = a + 45;
+      if (still()) return draw(el); const t0 = performance.now(); run.set(el, 1); const f = now => { const k = Math.min(1, (now - t0) / TrophyArt.DUR.tinker), e = 1 - Math.pow(1 - k, 3); draw(el, 1, { turn: a + 45 * e }); if (k < 1 && el.isConnected) requestAnimationFrame(f); else run.delete(el); }; return requestAnimationFrame(f); }
+    if (still()) return draw(el, 1); const t0 = performance.now(), D = TrophyArt.DUR[id] || 1000; run.set(el, 1); el.classList.add('ta-go');
+    const f = now => { const k = Math.min(1, (now - t0) / D); draw(el, k); if (k < 1 && el.isConnected) requestAnimationFrame(f); else { run.delete(el); el.classList.remove('ta-go'); draw(el, 1); } }; requestAnimationFrame(f); };
+  // Hover tracking: one part of each drawing follows the cursor live (rAF only while hovered or easing back; ~300ms back to rest)
+  const hov = new Map(); let hovRaf = 0;
+  const hovTick = () => { hovRaf = 0; for (const [el, h] of hov) { if (!el.isConnected) { hov.delete(el); continue; } h.s += (h.ts - h.s) * .16; h.x += (h.tx - h.x) * .3; h.y += (h.ty - h.y) * .3;
+      const done = h.ts === 0 && h.s < .01; if (!run.get(el)) draw(el, 1, done ? {} : { aim: { x: h.x, y: h.y, s: h.s } }); if (done) hov.delete(el); } if (hov.size) hovRaf = requestAnimationFrame(hovTick); };
+  const aimAt = (el, e) => { if (animLevel() < 2) return; const svg = el.querySelector('.ta'); if (!svg) return; const r = svg.getBoundingClientRect(), x = 6 + (e.clientX - r.left) / r.width * 52, y = 5 + (e.clientY - r.top) / r.height * 52;
+    const h = hov.get(el) || { x, y, s: 0 }; h.tx = x; h.ty = y; h.ts = el.closest('.trophy.on, .t-art.on') ? 1 : .35; hov.set(el, h); hovRaf ||= requestAnimationFrame(hovTick); };
+  const unaim = el => { const h = hov.get(el); if (h) h.ts = 0; };
+  // Knob Turner: drag turns the dial (on the card and in the popup); a drag never also counts as a click
+  let drag = null;
+  const down = e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (!el) return; drag = { el, x: e.clientX, y: e.clientY, moved: false, yaw: +el.dataset.yaw || 0, turn: turn[el.dataset.tid] || 0 }; };
+  const move = e => { const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && e.pointerType !== 'touch') { lean(el, e); aimAt(el, e); } else if (drag && e.pointerType === 'touch' && drag.el.isConnected) aimAt(drag.el, e);
+    if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 4 && dragOk(drag.el)) drag.moved = true; // only a real dial drag may swallow the click; a wobbly click still opens if (!drag.moved) return; if (drag.el.isConnected && e.pointerType === 'touch') lean(drag.el, e);
+    if (dragOk(drag.el)) { turn.tinker = drag.turn + dx * 2; draw(drag.el, 1); } };
+  const dragOk = el => el.dataset.tid === 'tinker' && (el.classList.contains('big') || !!el.closest('.trophy.on'));
+  const up = e => { if (!drag) return; const d = drag; drag = null; if (d.moved) { const kill = ev => { ev.stopPropagation(); ev.preventDefault(); }; d.el.addEventListener('click', kill, { capture: true, once: true }); setTimeout(() => d.el.removeEventListener('click', kill, true), 0); } if (e.pointerType === 'touch') { rest(d.el); unaim(d.el); } };
+  document.addEventListener('pointerdown', down); document.addEventListener('pointermove', move, { passive: true }); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+  document.addEventListener('pointerout', e => { const c = e.target.closest && e.target.closest('.trophy.t-lp'); if (c && !c.contains(e.relatedTarget)) { c.style.removeProperty('--cx'); c.style.removeProperty('--cy'); } const el = e.target.closest && e.target.closest('.t-art[data-tid]'); if (el && !el.contains(e.relatedTarget)) { rest(el); unaim(el); } });
+  return { play, popup(el, earned) { if (!el) return; if (earned) { el.addEventListener('click', () => play(el)); el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(el); } }); } if (turn[el.dataset.tid]) draw(el, 1); if (earned && animLevel() >= 1) setTimeout(() => { if (el.isConnected) play(el); }, 160); } }; })();
+ACT.taPlay = b => TAI.play(b);
+$('main').addEventListener('pointerenter', e => { const t = e.target; if (t.classList && t.classList.contains('trophy') && t.classList.contains('t-lp') && t.classList.contains('on') && !t._hov) { t._hov = true; TLP.sheen(t); } }, true);
+$('main').addEventListener('pointerleave', e => { const t = e.target; if (t.classList && t.classList.contains('trophy')) t._hov = false; }, true);
+$('main').addEventListener('pointerdown', e => { const t = e.target.closest && e.target.closest('.trophy.t-lp.on'); if (t && e.pointerType !== 'mouse') TLP.sheen(t); });
 function achIndicator(instant) { const bar = document.querySelector('.ach-cats'), on = bar && bar.querySelector('.on'), ind = bar && bar.querySelector('.ach-ind'); if (!on || !ind) return;
   if (instant || reduceMotion()) ind.style.transition = 'none'; ind.style.width = on.offsetWidth + 'px'; ind.style.height = on.offsetHeight + 'px'; ind.style.transform = 'translate(' + on.offsetLeft + 'px,' + on.offsetTop + 'px)';
   if (instant) { void ind.offsetWidth; ind.style.transition = ''; } bar.classList.add('has-ind'); on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
 function achSwap() { const g = $('achGrid'); if (!g || !ACH) return render(); const { body } = achBody(localStorage.achCat || 'all', localStorage.achFilter || 'all');
   const stagger = () => { if (reduceMotion()) return; g.querySelectorAll('.trophy').forEach((t, i) => { t.style.animationDelay = Math.min(i * 20, 250) + 'ms'; }); g.classList.remove('in'); void g.offsetWidth; g.classList.add('in'); clearTimeout(g._achT); g._achT = setTimeout(() => { g.classList.remove('in'); g.querySelectorAll('.trophy').forEach(t => { t.style.animationDelay = ''; }); }, 700); };
-  if (reduceMotion()) { g.innerHTML = body; t3dHydrate(); return; }
+  if (reduceMotion()) { g.innerHTML = body; TLP.scan(g); return; }
   g.style.minHeight = g.offsetHeight + 'px'; const unlock = () => setTimeout(() => { g.style.minHeight = ''; }, 450);
   // No View Transitions here: WebKit crashed on repeated grid swaps in CI; the CSS fade below is used everywhere.
-  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); t3dHydrate(); }, 120); }
+  g.classList.add('out'); setTimeout(() => { g.innerHTML = body; g.classList.remove('out'); stagger(); unlock(); TLP.scan(g); }, 120); }
 ACT.achCat = b => { localStorage.achCat = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', x === b); }); achIndicator(); achSwap(); };
 ACT.achFilter = b => { localStorage.achFilter = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); achSwap(); };
 const achAll = A => [...A.global, ...A.personal];
 // 3D trophies (lazy-loaded module; one shared WebGL renderer; emoji stays as fallback)
-let T3D = null; const t3d = () => (T3D ||= import('/trophy3d.js').catch(() => null));
-function t3dHydrate() { if (!window.TrophySpec || !$('achGrid')) return; t3d().then(m => { if (m && m.hydrate($('achGrid')) === false) window.__t3dFallback = true; if (!m) window.__t3dFallback = true; }); }
+// Auto quality: hardware/browser hints only (TrophyTier.pick on a throwaway WebGL probe), cached per device; the drawings are SVG so no 3D benchmark is needed
+function tierAuto() { if (!window.TrophyTier) return null; let gl = null; try { const c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); } catch { /* ignore */ }
+  const p = TrophyTier.pick(TrophyTier.probe(gl)), a = { v: TrophyTier.V, tier: p.tier === 'none' ? 'low' : p.tier, why: p.why, at: Date.now() };
+  try { gl && gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* ignore */ } try { localStorage.t3dAuto = JSON.stringify(a); } catch { /* ignore */ } return a; }
+{ const q = localStorage.t3dQuality; if ((!q || q === 'auto') && !localStorage.t3dAuto) setTimeout(() => { if (tierAuto()) { applyAnimLevel(); cometSync(true); } }, 0); }
 // 3D quality tier: Auto (probe + benchmark, cached) or a per-device override, stored in localStorage
 const T3DQ = ['auto', 'low', 'medium', 'high'], capW = w => w[0].toUpperCase() + w.slice(1);
 function t3dInfo() { const ov = localStorage.t3dQuality; let a = null; try { a = JSON.parse(localStorage.t3dAuto || 'null'); } catch { /* ignore */ }
   if (T3DQ.includes(ov) && ov !== 'auto') return 'Forced to ' + capW(ov) + ' on this device.';
-  return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects on your first visit to Trophies.'; }
+  return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects from this device.'; }
 function t3dQualityRow() { const cur = T3DQ.includes(localStorage.t3dQuality) ? localStorage.t3dQuality : 'auto';
-  return '<div class="t3dq mt"><label>3D trophy quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p></div>'; }
-async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; const m = T3D && await T3D; if (m) await m.refreshTier(); }
+  return '<div class="t3dq mt"><label>Trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
+async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; applyAnimLevel(); if (v === 'auto') tierAuto(); applyAnimLevel(); cometSync(true); }
+ACT.nowSize = async b => { const v = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); localStorage.nowSize = v; if (S) S.settings.nowSize = v; applyNowSize(); try { await api('/api/settings', 'POST', { nowSize: v }); } catch { toast('Could not save card size'); } };
 ACT.t3dQ = async b => { const v = b.dataset.q; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); const p = setT3dQuality(v), i = $('t3dInfo'); if (i) i.textContent = v === 'auto' ? 'Re-detecting\u2026' : t3dInfo(); await p; if (i && i.isConnected) i.textContent = t3dInfo(); };
 ACT.trophyView = b => { const x = ACH && achAll(ACH.A).find(a => a.id === b.dataset.id); if (!x) return;
   const spec = window.TrophySpec ? TrophySpec.spec(x, (ACH.tiers || {})[x.id], x.kind === 'subject' ? color(x.key) : null) : null;
-  dialog('<h3>' + esc(x.name) + (x.key ? ' <span class="muted small">' + esc(x.key) + '</span>' : '') + '</h3><div class="t3d-host" id="t3dHost"><div class="t-ic big">' + (x.earned ? '&#127942;' : '&#128274;') + '</div></div>' +
+  dialog('<h3>' + esc(x.name) + (x.key ? ' <span class="muted small">' + esc(x.key) + '</span>' : '') + '</h3><div class="t3d-host" id="t3dHost"' + (x.kind === 'subject' ? ' style="--acc:' + esc(color(x.key)) + ';--tro:' + esc(color(x.key)) + '"' : '') + '>' + (window.TrophyArt && TrophyArt.has(x) ? '<div class="t-ic t-art big' + (x.earned ? ' on' : '') + '" data-tid="' + esc(TrophyArt.key(x)) + '"' + (x.earned ? ' role="button" tabindex="0" aria-label="Play the ' + esc(x.name) + ' animation; drag to turn"' : ' aria-label="Drag to turn"') + '>' + TrophyArt.svg(TrophyArt.key(x)) + '</div><div class="ta-cap muted small" aria-live="polite">' + esc(x.earned ? 'Earned' : x.unit === 'h' ? fmtH(x.value) + ' / ' + fmtH(x.target) : x.value + ' / ' + x.target + (x.unit === 'd' ? ' days' : '')) + '</div>' : '<div class="t-ic big">' + (x.earned ? '&#127942;' : '&#128274;') + '</div>') + '</div>' +
     '<p class="center">' + esc(x.desc) + '</p><p class="muted small center">' + (spec ? spec.tier[0].toUpperCase() + spec.tier.slice(1) + ' tier \u00b7 ' : '') + (x.earned ? 'Earned' : Math.round((x.progress || 0) * 100) + '% there') + (x.earnedBy ? ' \u00b7 earned by ' + x.earnedBy.count + ' of ' + x.earnedBy.users + ' user' + (x.earnedBy.users === 1 ? '' : 's') : '') + '</p>' +
     '<p class="muted small center t3d-hint">Drag to rotate</p><div class="row"><span class="sp"></span><button class="btn primary" value="cancel">Close</button></div>', () => {});
-  if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
+  if (window.TrophyArt && TrophyArt.has(x)) { TAI.popup($('t3dHost').querySelector('.t-art'), x.earned); const cl = $('dlg').querySelector('button[value=cancel]'); if (cl && document.activeElement && document.activeElement.closest('.t-art')) cl.focus({ preventScroll: true }); return; } if (!spec) return; t3d().then(m => { const host = $('t3dHost'); if (!m || !host) return; const stop = m.openViewer(host, spec, { reduced: reduceMotion() }); if (!stop) { window.__t3dFallback = true; return; } $('dlg').addEventListener('close', () => stop(), { once: true }); }); };
 $('main').addEventListener('keydown', e => { const t = e.target.closest && e.target.closest('.trophy[data-act]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); ACT.trophyView(t); } });
-AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); t3dHydrate(); };
+AFTER.trophy = async () => { const A = await api('/api/achievements'); localStorage.seenAch = JSON.stringify(achAll(A).filter(a => a.earned).map(a => a.id)); requestAnimationFrame(() => achIndicator(true)); TLP.scan($('achGrid')); };
 // ---- achievement notifications: the server diffs earned vs. already-notified (per user, so each unlock is announced once) ----
 const achQ = []; let achBusy = false, achT = 0;
 function achSoon() { clearTimeout(achT); achT = setTimeout(checkAchievements, 500); }
@@ -709,7 +887,7 @@ function achNext() { if (achBusy || !achQ.length) return; achBusy = true; const 
   document.body.appendChild(el);
   { const n = $('nav'), r = n && n.getBoundingClientRect(); if (r && getComputedStyle(n).position === 'fixed' && r.top > innerHeight / 2) el.style.bottom = (innerHeight - r.top + 10) + 'px'; } // sit above the phone tab bar
   requestAnimationFrame(() => el.classList.add('show')); if (typeof beep === 'function') try { beep(); } catch { /* ignore */ }
-  if (a.spec && window.TrophySpec) t3d().then(m => m && m.thumbCanvas && m.thumbCanvas(a.spec)).then(c => { if (c && el.isConnected) { el.querySelector('.ach-ic').replaceChildren(c); } }).catch(() => {});
+  if (window.TrophyArt && TrophyArt.has(a)) { const ic = el.querySelector('.ach-ic'); ic.className = 'ach-ic t-art on'; if (a.kind === 'subject') { ic.style.setProperty('--acc', color(a.key)); ic.style.setProperty('--tro', color(a.key)); } ic.innerHTML = TrophyArt.svg(TrophyArt.key(a)); }
   let done = false; const close = () => { if (done) return; done = true; clearTimeout(tm); el.classList.remove('show'); setTimeout(() => { el.remove(); achBusy = false; achNext(); }, reduceMotion() ? 0 : 300); };
   const tm = setTimeout(close, 7000);
   el.addEventListener('click', e => { if (e.target.closest('.ach-x')) return close(); close(); openTrophy(a.id); });
@@ -789,13 +967,14 @@ VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = SHTheme.pref(), rf = await api('/api/referral').catch(() => null);
   const af = await api('/api/affiliates/me').catch(() => null);
   return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div>
-    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
+    <div class="mt"><label>Session card size</label><div class="tabs" id="sNowSize">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><span class="acc-row" role="group" aria-label="Accent swatches">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveGoals">Save goals</button></div></div>
   <div class="card"><h3>Study template</h3><p>Current template: <b>${esc(tplOf().name)}</b></p><p class="muted small">Switching sets that test's subjects and activities. Ones you have logged time on are kept, and past sessions never change.</p><div class="tpl-grid">${TEMPLATES.LIST.map(t => `<button class="chip ${t.id === tplOf().id ? 'on' : ''}" style="--c:var(--acc)" data-act="tplSwitch" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div></div>
-  <div class="card"><h3>Subjects</h3>${S.subjects.map(n => { const m = S.subjectMeta[n] || {}; return `<div class="subj-row" data-subj="${esc(n)}"><input type="color" value="${m.color || '#868e96'}" style="width:40px;padding:2px" data-chg="subjColor"><span>${esc(n)}</span>
+  <div class="card"><h3>Subjects</h3>${S.subjects.map(n => { const m = S.subjectMeta[n] || {}; return `<div class="subj-row" data-subj="${esc(n)}"><input type="color" value="${color(n)}" style="width:40px;padding:2px" data-chg="subjColor" aria-describedby="scn-${esc(n)}"><span class="sc-note muted small" id="scn-${esc(n)}" aria-live="polite"></span><span>${esc(n)}</span>
       <input type="number" min="0" placeholder="weekly goal h" value="${m.weeklyGoalMin ? m.weeklyGoalMin / 60 : ''}" style="width:120px" data-chg="subjGoal" title="Weekly goal (hours)"><button class="icon" data-act="subjRename" title="Rename">✎</button><button class="icon" data-act="subjDel" title="Remove">✕</button></div>`; }).join('')}
     <div class="row"><input id="newSubj" placeholder="Add custom subject"><button class="btn" data-act="addSubj">Add</button></div></div>
   <div class="card"><h3>Activities (study types)</h3><div class="row wrap gap">${S.activities.map(a => `<span class="pill">${esc(a)} <button class="link" data-act="actRename" data-a="${esc(a)}" title="Rename">✎</button> <button class="link" data-act="actDel" data-a="${esc(a)}">✕</button></span>`).join('')}</div>
@@ -805,9 +984,6 @@ VIEWS.set = async () => {
   <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label><span class="medal m-${m}"></span> ${m} (h/day)</label><input type="number" step="0.25" min="0" id="md_${m}" value="${md[m] / 60}"></div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
   <div class="card"><h3>Notifications &amp; reminders</h3>${achNotifRow()}<p class="muted small">${window.isSecureContext ? '' : 'Installing the app also needs HTTPS. '}Reminders fire while the app is open or installed.</p>
     <div class="row wrap gap"><button class="btn" data-act="notifPerm">${'Notification' in window && Notification.permission === 'granted' ? 'Notifications enabled ✓' : 'Enable notifications'}</button><span class="muted small">Remind me if I haven't studied by</span><input type="time" id="remT" value="${localStorage.remindAt || ''}" style="width:auto"><button class="btn" data-act="saveRem">Save</button></div></div>
-  <div class="card"><h3>Busy Bar</h3><p class="muted small">Optional. Shows your study status on a Busy Bar on your network. Leave the IP blank to disable.</p>
-    <label>Busy Bar IP</label><input id="sBip" value="${esc(s.busyIp)}" placeholder="192.168.0.x"><label>API token</label><input id="sBtok" type="password" autocomplete="off" value="${esc(s.busyToken)}">
-    <div class="row"><button class="btn primary" data-act="saveBusy">Save</button><button class="btn" data-act="testBusy">Send test</button></div></div>
   <div class="card"><h3>Report a bug</h3><p class="muted small">Goes to the admin for review. The current page and browser info are attached.</p>
     <input id="bgT" placeholder="Short title" maxlength="120"><textarea id="bgD" class="mt" placeholder="What happened? What did you expect?" maxlength="4000"></textarea><textarea id="bgS" class="mt" placeholder="Steps to reproduce (optional)" maxlength="4000"></textarea>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="bugSend">Submit report</button></div>
@@ -1055,6 +1231,7 @@ async function adminHTML() {
       <div class="row"><button class="btn" data-act="repReview" data-id="${r.id}">Review / edit</button>${r.status !== 'approved' ? `<button class="btn primary" data-act="repSet" data-id="${r.id}" data-s="approved">Approve</button>` : ''}${r.status !== 'rejected' ? `<button class="btn danger" data-act="repSet" data-id="${r.id}" data-s="rejected">Reject</button>` : ''}</div></div>`).join('') || '<p class="muted small">No reports.</p>'}</div>`;
 }
 ACT.theme = b => { SHTheme.set(b.dataset.t); render(); };
+ACT.accSw = async b => { $('sAccent').value = b.dataset.c; await api('/api/settings', 'POST', { accent: b.dataset.c }); await refresh(); };
 ACT.saveAccent = async () => { await api('/api/settings', 'POST', { accent: $('sAccent').value }); await refresh(); };
 ACT.resetAccent = async () => { await api('/api/settings', 'POST', { accent: '' }); await refresh(); };
 const hrs = id => Math.round((+$(id).value || 0) * 60);
@@ -1063,7 +1240,9 @@ ACT.saveGoals = async () => { track('goal_created', { goal_type: 'time' }); awai
 ACT.saveTimer = async () => { await api('/api/settings', 'POST', { pomodoro: { focusMin: +$('pF').value, shortMin: +$('pS').value, longMin: +$('pL').value, cycles: +$('pC').value, autoStart: $('pA').checked }, quickDurations: $('qD').value.split(/[ ,]+/).filter(Boolean).map(Number) }); toast('Timer saved'); refresh(); };
 ACT.saveMedals = async () => { const medals = {}; MEDAL_ORDER.forEach(m => (medals[m] = hrs('md_' + m))); await api('/api/settings', 'POST', { medals }); toast('Medals saved'); refresh(); };
 const subjOf = b => b.closest('[data-subj]').dataset.subj;
-ACT.subjColor = async b => { await api('/api/subjects', 'PUT', { name: subjOf(b), color: b.value }); await load(); };
+ACT.subjColor = async b => { const r = window.SubjectColor ? SubjectColor.clamp(b.value) : { color: b.value, adjusted: false }; b.value = r.color; const n = b.parentNode.querySelector('.sc-note');
+  if (n) { n.textContent = r.adjusted ? 'Adjusted for readability' : ''; clearTimeout(n._t); if (r.adjusted) n._t = setTimeout(() => { if (n.isConnected) n.textContent = ''; }, 4000); }
+  await api('/api/subjects', 'PUT', { name: subjOf(b), color: r.color }); await load(); if (r.adjusted) { const m = document.querySelector('.subj-row[data-subj="' + CSS.escape(subjOf(b)) + '"] .sc-note'); if (m) { m.textContent = 'Adjusted for readability'; setTimeout(() => { if (m.isConnected) m.textContent = ''; }, 4000); } } };
 ACT.subjGoal = async b => { if (+b.value > 0) track('goal_created', { goal_type: 'subject_weekly' }); await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: Math.round((+b.value || 0) * 60) }); toast('Weekly subject goal saved'); await load(); };
 ACT.subjRename = async b => { const n = subjOf(b), nn = prompt('Rename subject (past sessions are renamed too):', n); if (nn && nn.trim() && nn !== n) { await api('/api/subjects', 'PUT', { name: n, rename: nn.trim() }); if (sel === n) sel = nn.trim(); refresh(); } };
 ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); refresh(); } };
@@ -1088,8 +1267,6 @@ ACT.notifPerm = async () => { if (!('Notification' in window)) return toast('Not
 ACT.saveRem = () => { localStorage.remindAt = $('remT').value; toast($('remT').value ? 'Reminder set' : 'Reminder off'); };
 function checkReminder() { const t = localStorage.remindAt; if (!t || !ST || S?.active) return; const now = new Date(), [h, m] = t.split(':').map(Number), np = TZ.parts(now, utz());
   if (np.h * 60 + np.mi < h * 60 + m || localStorage.remindedOn === ik(now) || ST.today > 0) return; localStorage.remindedOn = ik(now); notify('Time to study 📚', `Nothing logged yet today. Keep your ${ST.streak}-day streak alive!`); }
-ACT.saveBusy = async () => { await api('/api/settings', 'POST', { busyIp: $('sBip').value, busyToken: $('sBtok').value }); toast('Busy Bar saved'); refresh(); };
-ACT.testBusy = async () => { const r = await api('/api/busybar/test', 'POST'); toast(r.ok ? 'Sent! Check your Busy Bar.' : 'Could not reach the Busy Bar'); };
 ACT.delAcct = () => dialog(`<h3>Delete your account?</h3><p class="muted small">This permanently deletes ${esc(ME.username)} and all study data. Any subscription is canceled immediately, with no refund, and lifetime access isn't refundable. This can't be undone.</p>
   <label for="delConf">Type DELETE (or your email) to confirm</label><input id="delConf" name="confirm" autocomplete="off" autocapitalize="characters" required>
   ${ME.hasPassword ? '<label for="delPw">Password</label><input id="delPw" name="password" type="password" autocomplete="current-password" required>' : ''}
@@ -1187,7 +1364,7 @@ function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDef
 // ---------- periodic refresh ----------
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
 setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
-document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && view === 'timer') refresh().catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && (view === 'timer' || (S && S.active))) refresh().catch(() => {}); });
 boot().catch(e => { console.error('boot', e); if (ME) { toast('Something went wrong loading your data. Please refresh.'); return; } // never wipe the page: fall back to the signed-out landing
   document.documentElement.classList.remove('authed'); $('app').classList.add('hid'); $('auth').classList.add('hid'); $('landing').classList.remove('hid'); });
 
