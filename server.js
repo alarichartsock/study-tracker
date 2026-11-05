@@ -538,15 +538,17 @@ function createApp(opts = {}) {
           if (st0.lifetime) return send(res, 409, { error: 'You already have lifetime access.' });
           if (plan === 'lifetime') { if (!bcfg.prices.lifetime) return send(res, 400, { error: 'The lifetime plan is not available.' });
             const customer = await ensureCustomer(user), base = baseUrl(req);
-            const cs = await stripe('POST', '/checkout/sessions', { mode: 'payment', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices.lifetime, quantity: 1 }],
+            const cs = await stripe('POST', '/checkout/sessions', { mode: 'payment', ui_mode: 'hosted_page', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices.lifetime, quantity: 1 }],
               success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, payment_intent_data: { metadata: { uid: String(user.id), plan } },
-              integration_identifier: 'studyhertz-lifetime-qhxmzpta' });
+              billing_address_collection: 'auto', phone_number_collection: { enabled: false }, automatic_tax: { enabled: true }, allow_promotion_codes: false, submit_type: 'auto',
+              origin_context: 'web', integration_identifier: 'hosted_web_0001' });
             ttCheckout(user, cs.id, plan); oaiCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id }); }
           if (st0.subscribed) return send(res, 409, { error: 'You already have a subscription. Use Manage subscription to change it.' });
           const customer = await ensureCustomer(user), base = baseUrl(req);
-          const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
+          const cs = await stripe('POST', '/checkout/sessions', { mode: 'subscription', ui_mode: 'hosted_page', customer, client_reference_id: String(user.id), line_items: [{ price: bcfg.prices[plan], quantity: 1 }],
             success_url: base + '/?billing=success', cancel_url: base + '/?billing=cancel', metadata: { uid: String(user.id), plan, ...gaMeta }, subscription_data: { metadata: { uid: String(user.id) } },
-            integration_identifier: 'studyhertz-subscribe-qhxmzpta' });
+            billing_address_collection: 'auto', phone_number_collection: { enabled: false }, automatic_tax: { enabled: true }, allow_promotion_codes: false, submit_type: 'auto',
+            payment_method_collection: 'always', origin_context: 'web', integration_identifier: 'hosted_web_0001' });
           ttCheckout(user, cs.id, plan); oaiCheckout(user, cs.id, plan); return send(res, 200, { url: cs.url, id: cs.id });
         } catch (e) { if (!opts.quiet) console.error('stripe', p, e.status, e.message); return send(res, 502, { error: 'Billing is temporarily unavailable. Please try again.' }); }
       }
