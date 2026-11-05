@@ -209,6 +209,12 @@ test('favicons: every page points at the wave logo; /favicon.ico and touch icon 
   const ico = await fetch(app.base + '/favicon.ico'); assert.equal(ico.status, 200); assert.equal(ico.headers.get('content-type'), 'image/x-icon'); const ib = Buffer.from(await ico.arrayBuffer()); assert.equal(ib.readUInt16LE(2), 1); assert.equal(ib.readUInt16LE(4), 3);
   const at = Buffer.from(await (await fetch(app.base + '/apple-touch-icon.png')).arrayBuffer()); assert.equal(at.readUInt32BE(16), 180);
   const f32 = Buffer.from(await (await fetch(app.base + '/favicon-32.png')).arrayBuffer()); assert.equal(f32.readUInt32BE(16), 32);
+  const svg = await fetch(app.base + '/accent-icon/4c6ef5.svg'); assert.equal(svg.status, 200); assert.equal(svg.headers.get('content-type'), 'image/svg+xml'); assert.match(svg.headers.get('cache-control'), /immutable/);
+  const body = await svg.text(); assert.match(body, /fill="#4c6ef5"/); assert.match(body, /xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  const dark = await (await fetch(app.base + '/accent-icon/0B0D18.svg')).text(); assert.match(dark, /fill="#0b0d18"/); assert.match(dark, /stroke="#ffffff"/);
+  const light = await (await fetch(app.base + '/accent-icon/ffffff.svg')).text(); assert.match(light, /fill="#ffffff"/); assert.match(light, /stroke="#0b0d18"/);
+  assert.equal((await fetch(app.base + '/accent-icon/zzzzzz.svg')).status, 404); assert.equal((await fetch(app.base + '/accent-icon/4c6ef5.png')).status, 404);
+  assert.match(await (await fetch(app.base + '/')).text(), /apple-touch-icon\.png/); assert.match(await (await fetch(app.base + '/')).text(), /manifest\.webmanifest/);
 });
 
 test('SEO: per-page titles/canonicals, robots, sitemap, og image, JSON-LD, compression and caching', async t => {

@@ -1,11 +1,11 @@
 // Offline-friendly app shell. API calls always go to the network (never cached).
-const CACHE = 'studyhertz-shell-v163';
+const CACHE = 'studyhertz-shell-v164';
 const SHELL = ['/', '/app.js', '/mix.js', '/mcat.js', '/templates.js', '/tz.js', '/practice.js', '/trophy-spec.js', '/trophy-tier.js', '/trophy-art.js', '/color-clamp.js', '/style.css', '/favicon.svg', '/manifest.webmanifest', '/icon-192.png', '/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png', '/consent.js', '/i18n.js', '/privacy', '/terms'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/')) return;
+  if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/') || u.pathname.startsWith('/accent-icon/')) return;
   // network first, fall back to cache when offline
   e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; }).catch(() => caches.match(e.request).then(r => r || caches.match('/'))));
 });
