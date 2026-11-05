@@ -1405,15 +1405,18 @@ function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.
   dots.forEach((el, i) => { const p = list[i]; if (!p) { el.style.cssText = ''; el.classList.remove('on'); return; }
     el.classList.add('on'); el.style.setProperty('--c', p.color); el.style.setProperty('--x', p.x + '%'); el.style.setProperty('--y', p.y + '%'); el.style.setProperty('--s', p.size + 'vmax'); });
   pinIosWash(); }
-/* iPhone Safari leaves a strip above the URL bar that fixed bottom:0 does not cover; that strip paints the root background.
-   Size the default wash to the visual viewport plus that gap. Study-mix clears the inline size so the orbs stay in CSS. */
+/* iPhone Safari fills the strip above the URL bar with background-color and clips a fixed layer's image there.
+   Grow the default wash through that gap. Mix keeps the CSS box so blob percentages do not move; overflow:visible
+   lets the blurs spill, and the absolute root wash covers the strip in both modes. */
 function pinIosWash() {
   const wp = $('wallpaper'); if (!wp || !document.documentElement.classList.contains('ios')) return;
-  const app = $('app'), on = app && !app.classList.contains('hid') && !wp.classList.contains('mix');
-  if (!on) { if (wp.dataset.iosWash) { wp.style.top = wp.style.height = wp.style.bottom = ''; delete wp.dataset.iosWash; } return; }
+  const app = $('app'), on = app && !app.classList.contains('hid');
+  if (!on) { if (wp.dataset.iosWash) { wp.style.top = wp.style.height = wp.style.bottom = wp.style.minHeight = ''; delete wp.dataset.iosWash; } return; }
   const vv = window.visualViewport, top = vv ? vv.offsetTop : 0, vis = vv ? vv.height : window.innerHeight;
   const gap = vv ? Math.max(0, window.innerHeight - vis - top) : 0;
-  wp.dataset.iosWash = '1'; wp.style.top = '0px'; wp.style.bottom = 'auto'; wp.style.height = Math.ceil(top + vis + gap + 160) + 'px';
+  wp.dataset.iosWash = '1';
+  if (wp.classList.contains('mix')) { wp.style.top = wp.style.height = wp.style.bottom = wp.style.minHeight = ''; return; }
+  wp.style.top = '0px'; wp.style.bottom = 'auto'; wp.style.minHeight = ''; wp.style.height = Math.ceil(top + vis + gap + 220) + 'px';
 }
 if (window.visualViewport) { visualViewport.addEventListener('resize', pinIosWash); visualViewport.addEventListener('scroll', pinIosWash); }
 addEventListener('pageshow', pinIosWash);
