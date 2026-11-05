@@ -51,6 +51,13 @@ const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
+// Tab icon for one accent: same tile + contrasting wave as the in-app mark. The hex is the path, so the URL can be cached forever.
+function accentIconSvg(hex) {
+  const n = parseInt(hex, 16), lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  const wave = (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0535) ? '#ffffff' : '#0b0d18';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#' + hex.toLowerCase() + '"/><path d="M4 16c2-7 4-7 6 0s4 7 6 0 4-7 6 0 4 7 6 0" fill="none" stroke="' + wave + '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
 
 // days on which the daily goal was met (weekend goal honored)
 function goalDaysMet(ud, h = stats.ctxOf(ud.settings)) { const g = (ud.settings && ud.settings.goals) || {}, by = stats.computeStats(ud.sessions || [], { dayStartHour: h }).byDay;
@@ -413,6 +420,8 @@ function createApp(opts = {}) {
       if ((M === 'GET' || M === 'HEAD') && (p === '/zh' || p === '/zh/')) { res.writeHead(301, { Location: '/zh-cn/' }); return res.end(); }
       if ((M === 'GET' || M === 'HEAD') && STATIC[p]) return serveStatic(req, res, p);
       const plain = (code, body, type, cc) => { const b = Buffer.from(body); res.writeHead(code, { 'Content-Type': type, 'Content-Length': b.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': cc }); res.end(M === 'HEAD' ? undefined : b); };
+      const accentIcon = /^\/accent-icon\/([0-9a-fA-F]{6})\.svg$/.exec(p);
+      if ((M === 'GET' || M === 'HEAD') && accentIcon) return plain(200, accentIconSvg(accentIcon[1]), 'image/svg+xml', 'public, max-age=31536000, immutable');
       if ((M === 'GET' || M === 'HEAD') && p === INDEXNOW.KEY_PATH) return plain(200, INDEXNOW.KEY, 'text/plain; charset=utf-8', 'public, max-age=86400');
       if ((M === 'GET' || M === 'HEAD') && p === '/robots.txt') return plain(200, SEO.robots(), 'text/plain; charset=utf-8', 'public, max-age=3600');
       if ((M === 'GET' || M === 'HEAD') && p === '/sitemap.xml') return plain(200, SEO.sitemap(sitemapState().lastmod), 'application/xml; charset=utf-8', 'public, max-age=3600');
