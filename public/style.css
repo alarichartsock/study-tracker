@@ -127,6 +127,19 @@ html,body{font-family:var(--font);background:var(--bg);-webkit-font-smoothing:an
 body{min-height:100vh;min-height:100dvh}
 .wallpaper{position:fixed;inset:0;z-index:-1;overflow:hidden;background:var(--bg)}
 .wallpaper i{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(80px);opacity:.55}
+/* App wash (Timer and the other signed-in screens). The shared orbs are filter:blur circles
+   inside a fixed overflow:hidden box; Safari clips that blur into a hard line above the URL bar,
+   and the flat --bg below it reads as a white band. This layer has no filter. Each hue fades to
+   itself at alpha 0 (a stop of transparent is transparent black, which Safari fringes). The box
+   runs past the visual viewport so the wash covers the home-indicator / toolbar strip. Study-mix
+   still uses the orbs. Landing and auth keep their own ::before. */
+body:has(#app:not(.hid)) .wallpaper:not(.mix){inset:-30vh -12vw -45vh;overflow:visible;background:
+  radial-gradient(75vmax 60vmax at 12% 8%,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
+  radial-gradient(70vmax 60vmax at 92% 38%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
+  radial-gradient(80vmax 60vmax at 40% 115%,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%),
+  var(--bg)}
+body:has(#app:not(.hid)) .wallpaper:not(.mix) i{display:none}
+body:has(#app:not(.hid)){overflow-x:clip;min-height:100lvh}
 .wallpaper i:nth-child(1){background:var(--wp1);left:-15vmax;top:-20vmax}
 .wallpaper i:nth-child(2){background:var(--wp2);right:-20vmax;top:10vh}
 .wallpaper i:nth-child(3){background:var(--wp3);left:20vw;bottom:-30vmax;opacity:.4}
