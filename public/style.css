@@ -560,6 +560,20 @@ body:has(#landing:not(.hid))::before,body:has(#auth:not(.hid))::before{content:'
   var(--bg)}
 #landing{position:relative}
 
+/* /affiliates: same three-hue wash as the landing page. The shared .wallpaper orbs are
+   filter:blur(80px) circles inside a fixed overflow:hidden box; Safari clips that blur
+   into hard bands. backdrop-filter on the card then samples the clipped layer as a flat
+   patch behind the card. This layer has no filter or mask, and each hue fades to itself
+   at alpha 0 — a stop of `transparent` is transparent black, which Safari fringes. */
+body.aff-page .wallpaper{display:none}
+body.aff-page::before{content:"";position:fixed;inset:-10vh -10vw;z-index:-1;pointer-events:none;background:
+  radial-gradient(75vmax 60vmax at 12% 8%,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
+  radial-gradient(70vmax 60vmax at 92% 38%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
+  radial-gradient(80vmax 60vmax at 40% 105%,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%),
+  var(--bg)}
+body.aff-page{overflow-x:clip}
+body.aff-page .card.glass{-webkit-backdrop-filter:none;backdrop-filter:none}
+
 /* heatmap: empty days get an outline so they read as "none", distinct from the lightest step */
 .l0{stroke:var(--line);stroke-width:1}.heat-key i.l0{box-shadow:inset 0 0 0 1px var(--line)}
 .pv-heat{display:grid;gap:6px;min-width:0}.pv-dow,.pv-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
