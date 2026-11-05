@@ -240,7 +240,9 @@ test('every public script parses (guards against a stray line comment swallowing
 test('tab favicon follows the accent via an SVG data URI; PNG/ICO and home-screen icons stay brand', () => {
   const fs = require('fs'), path = require('path'), app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'), html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   assert.match(html, /<link rel="icon" id="favSvg" href="\/favicon\.svg\?v=3"/); assert.match(html, /favicon-32\.png/); assert.match(html, /favicon\.ico/);
+  assert.match(html, /apple-touch-icon\.png/); assert.match(html, /manifest\.webmanifest/);
   assert.match(app, /function accentFavicon\(a\)/); assert.match(app, /'data:image\/svg\+xml,'/);
+  assert.match(app, /querySelectorAll\('link\[rel~="icon"\]'\)/); assert.match(app, /if \(l\.id !== 'favSvg'\) l\.remove\(\)/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
 
