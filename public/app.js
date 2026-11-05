@@ -1403,7 +1403,20 @@ function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.
   else if (b.mode === 'accent') { const a = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim() || '#6c8cff'; list = StudyMix.blobs([{ subject: '_', share: 1 }], () => a); }
   wp.classList.toggle('mix', list.length > 0); wp.classList.toggle('drift', b.motion !== false);
   dots.forEach((el, i) => { const p = list[i]; if (!p) { el.style.cssText = ''; el.classList.remove('on'); return; }
-    el.classList.add('on'); el.style.setProperty('--c', p.color); el.style.setProperty('--x', p.x + '%'); el.style.setProperty('--y', p.y + '%'); el.style.setProperty('--s', p.size + 'vmax'); }); }
+    el.classList.add('on'); el.style.setProperty('--c', p.color); el.style.setProperty('--x', p.x + '%'); el.style.setProperty('--y', p.y + '%'); el.style.setProperty('--s', p.size + 'vmax'); });
+  pinIosWash(); }
+/* iPhone Safari leaves a strip above the URL bar that fixed bottom:0 does not cover; that strip paints the root background.
+   Size the default wash to the visual viewport plus that gap. Study-mix clears the inline size so the orbs stay in CSS. */
+function pinIosWash() {
+  const wp = $('wallpaper'); if (!wp || !document.documentElement.classList.contains('ios')) return;
+  const app = $('app'), on = app && !app.classList.contains('hid') && !wp.classList.contains('mix');
+  if (!on) { if (wp.dataset.iosWash) { wp.style.top = wp.style.height = wp.style.bottom = ''; delete wp.dataset.iosWash; } return; }
+  const vv = window.visualViewport, top = vv ? vv.offsetTop : 0, vis = vv ? vv.height : window.innerHeight;
+  const gap = vv ? Math.max(0, window.innerHeight - vis - top) : 0;
+  wp.dataset.iosWash = '1'; wp.style.top = '0px'; wp.style.bottom = 'auto'; wp.style.height = Math.ceil(top + vis + gap + 160) + 'px';
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', pinIosWash); visualViewport.addEventListener('scroll', pinIosWash); }
+addEventListener('pageshow', pinIosWash);
 function mixLegend(m = currentMix()) { if (!m.parts.length) return '<span class="muted small">No study logged ' + WIN_LBL[m.win] + ' yet, so the default background is shown.</span>';
   return m.parts.map(p => '<span class="mix-item"><i class="dot" style="background:' + color(p.subject) + '"></i>' + esc(p.subject) + ' <b>' + Math.round(p.share * 100) + '%</b></span>').join('') + (m.others ? '<span class="muted small">(smaller subjects folded into the biggest)</span>' : ''); }
 function mixChip() { const b = bgSet(); if (b.mode !== 'auto') return '';

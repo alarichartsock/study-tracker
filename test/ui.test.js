@@ -261,11 +261,16 @@ test('tab favicon follows the accent; Safari snapshots a same-origin SVG before 
   assert.match(app, /localStorage\.shTabIcon = hex/); assert.match(app, /old\.replaceWith\(l\); \}/);
   assert.doesNotMatch(app.slice(app.indexOf('function accentFavicon'), app.indexOf('function applyLocalAccent')), /location\.reload|shTabReload|CriOS/);
   assert.match(sw, /pathname\.startsWith\('\/accent-icon\/'\)/);
-  const wash = pub('style.css').match(/body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\)\{[\s\S]*?\}/);
+  const css = pub('style.css'), wash = css.match(/body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\)\{[\s\S]*?\}/);
   assert.ok(wash, 'app wash rule');
   assert.match(wash[0], /inset:-30vh -12vw -45vh/); assert.match(wash[0], /rgb\(from var\(--wp1\) r g b \/ 75%\)/);
   assert.match(wash[0], /rgb\(from var\(--wp3\) r g b \/ 0\)/); assert.doesNotMatch(wash[0], /transparent|filter:/);
-  assert.match(pub('style.css'), /body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\) i\{display:none\}/);
+  assert.match(css, /body:has\(#app:not\(\.hid\)\) \.wallpaper:not\(\.mix\) i\{display:none\}/);
+  assert.doesNotMatch(css, /body:has\(#app:not\(\.hid\)\)\{overflow-x:clip/);
+  assert.match(css, /html\.ios:has\(#app:not\(\.hid\)\)\{background-color:var\(--bg\);background-image:/);
+  assert.match(css, /background-attachment:fixed/); assert.match(css, /env\(safe-area-inset-bottom, 0px\) \+ 160px/);
+  assert.match(html, /documentElement\.classList\.add\('ios'\)/);
+  assert.match(app, /function pinIosWash\(\)/); assert.match(app, /window\.visualViewport/); assert.match(app, /vv\.height/); assert.match(app, /pinIosWash\(\); \}/);
   assert.match(app, /accentFavicon\(a\); }\n\n\/\/ ---------- nav & data/); assert.match(app, /accentFavicon\(a\); accPick\.sync\(\)/);
 });
 
