@@ -123,7 +123,8 @@ textarea{padding:10px 12px;font-size:var(--control-fs);line-height:1.45;box-sizi
 [data-theme=light]{--bg:#eef1f8;--card:rgba(255,255,255,.86);--card2:rgba(20,30,70,.05);--line:rgba(20,30,70,.10);--text:#111827;--muted:#5b6478;--acc:#3a5bf0;--acc2:#2f4cd6;
 --glass:rgba(255,255,255,.48);--glass-strong:rgba(255,255,255,.78);--glass-edge:rgba(255,255,255,.85);--glass-hi:rgba(255,255,255,.6);--shadow:0 10px 30px rgba(30,40,90,.12),0 1px 2px rgba(30,40,90,.08);
 --wp1:#a5b4fc;--wp2:#67e8f9;--wp3:#f9a8d4}
-html,body{font-family:var(--font);background:var(--bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+html,body{font-family:var(--font);background:var(--bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overflow-x:hidden;max-width:100%}
+html{overscroll-behavior-x:none}
 body{min-height:100vh;min-height:100dvh}
 .wallpaper{position:fixed;inset:0;z-index:-1;overflow:hidden;background:var(--bg)}
 .wallpaper i{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(80px);opacity:.55}
@@ -133,31 +134,27 @@ body{min-height:100vh;min-height:100dvh}
    itself at alpha 0 (a stop of transparent is transparent black, which Safari fringes). Study-mix
    still uses the orbs. Landing and auth keep their own ::before. Do not set overflow-x:clip on
    body here: on iOS that clips this fixed layer back to the body box and reopens the band. */
-body:has(#app:not(.hid)) .wallpaper:not(.mix){inset:-30vh -12vw -45vh;overflow:visible;background:
+body:has(#app:not(.hid)) .wallpaper:not(.mix){top:-20vh;right:0;bottom:-40vh;left:0;overflow:visible;background:
   radial-gradient(75vmax 60vmax at 12% 8%,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
   radial-gradient(70vmax 60vmax at 92% 38%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
   radial-gradient(80vmax 60vmax at 40% 115%,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%),
   var(--bg)}
 body:has(#app:not(.hid)) .wallpaper:not(.mix) i{display:none}
 body:has(#app:not(.hid)){min-height:100lvh}
-/* iPhone Safari does not paint a fixed layer's background-image in the strip above the URL bar.
-   It fills that strip with the fixed element's background-color, which was --bg (#eef1f8) — the
-   hard off-white band. The strip is document pixels, so an absolute (not fixed) wash paints it,
-   and the color Safari samples is the same edge color the gradient fades into. Study-mix included:
-   its orbs are not :not(.mix), and overflow:hidden was clipping them on this edge. */
+/* iPhone Safari clips every position:fixed background at the top of the URL bar and paints
+   background-color (--bg, #eef1f8) in the strip above it. Fixed images, negative insets, and an
+   absolute ::before all stayed out of that strip. 100vh is the large viewport and includes the
+   area behind the toolbar, so the wash lives on html and body — not on a fixed layer. The fixed
+   wallpaper is removed in that mode so it cannot cover the strip with a shorter box. Study-mix
+   keeps its orbs. */
 html.ios{--wash-edge:color-mix(in srgb, var(--wp2) 26%, color-mix(in srgb, var(--wp3) 34%, var(--bg)))}
-html.ios:has(#app:not(.hid)){position:relative;background-color:var(--wash-edge);min-height:100%;min-height:100lvh}
-html.ios:has(#app:not(.hid))::before{content:"";position:absolute;z-index:-1;left:-10vw;right:-10vw;top:0;height:calc(100lvh + env(safe-area-inset-bottom, 0px) + 220px);pointer-events:none;background:
-  radial-gradient(75vmax 60vmax at 12vw 8vh,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
-  radial-gradient(70vmax 60vmax at 92vw 36vh,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
-  radial-gradient(90vmax 70vmax at 42vw calc(100lvh - 2vh),rgb(from var(--wp3) r g b / 55%),rgb(from var(--wp3) r g b / 0) 80%),
-  var(--wash-edge)}
-html.ios:has(#app:not(.hid)) .wallpaper{overflow:visible;background-color:var(--wash-edge)}
-html.ios:has(#app:not(.hid)) .wallpaper:not(.mix){background-image:
-  linear-gradient(to bottom, rgb(from var(--wash-edge) r g b / 0) 70%, var(--wash-edge) 100%),
+html.ios:has(#app:not(.hid)),html.ios:has(#app:not(.hid)) body{background-color:var(--wash-edge);background-image:
   radial-gradient(75vmax 60vmax at 12% 8%,rgb(from var(--wp1) r g b / 75%),rgb(from var(--wp1) r g b / 0) 72%),
-  radial-gradient(70vmax 60vmax at 92% 38%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
-  radial-gradient(80vmax 60vmax at 40% 115%,rgb(from var(--wp3) r g b / 45%),rgb(from var(--wp3) r g b / 0) 72%)}
+  radial-gradient(70vmax 60vmax at 100% 36%,rgb(from var(--wp2) r g b / 60%),rgb(from var(--wp2) r g b / 0) 72%),
+  radial-gradient(90vmax 75vmax at 40% 100%,rgb(from var(--wp3) r g b / 55%),rgb(from var(--wp3) r g b / 0) 78%);
+  background-repeat:no-repeat;background-size:100% 100vh;background-position:top center;min-height:100vh}
+html.ios:has(#app:not(.hid)) .wallpaper:not(.mix){display:none}
+html.ios:has(#app:not(.hid)) .wallpaper.mix{overflow:visible;background-color:transparent}
 .wallpaper i:nth-child(1){background:var(--wp1);left:-15vmax;top:-20vmax}
 .wallpaper i:nth-child(2){background:var(--wp2);right:-20vmax;top:10vh}
 .wallpaper i:nth-child(3){background:var(--wp3);left:20vw;bottom:-30vmax;opacity:.4}
