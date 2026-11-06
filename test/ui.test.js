@@ -164,6 +164,21 @@ test('trophy drawings track the cursor while hovered (one part each, faint when 
   assert.match(js, /const hovTick = /); assert.match(js, /h\.ts = el\.closest\('\.trophy\.on, \.t-art\.on'\) \? 1 : \.35/); assert.match(js, /if \(animLevel\(\) < 2\) return; const svg/);
 });
 
+test('load-in plays on a cold open or a view change, not on the periodic same-view refresh', () => {
+  const js = pub('app.js'), css = pub('style.css');
+  assert.match(js, /setInterval\(\(\) => \{ if \(ME && !document\.hidden && !\$\('dlg'\)\.open && \['timer', 'dash'\]\.includes\(view\)\) refresh\(\)/); // the poll stays
+  assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
+  assert.match(js, /if \(enter\) \{ m\.classList\.remove\('enter'\); void m\.offsetWidth; m\.classList\.add\('enter'\); \} else settleLogo\(\)/);
+  assert.match(js, /render\.painted = false; go\(view\)/); // boot is a cold open
+  assert.match(js, /async function refresh\(\) \{ settleLogo\(\); await load\(\); render\(\); \}/);
+  assert.match(js, /function armLogo\(\)/); assert.match(js, /if \(app\.classList\.contains\('hid'\)\) armLogo\(\)/);
+  assert.match(js, /if \(e\.animationName === 'sh-draw'\) w\.classList\.add\('sh-drawn'\)/);
+  assert.match(js, /if \(stay\) el\.classList\.add\('g-stay'\)/); assert.match(js, /cometSync\.k = a\.start/);
+  assert.match(css, /html:not\(\[data-anim="0"\]\) \.sh-wave\.sh-drawn\{animation:none;stroke-dashoffset:0\}/);
+  assert.match(css, /\.g-comet\.g-stay,\[data-run\] \.g-comet\.g-stay,\.running \.tring \.t-comet-svg \.g-comet\.g-stay\{opacity:1;transition:none\}/);
+  assert.match(css, /main\.enter\{animation:enter/);
+});
+
 test('in-app logo mark is an accent-derived hairline wave, synced to the session clock and tied to quality', () => {
   const fs = require('node:fs'), path = require('node:path'), P = f => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8'), js = P('app.js'), html = P('index.html'), css = P('style.css');
   assert.match(html, /<header class="top">\s*<div class="brand"><svg class="sh-mark"/); assert.match(html, /stop-color:var\(--logo-a,var\(--acc\)\)/); assert.match(css, /--acc-b:color-mix\(in srgb,var\(--acc\)/); assert.match(js, /function logoInk\(\)/); assert.match(css, /\.sh-tile\{fill:url\(#shMarkG\)/); assert.match(css, /\.sh-wave\{fill:none;stroke:var\(--logo-ink\)/);
@@ -233,7 +248,7 @@ test('auth/setup screens use the accent logo tile, hairline wave and accent wash
 test('accent changes repaint the logo stops directly and drop the signed-out accent state once signed in', () => {
   const a = pub('app.js');
   assert.match(a, /document\.querySelectorAll\('\.sh-mark linearGradient'\)\.forEach\(g => \{ const st = g\.querySelectorAll\('stop'\)/);
-  assert.match(a, /function applyAccent\(\) \{ queueMicrotask\(applyWallpaper\); if \(ME\) document\.documentElement\.classList\.remove\('acc-local'\);/);
+  assert.match(a, /function applyAccent\(\) \{ settleLogo\(\); queueMicrotask\(applyWallpaper\); if \(ME\) document\.documentElement\.classList\.remove\('acc-local'\);/);
 });
 
 test('trophy colours: site-wide drawings follow the selected subject (else accent), subject groups keep their own colour, fills stay faint', () => {

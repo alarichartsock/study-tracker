@@ -732,6 +732,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .tring .t-comet-svg{position:absolute;inset:0;pointer-events:none}
 .tring .t-comet-svg .g-comet{transition:opacity .6s var(--ease)}
 .running .tring .t-comet-svg .g-comet{opacity:1}
+.g-comet.g-stay,[data-run] .g-comet.g-stay,.running .tring .t-comet-svg .g-comet.g-stay{opacity:1;transition:none} /* same session rebuilt by a refresh: don't fade the hairline in again */
 .tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
 /* Trophy art (trophy-art.js): isometric hairline drawings. One 1.15px round stroke; faces painted with the card colour hide what's behind;
    tops carry a faint accent tint. Earned: accent. Locked: muted, lighter, accent details dashed. */
@@ -775,6 +776,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .sh-wave{fill:none;stroke:var(--logo-ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
 html:not([data-anim="0"]) .sh-wave{stroke-dasharray:1 1;animation:sh-draw .8s var(--ease) .15s both}
 html:not([data-anim="0"]) .sh-wave{animation-delay:.3s}
+html:not([data-anim="0"]) .sh-wave.sh-drawn{animation:none;stroke-dashoffset:0} /* one draw per cold open */
 @keyframes sh-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
 @media (prefers-reduced-motion:reduce){.sh-tile,.sh-wave{animation:none!important;stroke-dasharray:none}}
 
