@@ -86,8 +86,8 @@ document.addEventListener('visibilitychange', () => { document.documentElement.c
 // One shared clock for every circling line (goal rings + timer ring): phase = ((now - session start) / period) mod 1, so they stay in lockstep
 // across re-renders, views and tabs. Each new line is anchored once; returning to a hidden tab restarts them at the synced angle.
 const COMET_S = 9;
-function cometSync(force) { const a = S && S.active; if (!a || a.paused || animLevel() < 2) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S;
-  document.querySelectorAll('.g-comet').forEach(el => { const k = String(a.start), re = force || (el.dataset.sync && el.dataset.sync !== k); if (el.dataset.sync === k && !force) return; el.dataset.sync = k; if (re) { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; } el.style.animationDelay = -ph.toFixed(3) + 's'; }); }
+function cometSync(force) { const a = S && S.active; if (!a || a.paused || animLevel() < 2) return; const ph = ((Date.now() - new Date(a.start)) / 1000) % COMET_S, stay = cometSync.k === a.start;
+  document.querySelectorAll('.g-comet').forEach(el => { const k = String(a.start), re = force || (el.dataset.sync && el.dataset.sync !== k); if (stay) el.classList.add('g-stay'); if (el.dataset.sync === k && !force) return; el.dataset.sync = k; if (re) { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; } el.style.animationDelay = -ph.toFixed(3) + 's'; }); cometSync.k = a.start; }
 const ring = (r, pct, cls = '') => { const c = 2 * Math.PI * r; return `<circle cx="100" cy="100" r="${r}" class="ring-bg"/><circle cx="100" cy="100" r="${r}" class="ring-fg ${cls}" style="stroke-dasharray:${c};stroke-dashoffset:${c * (1 - Math.min(1, Math.max(0, pct)))}${pct > 0.001 ? '' : ';opacity:0'}"/>`; };
 const statCards = items => `<div class="grid4">${items.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
 
@@ -123,7 +123,7 @@ async function boot() {
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   if (sessionStorage.shOauthLogin) { track('login', { method: sessionStorage.shOauthLogin }); sessionStorage.shOauthLogin = sessionStorage.shOauth = ''; }
-  ME = me.user; document.title = BRAND; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); $('app').classList.remove('hid');
+  ME = me.user; document.title = BRAND; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); { const app = $('app'); if (app.classList.contains('hid')) armLogo(); app.classList.remove('hid'); } // showing the shell is a cold open: the logo wave may draw once
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar(); emailBar();
   try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
@@ -134,7 +134,7 @@ async function boot() {
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
     if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
   { const lm = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(BOOT_HASH); if (lm && ME && ME.admin) { UI.logEv = lm[1]; view = "logev"; } else if (BOOT_HASH === '#/admin/live' && ME && ME.admin) view = 'loglive'; }
-  go(view);
+  render.painted = false; go(view); // cold open: the page load-in plays on this paint, not when the same view refreshes
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
@@ -322,7 +322,7 @@ const accPick = (() => { const root = $('accTop'), trig = root && root.querySele
 // first signed-in load: carry a locally chosen accent over to an account that has none (once per user; never overwrites)
 async function carryAccent() { const a = localAccent(); if (!a || !S || S.settings.accent || !ME) return; const k = 'shAccentDone:' + (ME.id || ME.username || ''); try { if (localStorage[k]) return; localStorage[k] = '1'; } catch { return; }
   try { await api('/api/settings', 'POST', { accent: a }); S.settings.accent = a; applyAccent(); } catch { /* ignore */ } }
-function applyAccent() { queueMicrotask(applyWallpaper); if (ME) document.documentElement.classList.remove('acc-local'); { const tc = S && sel && S.subjectMeta[sel] ? color(sel) : '', rs = document.documentElement.style; if (tc) rs.setProperty('--tro', tc); else rs.removeProperty('--tro'); } /* site-wide trophies follow the selected subject, else the accent */ const a = (S && sel && S.subjectMeta[sel]?.color && color(sel)) || S?.settings.accent, /* whole-app accent follows the selected subject (clamped), else the Settings accent; the stored accent is untouched */ st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } accentFavicon(a); }
+function applyAccent() { settleLogo(); queueMicrotask(applyWallpaper); if (ME) document.documentElement.classList.remove('acc-local'); { const tc = S && sel && S.subjectMeta[sel] ? color(sel) : '', rs = document.documentElement.style; if (tc) rs.setProperty('--tro', tc); else rs.removeProperty('--tro'); } /* site-wide trophies follow the selected subject, else the accent */ const a = (S && sel && S.subjectMeta[sel]?.color && color(sel)) || S?.settings.accent, /* whole-app accent follows the selected subject (clamped), else the Settings accent; the stored accent is untouched */ st = document.documentElement.style; if (a) { st.setProperty('--acc', a); st.setProperty('--acc2', a); } else { st.removeProperty('--acc'); st.removeProperty('--acc2'); } accentFavicon(a); }
 
 // ---------- nav & data ----------
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.v));
@@ -349,7 +349,7 @@ let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
 async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); }
-async function refresh() { await load(); render(); }
+async function refresh() { settleLogo(); await load(); render(); } // same view, fresh data: keep the poll, don't replay the load-in
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
 ACT.emailBarSave = async () => { await saveEmail($('ebEmail').value); if (view === 'set') render(); };
@@ -359,7 +359,8 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
-async function render() { if (!S) return; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); AFTER[view]?.(); NOW.draw(); cometSync(); }
+// Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
+async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -804,6 +805,10 @@ const mkLogo = el => { const w = el && el.querySelector('.sh-wave'); if (!w) ret
   const play = () => { if (animLevel() >= 1) { g.classList.add('pv-play'); setTimeout(() => g.classList.add('pv-shown'), 1700); } else g.classList.add('pv-shown'); };
   if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); play(); } }, { threshold: .5 }); io.observe(g); } else play(); })();
 const LOGO = mkLogo(document.querySelector('#app .sh-mark')); mkLogo(document.querySelector('#landing .sh-mark')); mkLogo(document.querySelector('#auth .sh-mark')); // landing: same hairline wave (no session clock there)
+// The wave draws itself once per cold open. After that, .sh-drawn pins it fully stroked so a refresh (or an accent restyle) cannot restart sh-draw. Hold covers the draw itself.
+function armLogo() { const w = document.querySelector('#app .sh-wave'); if (!w) return; w.classList.remove('sh-drawn'); settleLogo.hold = performance.now() + 1200; }
+function settleLogo() { const w = document.querySelector('#app .sh-wave'); if (!w || !render.painted || (settleLogo.hold && performance.now() < settleLogo.hold)) return; w.classList.add('sh-drawn'); }
+document.querySelectorAll('.sh-wave').forEach(w => w.addEventListener('animationend', e => { if (e.animationName === 'sh-draw') w.classList.add('sh-drawn'); }));
 // Trophy drawings respond to the pointer: a gentle lean toward it (earned more, locked faintly), and one small action per trophy on
 // click/tap/Enter (redrawn frame by frame from trophy-art.js). Knob Turner's dial turns while dragged. In the popup, dragging turns the
 // isometric view a few degrees. Reduced motion: no lean, actions show their end state.
