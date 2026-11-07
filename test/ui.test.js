@@ -35,6 +35,13 @@ test('served files have no mojibake', () => {
   for (const f of ['index.html', 'app.js', 'style.css', 'sw.js']) assert.doesNotMatch(pub(f), /\u00c2|\u00e2\u20ac/, f);
 });
 test('service worker cache bumped', () => assert.match(pub('sw.js'), /studyhertz-shell-v\d+/));
+test('session filter controls are excluded from stacked card spacing', () => {
+  const css = pub('style.css');
+  assert.match(css, /\.card:not\(\.filters\)>select\+select\{margin-top:10px\}/);
+  assert.match(css, /\.card:not\(\.filters\)>select\+input/);
+  assert.doesNotMatch(css, /\.card>select\+select\{margin-top:10px\}/);
+  assert.match(pub('app.js'), /class="card filters"/);
+});
 test('add-session shortcut is in the toolbar with a timer fallback', () => {
   assert.match(pub('index.html'), /id="addBtn"[^>]*aria-label="Add session"/);
   const js = pub('app.js');
