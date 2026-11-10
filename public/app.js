@@ -1,7 +1,7 @@
 'use strict';
 const BOOT_HASH = location.hash; window.SH_LANDING = window.SH_LANDING || location.href;
 // per-test landing: /lsat etc. (server sets <html data-exam>) or ?exam=lsat on any landing; value = template id, read by consent.js for analytics
-window.SH_EXAM = (() => { const ok = v => { v = String(v || '').toLowerCase(); if (v === 'usmle') v = 'usmle1'; return v !== 'custom' && window.TEMPLATES && TEMPLATES.get(v) ? v : null; };
+window.SH_EXAM = (() => { const ok = v => { v = String(v || '').toLowerCase(); if (v === 'usmle') v = 'usmle1'; if (v === 'step2') v = 'usmle2'; return v !== 'custom' && window.TEMPLATES && TEMPLATES.get(v) ? v : null; };
   try { return ok(document.documentElement.dataset.exam) || ok(new URL(window.SH_LANDING).searchParams.get('exam')); } catch { return null; } })(); // original URL (UTM/gclid) before replaceState strips the query
 const signupMeta = () => { const o = { lang: (navigator.language || '').slice(0, 35) }; try { const ft = window.SHConsent?.firstTouch(); if (ft) o.ft = ft; if (window.SHConsent?.adsOk?.()) o.ads = true; } catch { /* ignore */ } return o; };
 // GA4 events: queued until consent.js loads; consent.js drops PII and never throws
@@ -248,7 +248,8 @@ async function showAuth(me) { queueMicrotask(applyLocalAccent);
 }
 // landing hero: rotate the test name. The server-rendered "MCAT" stays the accessible text (aria-live off); the other
 // words are aria-hidden clones stacked in the same grid cell (fixed width). Reduced motion: stays on MCAT.
-const HERO_WORDS = ['MCAT', 'LSAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'USMLE', 'DAT'], heroStart = (() => { const i = HERO_WORDS.indexOf(window.SH_EXAM === 'usmle1' ? 'USMLE' : String(window.SH_EXAM || '').toUpperCase()); return i < 0 ? 0 : i; })();
+const HERO_WORD = { usmle1: 'USMLE', usmle2: 'Step 2', bar: 'Bar' };
+const HERO_WORDS = ['MCAT', 'LSAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'USMLE', 'DAT', 'Step 2', 'Bar'], heroStart = (() => { const w = HERO_WORD[window.SH_EXAM] || String(window.SH_EXAM || '').toUpperCase(); const i = HERO_WORDS.indexOf(w); return i < 0 ? 0 : i; })();
 { const w0 = document.querySelector('#heroH1 .rot-w.on'); if (w0 && heroStart) w0.textContent = HERO_WORDS[heroStart]; } // ?exam= on a generic landing (per-test pages are already server-rendered)
 { const rot = document.querySelector('#heroH1 .rot'); if (rot && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
   const first = rot.querySelector('.rot-w').textContent, rest = [...HERO_WORDS.slice(HERO_WORDS.indexOf(first) + 1), ...HERO_WORDS.slice(0, Math.max(0, HERO_WORDS.indexOf(first)))];
