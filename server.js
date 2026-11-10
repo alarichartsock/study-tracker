@@ -110,7 +110,7 @@ function createApp(opts = {}) {
     for (const k of ATTR_KEYS) if (typeof x[k] === 'string' && x[k] && !x[k].includes('@')) a[k] = x[k].slice(0, k === 'referrer' || k === 'landing' ? 200 : k === 'oppref' || k === 'olref' || k === 'ttclid' ? 2000 : 100); // oppref is OpenAI's opaque click id: kept unmodified
     if (a.referrer && !/^https?:\/\//.test(a.referrer)) delete a.referrer; if (a.landing && !a.landing.startsWith('/')) delete a.landing;
     // landing_exam: template id of the per-test landing (/lsat, ?exam=lsat); validated, else derived from the landing path
-    const le = EXAMS.idFor(x.landing_exam) || (a.landing ? EXAMS.idFor((/^\/([a-z]+)\/?(?:\?|$)/.exec(a.landing) || [])[1] || (/[?&]exam=([a-z0-9]+)/i.exec(a.landing) || [])[1]) : null);
+    const le = EXAMS.idFor(x.landing_exam) || (a.landing ? EXAMS.idFor((/^\/([a-z0-9]+)\/?(?:\?|$)/.exec(a.landing) || [])[1] || (/[?&]exam=([a-z0-9]+)/i.exec(a.landing) || [])[1]) : null);
     if (le) a.landing_exam = le; else delete a.landing_exam; return a; }
   const cleanLang = l => { const s = String(l || '').split(',')[0].split(';')[0].trim(); return /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/.test(s) ? s.slice(0, 35) : ''; };
   function saveSignupMeta(u, req, j) { let changed = false;

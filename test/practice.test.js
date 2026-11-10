@@ -19,11 +19,16 @@ test('scales and totals per template match the official rules', () => {
   assert.equal(P.clean('dat', { ...D, bio: 600, gc: 600, oc: 600, pat: 200, rc: 200, qr: 200 }).total, 440); // 2200/5 = 440
   assert.equal(P.clean('lsat', { ...D, lr: 45, total: 165 }).total, 165); assert.equal(P.clean('lsat', { ...D, total: 170 }).rc, null); assert.throws(() => P.clean('lsat', { ...D, total: 119 }), /120 to 180/);
   const u = P.clean('usmle1', { ...D, pct: 72, three: 210 }); assert.equal(u.total, 72); assert.equal(P.SPECS.usmle1.pass.at, 196);
+  const u2 = P.clean('usmle2', { ...D, three: 245, pct: 78, pp: 96 }); assert.equal(u2.total, 245); assert.equal(u2.pct, 78); assert.equal(P.SPECS.usmle2.pass.at, 218);
+  assert.throws(() => P.clean('usmle2', { ...D, pct: 70 }), /3-digit/); assert.throws(() => P.clean('usmle2', { ...D, three: 301 }), /1 to 300/);
+  const bar = P.clean('bar', { ...D, mbe: 142.3, written: 137.7, total: 280 }); assert.equal(bar.total, 280); assert.equal(bar.mbe, 142.3);
+  assert.equal(P.clean('bar', { ...D, total: 660 }).mbe, null); assert.throws(() => P.clean('bar', { ...D, total: 751 }), /0 to 750/);
+  assert.throws(() => P.clean('bar', { ...D, mbe: 200.1, total: 280 }), /MBE/); assert.equal(P.SPECS.bar.pass, undefined);
   const cs = P.cleanCustomSections([{ l: 'Theory', min: 0, max: 50 }, { l: '', min: 0, max: 1 }, { l: 'Ear', min: 10, max: 40 }]); assert.equal(cs.length, 2);
   assert.equal(P.clean('custom', { ...D, s1: 40, s2: 30 }, {}, cs).total, 70); assert.throws(() => P.clean('custom', { ...D, s1: 51, s2: 30 }, {}, cs));
   assert.throws(() => P.cleanCustomSections([{ l: 'X', min: 5, max: 5 }]));
   assert.deepEqual(T.get('dat').score, [200, 600]);
-  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'dat']) { assert.ok(P.SPECS[id] && P.SOURCES[id], id); }
+  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'usmle2', 'bar', 'dat']) { assert.ok(P.SPECS[id] && P.SOURCES[id], id); }
   const s = P.summary([{ id: 1, exam: 'gre', date: '2026-01-01', v: 150, q: 150, total: 300 }, { id: 2, exam: 'gre', date: '2026-02-01', v: 155, q: 160, total: 315 }, { id: 3, date: '2026-03-01', total: 510 }], 'gre');
   assert.equal(s.n, 2); assert.equal(s.change.total.prev, 15); assert.equal(s.change.q.first, 10);
 });

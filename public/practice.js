@@ -21,6 +21,15 @@
     usmle1: { sections: [['pct', '% correct', 'Equated percent correct', 0, 100, 1, true], ['three', '3-digit', '3-digit equivalent (if shown)', 1, 300, 1, false], ['pp', 'Pass prob.', 'Probability of passing %', 0, 100, 1, false]],
       total: { label: 'Percent correct', min: 0, max: 100, step: 1, of: ['pct'], calc: 'first', unit: '%' }, pass: { key: 'three', at: 196 },
       note: 'Step 1 is pass/fail. Practice tests report percent correct; the passing standard is 196 on the 3-digit scale.' },
+    // 3-digit scale is the same 1-300 field Step 1 already uses. Passing standard 218 applies to Step 2 CK exams given on or after July 1, 2025 (usmle.org).
+    usmle2: { sections: [['three', '3-digit', '3-digit score', 1, 300, 1, true], ['pct', '% correct', 'Equated percent correct (if shown)', 0, 100, 1, false], ['pp', 'Pass prob.', 'Probability of passing %', 0, 100, 1, false]],
+      total: { label: '3-digit score', min: 1, max: 300, step: 1, of: ['three'], calc: 'first' }, pass: { key: 'three', at: 218 },
+      note: 'Step 2 CK is reported on a 3-digit scale. The minimum passing score is 218 for exams administered on or after July 1, 2025.' },
+    // Legacy UBE total is a whole number on a 400-point scale; NextGen UBE (first given July 2026) is a whole number from 500 to 750.
+    // MBE and written scaled scores are optional and reported to one decimal (NCBE). No pass line: each jurisdiction sets its own.
+    bar: { sections: [['mbe', 'MBE', 'MBE scaled score (legacy, if shown)', 0, 200, 0.1, false], ['written', 'Written', 'MEE and MPT scaled score (legacy, if shown)', 0, 200, 0.1, false]],
+      total: { label: 'Total score', min: 0, max: 750, step: 1, entered: true },
+      note: 'Legacy UBE totals are on a 400-point scale (MBE 50%, MEE 30%, MPT 20%). NextGen UBE totals are on a 500\u2013750 scale. Jurisdictions set the passing score.' },
     dat: { sections: [['bio', 'Bio', 'Biology', 200, 600, 10, true], ['gc', 'GC', 'General Chemistry', 200, 600, 10, true], ['oc', 'OC', 'Organic Chemistry', 200, 600, 10, true], ['pat', 'PAT', 'Perceptual Ability', 200, 600, 10, true], ['rc', 'RC', 'Reading Comprehension', 200, 600, 10, true], ['qr', 'QR', 'Quantitative Reasoning', 200, 600, 10, true]],
       total: { label: 'Academic Average', min: 200, max: 600, step: 10, of: ['bio', 'gc', 'oc', 'rc', 'qr'], calc: 'avgR10' }, extra: [['Total Science', ['bio', 'gc', 'oc'], 'avgR10']],
       note: 'DAT scale 200\u2013600 (since March 1, 2025). AA = rounded mean of Bio, GC, OC, RC, QR (PAT excluded); Total Science = Bio, GC, OC.' }
@@ -29,7 +38,10 @@
     lsat: 'https://www.lsac.org/lsat/lsat-scoring', gre: 'https://www.ets.org/gre/test-takers/general-test/scores/understand-scores.html',
     gmat: 'https://www.mba.com/exams/gmat-exam/scores', sat: 'https://satsuite.collegeboard.org/scores/what-scores-mean/understanding-scores',
     act: 'https://www.act.org/content/act/en/products-and-services/the-act/scores/understanding-your-scores.html',
-    usmle1: 'https://www.usmle.org/scores-transcripts/examination-results-and-scoring', dat: 'https://www.ada.org/education/testing/exams/dental-admission-test-dat/dat-scores'
+    usmle1: 'https://www.usmle.org/scores-transcripts/examination-results-and-scoring',
+    usmle2: 'https://www.usmle.org/scores-transcripts/examination-results-and-scoring',
+    bar: 'https://www.ncbex.org/exams/ube/ube-scores',
+    dat: 'https://www.ada.org/education/testing/exams/dental-admission-test-dat/dat-scores'
   };
   // Known official / common practice-test sources per template (suggestions for the Source field; free text still allowed).
   // Checked Nov 2026: LSAC LawHub PrepTests; ETS POWERPREP Online 1-2 (free) + POWERPREP PLUS 1-3; GMAT Official Practice Exams 1-6 (1-2 free);
@@ -43,6 +55,8 @@
     sat: [...n('Bluebook Practice Test ', 4, 11), 'Khan Academy', 'Princeton Review', 'Kaplan', 'UWorld'],
     act: [...n('ACT Official Practice Test ', 1, 4), 'Official ACT Prep Guide test', 'Kaplan', 'Princeton Review', 'UWorld'],
     usmle1: [...n('NBME CBSSA ', 28, 34), 'NBME CBSSA 26 (retired)', 'NBME CBSSA 27 (retired)', 'UWSA 1', 'UWSA 2', 'UWSA 3', 'Free 120', 'AMBOSS Self-Assessment'],
+    usmle2: [...n('NBME CCSSA ', 9, 16), 'UWSA 1', 'UWSA 2', 'Free 120', 'AMBOSS Self-Assessment'],
+    bar: ['NCBE practice exam', 'Barbri simulated exam', 'Themis simulated exam', 'Kaplan simulated exam', 'Adaptibar', 'UWorld'],
     dat: ['ADA DAT Practice Test', 'DAT Bootcamp', 'Booster Prep', 'Kaplan', 'Princeton Review', 'Chad\u2019s Prep'],
     custom: []
   };

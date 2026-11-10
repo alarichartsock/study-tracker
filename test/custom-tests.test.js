@@ -8,7 +8,7 @@ async function start() { const app = createApp({ dataFile: path.join(fs.mkdtempS
 const reg = (c, u, template) => c('/api/register', 'POST', { agree: true, birthYear: 1990, username: u, password: 'pass-12345', email: u + '@example.com', template });
 
 test('practice providers: every built-in template has a verified source list', () => {
-  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'dat']) assert.ok(P.PROVIDERS[id].length >= 4, id);
+  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'usmle2', 'bar', 'dat']) assert.ok(P.PROVIDERS[id].length >= 4, id);
   assert.ok(P.PROVIDERS.gmat.includes('GMAT Official Practice Exam 6')); assert.ok(P.PROVIDERS.sat.includes('Bluebook Practice Test 11')); assert.ok(!P.PROVIDERS.sat.includes('Bluebook Practice Test 1'));
   assert.ok(P.PROVIDERS.usmle1.includes('NBME CBSSA 34')); assert.ok(P.PROVIDERS.gre.includes('POWERPREP PLUS Test 3'));
 });

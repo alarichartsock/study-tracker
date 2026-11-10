@@ -1,7 +1,7 @@
 'use strict';
 const BOOT_HASH = location.hash; window.SH_LANDING = window.SH_LANDING || location.href;
 // per-test landing: /lsat etc. (server sets <html data-exam>) or ?exam=lsat on any landing; value = template id, read by consent.js for analytics
-window.SH_EXAM = (() => { const ok = v => { v = String(v || '').toLowerCase(); if (v === 'usmle') v = 'usmle1'; return v !== 'custom' && window.TEMPLATES && TEMPLATES.get(v) ? v : null; };
+window.SH_EXAM = (() => { const ok = v => { v = String(v || '').toLowerCase(); if (v === 'usmle') v = 'usmle1'; if (v === 'step2') v = 'usmle2'; return v !== 'custom' && window.TEMPLATES && TEMPLATES.get(v) ? v : null; };
   try { return ok(document.documentElement.dataset.exam) || ok(new URL(window.SH_LANDING).searchParams.get('exam')); } catch { return null; } })(); // original URL (UTM/gclid) before replaceState strips the query
 const signupMeta = () => { const o = { lang: (navigator.language || '').slice(0, 35) }; try { const ft = window.SHConsent?.firstTouch(); if (ft) o.ft = ft; if (window.SHConsent?.adsOk?.()) o.ads = true; } catch { /* ignore */ } return o; };
 // GA4 events: queued until consent.js loads; consent.js drops PII and never throws
@@ -248,7 +248,8 @@ async function showAuth(me) { queueMicrotask(applyLocalAccent);
 }
 // landing hero: rotate the test name. The server-rendered "MCAT" stays the accessible text (aria-live off); the other
 // words are aria-hidden clones stacked in the same grid cell (fixed width). Reduced motion: stays on MCAT.
-const HERO_WORDS = ['MCAT', 'LSAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'USMLE', 'DAT'], heroStart = (() => { const i = HERO_WORDS.indexOf(window.SH_EXAM === 'usmle1' ? 'USMLE' : String(window.SH_EXAM || '').toUpperCase()); return i < 0 ? 0 : i; })();
+const HERO_WORD = { usmle1: 'USMLE', usmle2: 'Step 2', bar: 'Bar' };
+const HERO_WORDS = ['MCAT', 'LSAT', 'GRE', 'GMAT', 'SAT', 'ACT', 'USMLE', 'DAT', 'Step 2', 'Bar'], heroStart = (() => { const w = HERO_WORD[window.SH_EXAM] || String(window.SH_EXAM || '').toUpperCase(); const i = HERO_WORDS.indexOf(w); return i < 0 ? 0 : i; })();
 { const w0 = document.querySelector('#heroH1 .rot-w.on'); if (w0 && heroStart) w0.textContent = HERO_WORDS[heroStart]; } // ?exam= on a generic landing (per-test pages are already server-rendered)
 { const rot = document.querySelector('#heroH1 .rot'); if (rot && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
   const first = rot.querySelector('.rot-w').textContent, rest = [...HERO_WORDS.slice(HERO_WORDS.indexOf(first) + 1), ...HERO_WORDS.slice(0, Math.max(0, HERO_WORDS.indexOf(first)))];
@@ -355,7 +356,7 @@ async function load() {
   const gen = ++stateGen;
   const [s, st] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]);
   if (gen !== stateGen) return;
-  S = s; ST = st; if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent();
+  S = s; ST = st; if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); syncTabTitle(Date.now(), true); syncTabWorker();
 }
 async function refresh() { settleLogo(); await load(); render(); } // same view, fresh data: keep the poll, don't replay the load-in
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
@@ -368,7 +369,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 // Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
-async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); }
+async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -407,21 +408,42 @@ VIEWS.timer = () => {
 };
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
+// Tab title: the running clock is elapsed study time (or remaining, for a countdown) from timestamps —
+// accum + (now - start) — never a count of ticks. Date.now, not performance.now, so sleep moves it forward.
+// Written on every view. A re-render used to leave a stale title because the write lived behind the timer-view return.
+function tabTitleFor(active, now, signedIn, brand, landing) {
+  if (active && !active.paused) {
+    const elapsed = (+active.accum || 0) + (now - new Date(active.start).getTime()) / 1000;
+    const shown = active.targetSec ? +active.targetSec - elapsed : elapsed;
+    return fmtClock(shown) + ' · ' + active.subject;
+  }
+  return signedIn ? brand : landing;
+}
+function syncTabTitle(now, force) {
+  const t = tabTitleFor(S && S.active, now || Date.now(), !!ME, BRAND, LANDING_TITLE);
+  if (!force && syncTabTitle.last === t) return;
+  syncTabTitle.last = t; document.title = t;
+}
 function tick() {
+  const now = Date.now();
   if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
-  if (!S || view !== 'timer' || !$('clock')) return;
-  const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
+  syncTabTitle(now);
+  if (!S) return;
+  const a = S.active, l = a ? a.accum + (a.paused ? 0 : (now - new Date(a.start)) / 1000) : 0, p = UI.pomo;
+  // Countdown and break end on any view. Otherwise the title sits at 0:00:00 until the timer screen is opened again.
+  if (a?.targetSec && l >= a.targetSec && !a.paused && !tick.busy) { tick.busy = true; finishTarget().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
+  else if (!a && p?.phase === 'break' && (p.until - now) / 1000 <= 0 && !tick.busy) { tick.busy = true; breakOver().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
+  syncTabWorker();
+  if (view !== 'timer' || !$('clock')) return;
+  const today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
-  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown';
-    if (l >= a.targetSec && !a.paused && !tick.busy) { tick.busy = true; finishTarget().catch(e => toast(e.message)).finally(() => (tick.busy = false)); } }
-  else if (!a && p?.phase === 'break') { const left = (p.until - Date.now()) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break';
-    if (left <= 0 && !tick.busy) { tick.busy = true; breakOver().catch(e => toast(e.message)).finally(() => (tick.busy = false)); } }
+  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; }
+  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; }
   else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
   else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
   $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
-  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : ME ? BRAND : LANDING_TITLE;
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
 // shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard
@@ -441,7 +463,56 @@ const NOW = (() => { let el = null, key = '';
           '<div class="now-btns">' + (a.paused ? '<button class="btn small" data-now="resume">Resume</button>' : '<button class="btn small" data-now="pause">Pause</button>') + '<button class="btn small primary" data-now="stop">Stop</button><button class="btn small danger ghost" data-now="discard">Discard</button><button class="icon now-x" data-now="min" aria-label="Minimize session card" title="Minimize">\u2013</button></div>'; }
     const t = el.querySelector('.now-t'); if (t) { const l = live(), v = a.targetSec ? Math.max(0, a.targetSec - l) : l; t.textContent = fmtClock(v); } };
   return { draw }; })();
-setInterval(() => { tick(); checkReminder(); NOW.draw(); }, 1000);
+// Second boundary of the running clock (session start + accum), so the title flips with the elapsed second
+// instead of drifting off a setInterval phase. Background tabs clamp this; the worker and the visible-tab
+// broadcast cover that. No worker while the tab is visible or the clock is stopped — same cost as the old 1s tick.
+function tabClockLive() {
+  const a = S && S.active;
+  if (a && !a.paused) return true;
+  return !!(UI.pomo && UI.pomo.phase === 'break');
+}
+function tabClockDelay(now) {
+  const a = S && S.active; let phase;
+  if (a && !a.paused) phase = ((+a.accum || 0) * 1000 + (now - new Date(a.start).getTime())) % 1000;
+  else if (!a && UI.pomo && UI.pomo.phase === 'break') phase = (UI.pomo.until - now) % 1000;
+  else phase = now % 1000;
+  if (phase < 0) phase += 1000;
+  const wait = phase === 0 ? 1000 : 1000 - phase;
+  return Math.max(50, Math.min(1000, Math.ceil(wait)));
+}
+let tabWorker = null, tabBus = null;
+try { tabBus = new BroadcastChannel('sh-tab-clock'); } catch { /* ignore */ }
+function tabWorkerWanted() { return !!document.hidden && tabClockLive(); }
+function syncTabWorker() {
+  if (!tabWorkerWanted()) { if (tabWorker) { tabWorker.terminate(); tabWorker = null; } return; }
+  if (tabWorker) return;
+  const src = `let t=0;onmessage=function(e){if(e.data!=='run')return;var n=function(){postMessage(0);var w=1000-(Date.now()%1000);t=setTimeout(n,w||1000);};clearTimeout(t);n();};`;
+  try {
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    tabWorker = new Worker(url); URL.revokeObjectURL(url);
+    tabWorker.onmessage = () => { if (!document.hidden) return; const n = Date.now(); if (n - syncTabWorker.heard < 200) return; syncTabWorker.heard = n; tick(); };
+    tabWorker.onerror = () => { try { tabWorker && tabWorker.terminate(); } catch { /* ignore */ } tabWorker = null; };
+    tabWorker.postMessage('run');
+  } catch { tabWorker = null; }
+}
+function armTabClock() {
+  clearTimeout(armTabClock.t);
+  armTabClock.t = setTimeout(() => {
+    tick(); checkReminder(); NOW.draw();
+    if (tabBus && !document.hidden && tabClockLive()) { try { tabBus.postMessage(1); } catch { /* ignore */ } }
+    armTabClock();
+  }, tabClockDelay(Date.now()));
+}
+// Catch up the moment the browser unthrottles us: background -> foreground, sleep/wake, bfcache, window focus.
+function wakeTabClock() { syncTabTitle(Date.now(), true); tick(); NOW.draw(); armTabClock(); syncTabWorker(); }
+if (tabBus) tabBus.onmessage = () => { if (!document.hidden) return; const n = Date.now(); if (n - tabBus.heard < 200) return; tabBus.heard = n; tick(); };
+document.addEventListener('visibilitychange', () => { wakeTabClock(); });
+window.addEventListener('focus', wakeTabClock);
+window.addEventListener('blur', () => { syncTabTitle(Date.now(), true); syncTabWorker(); });
+window.addEventListener('pageshow', wakeTabClock);
+document.addEventListener('resume', wakeTabClock);
+document.addEventListener('freeze', () => syncTabTitle(Date.now(), true));
+armTabClock();
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
@@ -454,7 +525,7 @@ ACT.pick = async b => {
   catch (e) { toast(e.message); }
   await refresh();
 };
-const tFields = () => ({ subject: sel, activity: $('tAct')?.value || '', note: $('tNote')?.value || '' });
+const tFields = () => ({ subject: sel, activity: $('tAct') ? $('tAct').value : (localStorage.activity || ''), note: $('tNote') ? $('tNote').value : '' });
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {
   const f = tFields(), mode = UI.mode, body = { ...f, mode }; localStorage.activity = f.activity;
@@ -662,9 +733,15 @@ function rangeDates(r) { const t = k2d(ST.todayKey), term = S.settings.term;
   switch (r) { case '7d': return [dk(addD(t, -6)), ST.todayKey]; case '30d': return [dk(addD(t, -29)), ST.todayKey]; case 'week': { const m = addD(t, -((t.getDay() + 6) % 7)); return [dk(m), dk(addD(m, 6))]; }
     case 'month': return [dk(new Date(t.getFullYear(), t.getMonth(), 1)), dk(new Date(t.getFullYear(), t.getMonth() + 1, 0))]; case 'term': return term.start && term.end ? [term.start, term.end] : [dk(addD(t, -89)), ST.todayKey];
     case 'year': return [dk(addD(t, -364)), ST.todayKey]; case 'custom': return [UI.cFrom || dk(addD(t, -29)), UI.cTo || ST.todayKey]; default: return [null, null]; } }
-const bars = (obj, total, colFn) => { const e = Object.entries(obj).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]), mx = Math.max(1, ...e.map(x => x[1]));
-  return e.map(([k, v]) => `<div class="sbar"${tip(k + ' \u00b7 ' + fmtH(v) + ' \u00b7 ' + (total ? Math.round(v / total * 100) : 0) + '% of total')}><div class="row"><span>${esc(k)}</span><b>${fmtH(v)} <small class="muted">${total ? Math.round(v / total * 100) : 0}%</small></b></div><div class="bar"><i style="width:${v / mx * 100}%;background:${colFn(k)}"></i></div></div>`).join('') || '<p class="muted small">No data</p>'; };
-const colChart = (arr, labels, names = labels) => { const Y = niceT(Math.max(60, ...arr)), mx = Y.top, tot = arr.reduce((a, b) => a + b, 0); return `<div class="hcols yax">${yGrid(Y.ticks, mx, f => `calc(22px + (100% - 22px) * ${f.toFixed(4)})`)}${arr.map((v, i) => `<div class="hcol"${tip(names[i] + ' \u00b7 ' + fmtH(v) + (tot ? ' \u00b7 ' + Math.round(v / tot * 100) + '%' : ''))}><div class="hcol-bar">${v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : ''}</div><span>${labels[i]}</span></div>`).join('')}</div>`; };
+// Listed subjects first (same order as Settings), then anything logged that is no longer listed. Sessions with no subject are reported as Other and pick up color()'s muted fallback.
+const subjOrder = names => { const have = new Set(names), listed = (S?.subjects || []).filter(s => have.has(s)); return [...listed, ...[...have].filter(s => !listed.includes(s))]; };
+const segTip = (label, s, v) => tip(label + ' \u00b7 ' + s + ': ' + fmtH(v), false);
+const bars = (obj, total, colFn, parts) => { const e = Object.entries(obj).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]), mx = Math.max(1, ...e.map(x => x[1]));
+  return e.map(([k, v]) => { const split = parts && parts[k], segs = split ? subjOrder(Object.keys(split)).filter(s => split[s] > 0).map(s => `<i style="width:${(split[s] / mx * 100).toFixed(2)}%;background:${color(s)}"${segTip(k, s, split[s])}></i>`).join('') : '';
+    return `<div class="sbar"${tip(k + ' \u00b7 ' + fmtH(v) + ' \u00b7 ' + (total ? Math.round(v / total * 100) : 0) + '% of total')}><div class="row"><span>${esc(k)}</span><b>${fmtH(v)} <small class="muted">${total ? Math.round(v / total * 100) : 0}%</small></b></div><div class="bar${segs ? ' segs' : ''}">${segs || `<i style="width:${v / mx * 100}%;background:${colFn(k)}"></i>`}</div></div>`; }).join('') || '<p class="muted small">No data</p>'; };
+const colChart = (arr, labels, names = labels, parts) => { const Y = niceT(Math.max(60, ...arr)), mx = Y.top, tot = arr.reduce((a, b) => a + b, 0), stack = !!(parts && parts.some(p => p && Object.values(p).some(v => v > 0)));
+  return `<div class="hcols yax${stack ? ' stack' : ''}">${yGrid(Y.ticks, mx, f => `calc(22px + (100% - 22px) * ${f.toFixed(4)})`)}${arr.map((v, i) => { const p = parts && parts[i], segs = stack && p ? subjOrder(Object.keys(p)).filter(s => p[s] > 0).map(s => `<i style="height:${(p[s] / mx * 100).toFixed(2)}%;background:${color(s)}"${segTip(names[i], s, p[s])}></i>`).join('') : '';
+    return `<div class="hcol"${tip(names[i] + ' \u00b7 ' + fmtH(v) + (tot ? ' \u00b7 ' + Math.round(v / tot * 100) + '%' : ''))}><div class="hcol-bar">${segs || (v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : '')}</div><span>${labels[i]}</span></div>`; }).join('')}</div>`; };
 function cumHits(cum, top = Math.max(1, ...cum.map(x => x[1]))) { const n = Math.min(cum.length, 60), seg = [...Array(n)].map((_, i) => cum[Math.round((i + 1) / n * cum.length) - 1]);
   return '<div class="cum-hit">' + seg.map(([k, v], i) => { const pk = i ? seg[i - 1][0] : null, d = i ? v - seg[i - 1][1] : 0;
     return '<i' + tip(fmtDate(k2d(k), { month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + ' total' + (i ? ' \u00b7 ' + (d > 0 ? '+' + fmtH(d) : 'no change') + ' since ' + fmtDate(k2d(pk), { month: 'short', day: 'numeric' }) : ''), i === 0 || i === n - 1) + '><b style="bottom:' + ((5 + v / top * 145) / 160 * 100).toFixed(2) + '%"></b></i>'; }).join('') + '</div>'; }
@@ -689,11 +766,11 @@ VIEWS.stats = async () => {
   ${statCards([[`${c.activeDays}/${c.spanDays}`, 'Active days'], [fmtH(c.avgPerActiveDay), 'Avg per active day'], [c.bestDay ? fmtH(c.bestDay[1]) : '–', 'Best day' + (c.bestDay ? ' · ' + fmtDate(k2d(c.bestDay[0])) : '')], [c.avgFocus ? c.avgFocus.toFixed(1) + '★' : '–', 'Avg focus']])}
   <div class="grid2"><div class="card center"><h3>By subject</h3>${donut(c.bySubject, c.total)}<div class="legend" style="justify-content:center">${subjects.map(s => `<span><i class="dot" style="background:${color(s)}"></i>${esc(s)}</span>`).join('')}</div></div>
     <div class="card"><h3>Subjects</h3>${bars(c.bySubject, c.total, color)}</div></div>
-  <div class="grid2"><div class="card"><h3>Activities</h3>${bars(c.byActivity, c.total, () => 'var(--acc)')}</div>
+  <div class="grid2"><div class="card"><h3>Activities</h3>${bars(c.byActivity, c.total, () => 'var(--acc)', c.matrix.activitySubject)}</div>
     <div class="card"><h3>Records</h3><div class="subj-row"><span>Best week</span><b>${c.bestWeek ? `${fmtH(c.bestWeek[1])} <small class="muted">${esc(c.bestWeek[0])}</small>` : '–'}</b></div><div class="subj-row"><span>Best month</span><b>${c.bestMonth ? `${fmtH(c.bestMonth[1])} <small class="muted">${esc(c.bestMonth[0])}</small>` : '–'}</b></div>
       <div class="subj-row"><span>Longest session</span><b>${fmtH(c.longestSession)}</b></div><div class="subj-row"><span>Longest streak</span><b>${c.streak} days</b></div><div class="subj-row"><span>Breaks</span><b>${fmtH(c.breakSec)}</b></div>
       <div class="subj-row"><span>Medals</span><b>${MEDAL_ORDER.map(m => `<span class="medal m-${m}"></span> ${c.medals[m]}`).join(' &nbsp;')}</b></div></div></div>
-  <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))), [...Array(24)].map((_, i) => pad(i) + ':00-' + pad((i + 1) % 24) + ':00'))}</div></div>
+  <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], c.byWeekdaySubject)}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))), [...Array(24)].map((_, i) => pad(i) + ':00-' + pad((i + 1) % 24) + ':00'), c.byHourSubject)}</div></div>
   <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? `<div class="cum-wrap yax">${yGrid(cY.ticks, cMax, f => ((5 + f * 145) / 160 * 100).toFixed(2) + '%')}<svg viewBox="0 0 700 160" preserveAspectRatio="none" style="width:100%;height:160px"><polyline vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="2" points="${cum.map(([, v], i) => `${cum.length > 1 ? i / (cum.length - 1) * 700 : 0},${155 - v / cMax * 145}`).join(' ')}"/></svg>${cumHits(cum, cMax)}</div><p class="muted small">${fmtH(cTot)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
   <div class="card scroll"><h3>Data room · activities × subjects</h3>${acts.length ? dataRoom(acts, subjects, c.matrix.activitySubject, cell) : '<p class="muted small">No data</p>'}</div>
   <div class="card scroll"><h3>Data room · subjects × weeks</h3>${weeks.length ? `<table class="tbl"><tr><th></th>${weeks.map(w => `<th class="num">${esc(w.slice(5))}</th>`).join('')}</tr>${subjects.map(s => `<tr><th><span class="dot" style="background:${color(s)}"></span> ${esc(s)}</th>${weeks.map(w => cell((c.matrix.subjectWeek[s] || {})[w])).join('')}</tr>`).join('')}<tr><th>Total</th>${weeks.map(w => `<td class="num"><b>${fmtH(c.byWeek[w])}</b></td>`).join('')}</tr></table>` : '<p class="muted small">No data</p>'}</div>`;

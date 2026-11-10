@@ -19,9 +19,18 @@
     { id: 'usmle1', name: 'USMLE Step 1', exam: 'USMLE Step 1', score: null,
       subjects: ['Anatomy', 'Behavioral Science', 'Biochemistry', 'Microbiology', 'Pathology', 'Pharmacology', 'Physiology'],
       activities: ['Content review', 'Q-bank', 'Practice test', 'Flashcards', 'Review mistakes'] },
+    // Step 2 CK clinical sciences, in the order of the USMLE content table (usmle.org, Nov 2026). 3-digit scale matches the Step 1 field.
+    { id: 'usmle2', name: 'USMLE Step 2 CK', exam: 'USMLE Step 2 CK', score: [1, 300],
+      subjects: ['Medicine', 'Pediatrics', 'Obstetrics & Gynecology', 'Psychiatry', 'Surgery'],
+      activities: ['Content review', 'Q-bank', 'Practice test', 'Flashcards', 'Review mistakes'] },
     { id: 'dat', name: 'DAT', exam: 'DAT', score: [200, 600], // 200-600 scale since March 1, 2025 (ADA)
       subjects: ['Biology', 'General Chemistry', 'Organic Chemistry', 'Perceptual Ability', 'Reading Comprehension', 'Quantitative Reasoning'],
       activities: ['Content review', 'Practice questions', 'Practice test', 'Flashcards', 'Review mistakes'] },
+    // Legacy UBE still given through the 2026-2028 NextGen transition: 7 MBE subjects, then the MEE and the MPT.
+    // Score span covers both official totals: legacy UBE 0-400, NextGen UBE 500-750. No single passing score (jurisdictions set it).
+    { id: 'bar', name: 'Bar Exam', exam: 'Bar Exam', score: [0, 750],
+      subjects: ['Contracts', 'Constitutional Law', 'Criminal Law and Procedure', 'Evidence', 'Real Property', 'Torts', 'Civil Procedure', 'MEE', 'MPT'],
+      activities: ['Content review', 'Practice questions', 'Essays', 'Performance test', 'Review mistakes'] },
     { id: 'custom', name: 'Custom', exam: 'Exam', score: null, subjects: [], activities: ['Study', 'Practice', 'Review'] }
   ];
   const BY = Object.fromEntries(LIST.map(t => [t.id, t]));

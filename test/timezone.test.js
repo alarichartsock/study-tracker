@@ -45,6 +45,7 @@ test('computeStats: today, streaks across the DST change, late-night sessions on
 test('report: time-of-day buckets use the user zone (spring-forward gap)', () => {
   const r = analytics.report([{ subject: 'CARS', start: '2026-03-08T09:30:00Z', end: '2026-03-08T11:00:00Z' }], { h: stats.ctx(0, LA) });
   assert.equal(r.byHour[1], 1800); assert.equal(r.byHour[2], 0); assert.equal(r.byHour[3], 3600);
+  assert.equal(r.byHourSubject[1].CARS, 1800); assert.equal(r.byHourSubject[3].CARS, 3600); assert.equal(Object.keys(r.byHourSubject[2]).length, 0);
   const t = analytics.report([{ subject: 'CARS', start: '2026-03-08T09:30:00Z', end: '2026-03-08T11:00:00Z' }], { h: stats.ctx(0, 'UTC') });
   assert.equal(t.byHour[9], 1800); assert.equal(t.byHour[10], 3600);
 });
