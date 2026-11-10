@@ -348,7 +348,7 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); }
+async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 async function refresh() { settleLogo(); await load(); render(); } // same view, fresh data: keep the poll, don't replay the load-in
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -360,7 +360,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 // Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
-async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); }
+async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -399,21 +399,42 @@ VIEWS.timer = () => {
 };
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
+// Tab title: the running clock is elapsed study time (or remaining, for a countdown) from timestamps —
+// accum + (now - start) — never a count of ticks. Date.now, not performance.now, so sleep moves it forward.
+// Written on every view. A re-render used to leave a stale title because the write lived behind the timer-view return.
+function tabTitleFor(active, now, signedIn, brand, landing) {
+  if (active && !active.paused) {
+    const elapsed = (+active.accum || 0) + (now - new Date(active.start).getTime()) / 1000;
+    const shown = active.targetSec ? +active.targetSec - elapsed : elapsed;
+    return fmtClock(shown) + ' · ' + active.subject;
+  }
+  return signedIn ? brand : landing;
+}
+function syncTabTitle(now, force) {
+  const t = tabTitleFor(S && S.active, now || Date.now(), !!ME, BRAND, LANDING_TITLE);
+  if (!force && syncTabTitle.last === t) return;
+  syncTabTitle.last = t; document.title = t;
+}
 function tick() {
+  const now = Date.now();
   if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
-  if (!S || view !== 'timer' || !$('clock')) return;
-  const a = S.active, l = live(), p = UI.pomo, today = ST.today + l;
+  syncTabTitle(now);
+  if (!S) return;
+  const a = S.active, l = a ? a.accum + (a.paused ? 0 : (now - new Date(a.start)) / 1000) : 0, p = UI.pomo;
+  // Countdown and break end on any view. Otherwise the title sits at 0:00:00 until the timer screen is opened again.
+  if (a?.targetSec && l >= a.targetSec && !a.paused && !tick.busy) { tick.busy = true; finishTarget().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
+  else if (!a && p?.phase === 'break' && (p.until - now) / 1000 <= 0 && !tick.busy) { tick.busy = true; breakOver().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
+  syncTabWorker();
+  if (view !== 'timer' || !$('clock')) return;
+  const today = ST.today + l;
   let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
-  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown';
-    if (l >= a.targetSec && !a.paused && !tick.busy) { tick.busy = true; finishTarget().catch(e => toast(e.message)).finally(() => (tick.busy = false)); } }
-  else if (!a && p?.phase === 'break') { const left = (p.until - Date.now()) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break';
-    if (left <= 0 && !tick.busy) { tick.busy = true; breakOver().catch(e => toast(e.message)).finally(() => (tick.busy = false)); } }
+  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; }
+  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; }
   else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
   else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
   $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
-  document.title = a && !a.paused ? `${fmtClock(shown)} · ${a.subject}` : ME ? BRAND : LANDING_TITLE;
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
 // shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard
@@ -433,14 +454,63 @@ const NOW = (() => { let el = null, key = '';
           '<div class="now-btns">' + (a.paused ? '<button class="btn small" data-now="resume">Resume</button>' : '<button class="btn small" data-now="pause">Pause</button>') + '<button class="btn small primary" data-now="stop">Stop</button><button class="btn small danger ghost" data-now="discard">Discard</button><button class="icon now-x" data-now="min" aria-label="Minimize session card" title="Minimize">\u2013</button></div>'; }
     const t = el.querySelector('.now-t'); if (t) { const l = live(), v = a.targetSec ? Math.max(0, a.targetSec - l) : l; t.textContent = fmtClock(v); } };
   return { draw }; })();
-setInterval(() => { tick(); checkReminder(); NOW.draw(); }, 1000);
+// Second boundary of the running clock (session start + accum), so the title flips with the elapsed second
+// instead of drifting off a setInterval phase. Background tabs clamp this; the worker and the visible-tab
+// broadcast cover that. No worker while the tab is visible or the clock is stopped — same cost as the old 1s tick.
+function tabClockLive() {
+  const a = S && S.active;
+  if (a && !a.paused) return true;
+  return !!(UI.pomo && UI.pomo.phase === 'break');
+}
+function tabClockDelay(now) {
+  const a = S && S.active; let phase;
+  if (a && !a.paused) phase = ((+a.accum || 0) * 1000 + (now - new Date(a.start).getTime())) % 1000;
+  else if (!a && UI.pomo && UI.pomo.phase === 'break') phase = (UI.pomo.until - now) % 1000;
+  else phase = now % 1000;
+  if (phase < 0) phase += 1000;
+  const wait = phase === 0 ? 1000 : 1000 - phase;
+  return Math.max(50, Math.min(1000, Math.ceil(wait)));
+}
+let tabWorker = null, tabBus = null;
+try { tabBus = new BroadcastChannel('sh-tab-clock'); } catch { /* ignore */ }
+function tabWorkerWanted() { return !!document.hidden && tabClockLive(); }
+function syncTabWorker() {
+  if (!tabWorkerWanted()) { if (tabWorker) { tabWorker.terminate(); tabWorker = null; } return; }
+  if (tabWorker) return;
+  const src = `let t=0;onmessage=function(e){if(e.data!=='run')return;var n=function(){postMessage(0);var w=1000-(Date.now()%1000);t=setTimeout(n,w||1000);};clearTimeout(t);n();};`;
+  try {
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    tabWorker = new Worker(url); URL.revokeObjectURL(url);
+    tabWorker.onmessage = () => { if (!document.hidden) return; const n = Date.now(); if (n - syncTabWorker.heard < 200) return; syncTabWorker.heard = n; tick(); };
+    tabWorker.onerror = () => { try { tabWorker && tabWorker.terminate(); } catch { /* ignore */ } tabWorker = null; };
+    tabWorker.postMessage('run');
+  } catch { tabWorker = null; }
+}
+function armTabClock() {
+  clearTimeout(armTabClock.t);
+  armTabClock.t = setTimeout(() => {
+    tick(); checkReminder(); NOW.draw();
+    if (tabBus && !document.hidden && tabClockLive()) { try { tabBus.postMessage(1); } catch { /* ignore */ } }
+    armTabClock();
+  }, tabClockDelay(Date.now()));
+}
+// Catch up the moment the browser unthrottles us: background -> foreground, sleep/wake, bfcache, window focus.
+function wakeTabClock() { syncTabTitle(Date.now(), true); tick(); NOW.draw(); armTabClock(); syncTabWorker(); }
+if (tabBus) tabBus.onmessage = () => { if (!document.hidden) return; const n = Date.now(); if (n - tabBus.heard < 200) return; tabBus.heard = n; tick(); };
+document.addEventListener('visibilitychange', () => { wakeTabClock(); });
+window.addEventListener('focus', wakeTabClock);
+window.addEventListener('blur', () => { syncTabTitle(Date.now(), true); syncTabWorker(); });
+window.addEventListener('pageshow', wakeTabClock);
+document.addEventListener('resume', wakeTabClock);
+document.addEventListener('freeze', () => syncTabTitle(Date.now(), true));
+armTabClock();
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
 ACT.useSuggestion = () => { UI.target = Math.round(ST.suggestion / 60); localStorage.countdownMin = UI.target; render(); };
 ACT.goto = b => go(b.dataset.v);
 ACT.pick = async b => { if (S.active && !S.active.paused) return toast('Pause or stop the timer to switch subjects'); sel = localStorage.subject = b.dataset.s; if (S.active) S.active.subject = sel; applyAccent(); ST = await api('/api/stats?subject=' + encodeURIComponent(sel)); render(); };
-const tFields = () => ({ subject: sel, activity: $('tAct')?.value || '', note: $('tNote')?.value || '' });
+const tFields = () => ({ subject: sel, activity: $('tAct') ? $('tAct').value : (localStorage.activity || ''), note: $('tNote') ? $('tNote').value : '' });
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {
   const f = tFields(), mode = UI.mode, body = { ...f, mode }; localStorage.activity = f.activity;
