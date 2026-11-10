@@ -18,7 +18,17 @@ const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sh-tpl-')), '
 
 test('templates: MCAT is exactly the legacy defaults; every template is well-formed; resolve cleans input', () => {
   const m = T.get('mcat'); assert.deepEqual(m.subjects, DEFAULT_SUBJECTS); assert.deepEqual(m.activities, DEFAULT_ACTIVITIES); assert.deepEqual(m.score, [472, 528]);
-  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'dat', 'custom']) assert.ok(T.get(id), id);
+  for (const id of ['lsat', 'gre', 'gmat', 'sat', 'act', 'usmle1', 'usmle2', 'dat', 'bar', 'custom']) assert.ok(T.get(id), id);
+  assert.deepEqual(T.get('usmle1').subjects, ['Anatomy', 'Behavioral Science', 'Biochemistry', 'Microbiology', 'Pathology', 'Pharmacology', 'Physiology']);
+  assert.equal(T.get('usmle1').score, null);
+  assert.deepEqual(T.get('usmle2').subjects, ['Medicine', 'Pediatrics', 'Obstetrics & Gynecology', 'Psychiatry', 'Surgery']);
+  assert.deepEqual(T.get('usmle2').score, [1, 300]);
+  assert.deepEqual(T.get('bar').subjects, ['Contracts', 'Constitutional Law', 'Criminal Law and Procedure', 'Evidence', 'Real Property', 'Torts', 'Civil Procedure', 'MEE', 'MPT']);
+  assert.deepEqual(T.get('bar').score, [0, 750]);
+  const Color = require('../public/color-clamp.js'), { PALETTE } = require('../lib/store');
+  for (const id of ['usmle2', 'bar']) { const cols = T.get(id).subjects.map((_, i) => Color.color(PALETTE[i % PALETTE.length]));
+    assert.equal(new Set(cols).size, T.get(id).subjects.length, id + ' colors collide');
+    for (const c of cols) { assert.ok(Color.contrast(c, '#ffffff') >= 3, c); assert.ok(Color.contrast(c, '#161920') >= 3, c); } }
   for (const t of T.LIST) { assert.ok(t.activities.length); if (t.score) assert.ok(t.score[0] < t.score[1]); if (t.id !== 'custom') assert.ok(t.subjects.length >= 2, t.id); }
   assert.deepEqual(T.get('lsat').score, [120, 180]);
   assert.deepEqual(T.resolve('custom', [' Algebra ', 'algebra', '', 'Geometry'], []).subjects, ['Algebra', 'Geometry']);
@@ -40,6 +50,36 @@ test('signup with a template sets subjects/activities; custom lists; bad templat
   assert.equal((await c('/api/register', 'POST', { ...L, username: 'cus', email: 'c@example.com', template: 'bogus', subjects: ['X'] })).status, 400);
   assert.equal((await c('/api/register', 'POST', { ...L, username: 'cus', email: 'c@example.com', template: 'custom', subjects: ['Organ', 'Theory'], activities: ['Scales'] })).status, 200);
   s = (await c('/api/state')).body; assert.equal(s.template, 'custom'); assert.deepEqual(s.subjects, ['Organ', 'Theory']); assert.deepEqual(s.activities, ['Scales']);
+});
+
+test('Step 2 and Bar signup, and switching exams, keep MCAT sessions and practice scores', async t => {
+  const app = await start(tmp()); t.after(app.close);
+  const a = app.client();
+  assert.equal((await a('/api/register', 'POST', { ...L, username: 'boss', email: 'b@example.com', template: 'usmle2' })).status, 200);
+  let s = (await a('/api/state')).body;
+  assert.equal(s.template, 'usmle2'); assert.deepEqual(s.subjects, T.get('usmle2').subjects);
+  assert.ok(s.subjects.every(n => /^#[0-9a-f]{6}$/i.test(s.subjectMeta[n].color)));
+  assert.equal((await a('/api/exams', 'POST', { name: 'USMLE Step 2 CK', date: '2027-06-15', grade: 245 })).status, 200);
+  assert.equal((await a('/api/exams', 'POST', { name: 'USMLE Step 2 CK', date: '2027-06-16', grade: 301 })).status, 400);
+  const b = app.client();
+  assert.equal((await b('/api/register', 'POST', { ...L, username: 'mcat', email: 'm@example.com' })).status, 200);
+  const sess = await b('/api/sessions', 'POST', { subject: 'CARS', activity: 'Flashcards', start: '2026-10-01T15:00:00.000Z', end: '2026-10-01T16:00:00.000Z' });
+  assert.equal(sess.status, 200);
+  const px = await b('/api/practice', 'POST', { date: '2026-10-01', cp: 127, cars: 126, bb: 128, ps: 129 });
+  assert.equal(px.status, 200); assert.equal(px.body.total, 510);
+  const before = (await b('/api/state')).body;
+  const sw = await b('/api/template', 'POST', { template: 'bar' });
+  assert.equal(sw.status, 200);
+  assert.ok(sw.body.subjects.includes('CARS')); assert.ok(sw.body.subjects.includes('MPT')); assert.ok(sw.body.subjects.includes('Contracts'));
+  const after = (await b('/api/state')).body;
+  assert.equal(after.template, 'bar'); assert.deepEqual(after.sessions, before.sessions); assert.equal(after.practice[0].total, 510); assert.equal(after.practice[0].exam, undefined);
+  const ck = await b('/api/practice', 'POST', { date: '2026-10-02', total: 280, mbe: 145 });
+  assert.equal(ck.status, 200); assert.equal(ck.body.exam, 'bar'); assert.equal(ck.body.total, 280);
+  assert.equal((await b('/api/practice/' + px.body.id, 'PUT', { cars: 127 })).status, 400);
+  const back = await b('/api/template', 'POST', { template: 'mcat' });
+  assert.equal(back.body.template, 'mcat');
+  assert.ok(T.get('mcat').subjects.every(n => back.body.subjects.includes(n)));
+  assert.equal((await b('/api/state')).body.practice.find(x => x.id === px.body.id).total, 510);
 });
 
 test('switching template keeps subjects/activities with logged time; sessions untouched; activity rename', async t => {

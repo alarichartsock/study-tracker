@@ -105,7 +105,7 @@ test('landing v2: tour tabs, how it works, MCAT sections, FAQ, repeated tracked 
 
 test('MCAT landing hero: trial CTA above the fold and inert HTML previews with sample data', () => {
   const h = pub('index.html'), srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(h, /<h1 id=\"heroH1\" class=\"h1-en\"><span class=\"g\">Track every <\/span><span class=\"rot\" aria-live=\"off\"><span class=\"rot-w on\">MCAT<\/span><\/span><span class=\"vh\"> \(or LSAT, GRE, GMAT, SAT, ACT, USMLE, DAT\)<\/span><br><span class=\"g\">study hour<\/span><\/h1>/); assert.match(h, /id="heroCta" data-cta="hero" data-cta-id="hero_trial">Start free 30-day trial</);
+  assert.match(h, /<h1 id=\"heroH1\" class=\"h1-en\"><span class=\"g\">Track every <\/span><span class=\"rot\" aria-live=\"off\"><span class=\"rot-w on\">MCAT<\/span><\/span><span class=\"vh\"> \(or LSAT, GRE, GMAT, SAT, ACT, USMLE, DAT, Step 2, Bar\)<\/span><br><span class=\"g\">study hour<\/span><\/h1>/); assert.match(h, /id="heroCta" data-cta="hero" data-cta-id="hero_trial">Start free 30-day trial</);
   assert.equal((h.match(/class="pv" role="img" aria-label="Preview/g) || []).length, 6); assert.match(h, /not real user data/);
   assert.ok(!/shot-[a-z]+\.webp/.test(h + srv), 'no webp screenshots left'); assert.match(h, /id="aAgree"/); assert.ok(!/free to use/.test(h));
 });

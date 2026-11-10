@@ -40,6 +40,28 @@ test('landing_exam: saved from first touch at signup (validated / derived from l
   assert.deepEqual(r.body.summary.byExam, { lsat: 1, usmle1: 1, gre: 1, none: 1 });
 });
 
+test('step2 and bar landings use their template ids and do not repeat Step 1 copy', async t => {
+  const s = await start(); t.after(s.close);
+  const step = await (await fetch(s.base + '/step2')).text(), bar = await (await fetch(s.base + '/bar')).text();
+  assert.match(step, /data-exam="usmle2"/); assert.match(step, /USMLE Step 2 CK Study Tracker/); assert.match(step, /Medicine/); assert.match(step, /Surgery/);
+  assert.match(bar, /data-exam="bar"/); assert.match(bar, /Bar Exam Study Tracker/); assert.match(bar, /Civil Procedure/); assert.match(bar, />MPT</);
+  const colors = [...bar.matchAll(/sec-card" style="--c:(#[0-9a-f]{6})/g)].map(m => m[1]);
+  assert.equal(colors.length, 9); assert.equal(new Set(colors).size, 9);
+  const usmle = await (await fetch(s.base + '/usmle')).text();
+  assert.match(usmle, /data-exam="usmle1"/); assert.match(usmle, /Anatomy|Pathology/); assert.doesNotMatch(usmle.slice(0, usmle.indexOf('<div id="app"')), /USMLE Step 2 CK Study Tracker/);
+});
+
+test('step2 landing path attributes the signup to the Step 2 template', async t => {
+  const s = await start(); t.after(s.close);
+  const client = () => { let ck = ''; return async (p, m = 'GET', b) => { const r = await fetch(s.base + p, { method: m, headers: { 'Content-Type': 'application/json', ...(ck ? { Cookie: ck } : {}) }, body: b ? JSON.stringify(b) : undefined }); const sc = r.headers.get('set-cookie'); if (sc) ck = sc.split(';')[0]; return { status: r.status, body: await r.json() }; }; };
+  const reg = (c, u, ft) => c('/api/register', 'POST', { agree: true, birthYear: 1990, username: u, password: 'pass-12345', email: u + '@example.com', ft });
+  const adm = client(); await reg(adm, 'admin2', {}); await adm('/api/admin/config', 'POST', { openRegistration: true });
+  await reg(client(), 'ckuser', { landing: '/step2?utm_source=x' });
+  await reg(client(), 'baruser', { landing: '/bar' });
+  const U = n => s.app.store.db.users.find(u => u.username === n).attribution || {};
+  assert.equal(U('ckuser').landing_exam, 'usmle2'); assert.equal(U('baruser').landing_exam, 'bar');
+});
+
 test('per-test landing body copy is test-specific with its own FAQ JSON-LD', () => {
   const fs = require('fs'); const X = require('../lib/exams'); const src = fs.readFileSync(require('path').join(__dirname, '../public/index.html'), 'utf8');
   assert.equal(X.examHead(src, 'mcat', 'https://x').includes('Built around the MCAT'), true);
