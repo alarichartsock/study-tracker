@@ -108,7 +108,7 @@ const refCode = () => localStorage.shRef || '';
 { const q = new URLSearchParams(location.search), aff = q.get('aff'), rc = q.get('ref'), code = aff && /^[A-Za-z0-9_-]{3,24}$/.test(aff) ? 'aff:' + aff.toUpperCase() : rc && /^[A-Za-z0-9]{6,12}$/.test(rc) ? 'ref:' + rc.toUpperCase() : '';
   if (code) { let done = {}; try { done = JSON.parse(localStorage.shLeads || '{}'); } catch { /* ignore */ } if (!done[code]) { done[code] = 1; try { localStorage.shLeads = JSON.stringify(done); } catch { /* ignore */ } track('generate_lead', { lead_source: code.slice(0, 3) === 'aff' ? 'affiliate' : 'referral', currency: 'USD', value: 0 }); } }
   if (aff && code.slice(0, 3) === 'aff') fetch('/api/aff/click', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ code: aff }) }).catch(() => {}); }
-const affQ = new URLSearchParams(location.search).get('affiliate'); let BILL = { enabled: false }; const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
+const affQ = new URLSearchParams(location.search).get('affiliate'); let BILL = { enabled: false }; const emailQ = new URLSearchParams(location.search).get('email'); const billingQ = new URLSearchParams(location.search).get('billing'); if (billingQ) history.replaceState(null, '', location.pathname);
 { const q = new URLSearchParams(location.search); if (q.has('welcome') || q.has('oauth_error') || q.has('complete_signup')) { oauthPending = q.has('complete_signup'); if (q.get('welcome') === '1') { localStorage.onboard = '1'; setTimeout(() => window.SHConsent?.signup(), 0); const m = sessionStorage.shOauth || 'google'; sessionStorage.shOauth = ''; track('sign_up', { method: m }); track('trial_start', { method: m, trial_days: 30 }); } }
 { const q = new URLSearchParams(location.search); if (!q.has('welcome') && !q.has('oauth_error') && !q.has('complete_signup') && sessionStorage.shOauth) sessionStorage.shOauthLogin = sessionStorage.shOauth; if (q.has('oauth_error')) sessionStorage.shOauth = ''; oauthErr = q.get('oauth_error') || ''; const kq = new URLSearchParams(); ['msclkid', 'ttclid'].forEach(k => { const v = q.get(k); if (v) kq.set(k, v); }); const ks = kq.toString(); history.replaceState(null, '', location.pathname + (ks ? '?' + ks : '') + location.hash); } } // keep Microsoft Ads msclkid (UET) and TikTok ttclid (pixel)
 fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing && c.billing.plans && !c.billing.plans.lifetime) $('planLifetime')?.classList.add('hid'); if (c && c.billing === null) { $('pricing')?.classList.add('hid'); $('pricingLink')?.classList.add('hid'); return; } // pricing is in the HTML; hide only when billing is explicitly off
@@ -116,6 +116,7 @@ fetch('/api/public-config').then(r => r.json()).then(c => { if (c && c.billing &
 // signed-out defaults when /api/me is unreachable (crawlers, outages): show the landing page, never an error page
 const ME_FALLBACK = { user: null, needsSetup: false, registrationOpen: true, oauth: [] };
 async function boot() {
+  showEmailResult();
   if (oauthErr) landingDone = true;
   const me = await api('/api/me').catch(() => ME_FALLBACK);
   if (!me.user && oauthPending) { oauthPending = false; const pe = await api('/api/oauth/pending').catch(() => ({})); if (pe.pending) { oauthProvider = pe.provider; landingDone = true; authMode = 'oauth'; showAuth(me); return; } }
@@ -179,15 +180,29 @@ function billBar() {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const EMAIL_SNOOZE_MS = 3 * 864e5;
 function emailBar() {
-  let el = $('emailBar'); if (!el) { el = document.createElement('div'); el.id = 'emailBar'; el.className = 'billbar emailbar'; el.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); Promise.resolve(ACT[t.dataset.act](t, e)).catch(err => toast(err.message)); } });
+  let el = $('emailBar'); if (!el) { el = document.createElement('div'); el.id = 'emailBar'; el.className = 'billbar emailbar'; el.setAttribute('role', 'status'); el.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t && ACT[t.dataset.act]) { e.preventDefault(); Promise.resolve(ACT[t.dataset.act](t, e)).catch(err => toast(err.message)); } });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'ebEmail') { e.preventDefault(); ACT.emailBarSave().catch(err => toast(err.message)); } }); ($('billBar') || $('app').querySelector('header.top')).after(el); }
   let snoozed = 0; try { snoozed = +localStorage['shEmailSnooze' + ME.id] || 0; } catch { /* ignore */ }
-  const show = !!ME && !ME.email && Date.now() - snoozed > EMAIL_SNOOZE_MS;
-  el.innerHTML = show ? `<span>Add an email to your account so you can recover it and get important account updates.</span><input id="ebEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" aria-label="Email" maxlength="254"><button class="btn primary small" data-act="emailBarSave">Save email</button><button class="btn ghost small" data-act="emailBarLater">Not now</button>` : '';
-  el.classList.toggle('hid', !show);
+  const needEmail = !!ME && !ME.email && Date.now() - snoozed > EMAIL_SNOOZE_MS;
+  const needVerify = !!ME && !!ME.email && !ME.emailVerified;
+  el.innerHTML = needEmail ? `<span>Add an email to your account so you can recover it and get important account updates.</span><input id="ebEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" aria-label="Email" maxlength="254"><button class="btn primary small" data-act="emailBarSave">Save email</button><button class="btn ghost small" data-act="emailBarLater">Not now</button>`
+    : needVerify ? `<span>Verify <b>${esc(ME.email)}</b> so we know this address is yours. You can keep using StudyHertz either way.</span><button class="btn primary small" data-act="emailResend">Resend email</button>` : '';
+  el.classList.toggle('hid', !(needEmail || needVerify));
+}
+let emailResultShown = false;
+function showEmailResult() {
+  if (emailResultShown || (emailQ !== 'verified' && emailQ !== 'expired' && emailQ !== 'invalid')) return;
+  emailResultShown = true;
+  const ok = emailQ === 'verified', expired = emailQ === 'expired';
+  const g = document.createElement('div'); g.id = 'emailResult'; g.className = 'auth terms-gate';
+  g.innerHTML = `<div class="glass sheet auth-card" role="dialog" aria-modal="true" aria-labelledby="evH"><div class="brand big"><img src="/favicon.svg" alt="StudyHertz logo"> <span>StudyHertz</span></div>
+    <h2 id="evH">${ok ? 'Email verified' : expired ? 'Link expired' : 'Link not valid'}</h2>
+    <p class="muted">${ok ? 'This address is confirmed. You can keep using StudyHertz.' : expired ? 'That verification link has expired. Sign in and send a new one from the banner.' : 'That verification link is invalid or was already used.'}</p>
+    <button class="btn primary" type="button" id="evOk">Continue</button></div>`;
+  document.body.appendChild(g); $('evOk').onclick = () => g.remove();
 }
 async function saveEmail(email, password) { const v = String(email || '').trim(); if (!EMAIL_RE.test(v)) throw new Error('Enter a valid email address');
-  const r = await api('/api/account/email', 'POST', { email: v, ...(password ? { password } : {}) }); ME = r.user; emailBar(); toast('Email saved'); track('email_added'); return r; }
+  const r = await api('/api/account/email', 'POST', { email: v, ...(password ? { password } : {}) }); ME = r.user; emailBar(); toast(r.verificationSent ? 'Email saved. Check your inbox to verify it.' : 'Email saved'); track('email_added'); return r; }
 function showPaywall(blocked) {
   if (!BILL.enabled) return; sessionStorage.paywallSeen = '1'; track('paywall_view', { trial_ended: !!BILL.readOnly, blocked: !!blocked }); window.SHConsent?.viewList('paywall', BILL.plans && !BILL.plans.lifetime ? ['monthly', 'yearly'] : undefined);
   let g = $('paywall'); if (!g) { g = document.createElement('div'); g.id = 'paywall'; g.className = 'auth terms-gate'; document.body.appendChild(g); }
@@ -354,6 +369,10 @@ const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (
 const VIEWS = {}, AFTER = {}, ACT = {};
 ACT.emailBarSave = async () => { await saveEmail($('ebEmail').value); if (view === 'set') render(); };
 ACT.emailBarLater = () => { try { localStorage['shEmailSnooze' + ME.id] = String(Date.now()); } catch { /* ignore */ } emailBar(); };
+ACT.emailResend = async () => {
+  const r = await api('/api/email/verify/resend', 'POST', {}); if (r.user) ME = r.user; emailBar(); if (view === 'set') render();
+  toast(r.verified ? 'This email is already verified' : r.sent ? 'Verification email sent. Check your inbox.' : 'Could not send the verification email right now. Try again later.');
+};
 ACT.saveEmail = async () => { await saveEmail($('sEmail').value, $('sEmailPw') ? $('sEmailPw').value : ''); render(); };
 document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href^="/api/export"], a[data-oauth]'); if (!a) return;
   if (a.dataset.oauth) sessionStorage.shOauth = String(a.dataset.oauth).toLowerCase().replace(/[^a-z]/g, ''); else track('data_export', { format: /\.csv/.test(a.getAttribute('href')) ? 'csv' : /\.json/.test(a.getAttribute('href')) ? 'json' : 'other' }); }, true);
@@ -1001,7 +1020,7 @@ VIEWS.set = async () => {
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="bugSend">Submit report</button></div>
     ${my.length ? `<h3 class="mt">My reports</h3>${my.slice().reverse().map(r => `<div class="report"><b>${esc(r.title)}</b> <span class="pill ${esc(r.status)}">${esc(r.status)}</span>${r.adminNote ? `<div class="muted small">Admin: ${esc(r.adminNote)}</div>` : ''}</div>`).join('')}` : ''}</div>
   <div class="card"><h3>Account</h3><p class="muted small">Signed in as ${esc(ME.username)}${ME.admin ? ' (admin)' : ''}</p>
-    <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" maxlength="254" value="${esc(ME.email || '')}">${ME.email ? '' : '<p class="muted small">No email on file yet. Add one so you can recover your account.</p>'}
+    <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" maxlength="254" value="${esc(ME.email || '')}">${ME.email ? (ME.emailVerified ? '<p class="muted small">Verified. This address can be used for account updates.</p>' : '<p class="muted small">Not verified yet. <button type="button" class="link" data-act="emailResend">Resend verification email</button></p>') : '<p class="muted small">No email on file yet. Add one so you can recover your account.</p>'}
     ${ME.email && ME.hasPassword ? '<input id="sEmailPw" class="mt" type="password" placeholder="Current password (to change email)" autocomplete="current-password">' : ''}<div class="row"><button class="btn" data-act="saveEmail">Save email</button></div>
     <input id="pCur" type="password" placeholder="Current password" autocomplete="current-password"><input id="pNew" class="mt" type="password" placeholder="New password (8+ chars)" autocomplete="new-password">
     <div class="row"><button class="btn" data-act="changePw">Update password</button><span class="sp"></span><button class="btn" data-act="onboard">Show welcome tour</button></div></div>
