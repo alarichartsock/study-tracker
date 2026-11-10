@@ -13,7 +13,23 @@ test('report: totals, averages, best day/week/month, weekday & hour buckets', ()
   assert.equal(r.byHour[23], 3600); assert.equal(r.byHour[0], 1800); // 23:00-00:30 split across hours
   assert.equal(r.byActivity.Flashcards, 5400); assert.equal(r.byActivity.Unspecified, 9000);
   assert.equal(r.matrix.activitySubject.Flashcards['Bio/Biochem'], 5400); assert.ok(r.matrix.subjectWeek.CARS['2026-W43']);
+  assert.equal(r.byWeekdaySubject[0].CARS, 7200); assert.equal(r.byWeekdaySubject[1]['Bio/Biochem'], 5400); assert.equal(r.byWeekdaySubject[2].CARS, 1800);
+  assert.equal(r.byHourSubject[23]['Bio/Biochem'], 3600); assert.equal(r.byHourSubject[0]['Bio/Biochem'], 1800); // same split as byHour, kept on the subject
+  assert.equal(r.byHourSubject[9].CARS, 3600); assert.equal(r.byHourSubject[10].CARS, 3600); assert.equal(r.byHourSubject[14].CARS, 1800);
+  for (let i = 0; i < 7; i++) assert.equal(Object.values(r.byWeekdaySubject[i]).reduce((s, n) => s + n, 0), r.byWeekday[i], 'weekday ' + i);
+  for (let i = 0; i < 24; i++) assert.equal(Object.values(r.byHourSubject[i]).reduce((s, n) => s + n, 0), r.byHour[i], 'hour ' + i);
   assert.equal(r.streak, 3);
+});
+test('report: a session with no subject is Other, and activity makeup matches the matrix', () => {
+  const list = [S(10, 19, 9, 60, 'CARS', { activity: 'Lecture' }), S(10, 19, 11, 30, '', { activity: 'Lecture' }), S(10, 20, 23, 90, 'Bio/Biochem', { activity: 'Anki' })];
+  const r = a.report(list, { from: '2026-10-19', to: '2026-10-25' });
+  assert.equal(r.bySubject.Other, 1800); assert.equal(r.byActivity.Lecture, 5400);
+  assert.equal(r.matrix.activitySubject.Lecture.CARS, 3600); assert.equal(r.matrix.activitySubject.Lecture.Other, 1800);
+  assert.equal(r.byWeekdaySubject[0].CARS, 3600); assert.equal(r.byWeekdaySubject[0].Other, 1800);
+  assert.equal(r.byHourSubject[23]['Bio/Biochem'], 3600); assert.equal(r.byHourSubject[0]['Bio/Biochem'], 1800);
+  assert.equal(r.byHour[11], 1800); assert.equal(r.byHourSubject[11].Other, 1800);
+  for (let i = 0; i < 7; i++) assert.equal(Object.values(r.byWeekdaySubject[i]).reduce((s, n) => s + n, 0), r.byWeekday[i]);
+  for (let i = 0; i < 24; i++) assert.equal(Object.values(r.byHourSubject[i]).reduce((s, n) => s + n, 0), r.byHour[i]);
 });
 test('breaks are excluded from study time', () => {
   assert.equal(st.secs(S(10, 1, 9, 60, 'CARS', { breakSec: 600 })), 3000);
