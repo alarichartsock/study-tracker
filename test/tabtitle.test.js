@@ -132,7 +132,7 @@ test('title sync is not tied to the timer view and wakes on visibility, focus, p
   const gateAt = tickSrc.indexOf("if (view !== 'timer' || !$('clock')) return;");
   assert.ok(syncAt >= 0 && gateAt > syncAt, 'title is written before the timer-view return');
   assert.doesNotMatch(tickSrc, /document\.title = a && !a\.paused/);
-  assert.match(js, /async function load\(\) \{[^\n]*syncTabTitle\(Date\.now\(\), true\); syncTabWorker\(\);/);
+  assert.match(js, /async function load\(\) \{(?:(?!\n\}\n)[\s\S])*syncTabTitle\(Date\.now\(\), true\); syncTabWorker\(\);/);
   assert.match(js, /cometSync\(\); syncTabTitle\(Date\.now\(\), true\); syncTabWorker\(\); \}/);
   assert.match(js, /document\.addEventListener\('visibilitychange', \(\) => \{ wakeTabClock\(\); \}\)/);
   assert.match(js, /window\.addEventListener\('focus', wakeTabClock\)/);
