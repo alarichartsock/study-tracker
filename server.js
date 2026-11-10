@@ -621,6 +621,14 @@ function createApp(opts = {}) {
         if (!ud.active || ud.active.paused) return send(res, 409, { error: 'Timer not running' });
         ud.active.accum += (Date.now() - new Date(ud.active.start)) / 1000; ud.active.paused = true; ud.active.pausedAt = new Date().toISOString(); save(); return send(res, 200, ud.active);
       }
+      // Paused only: retarget the open session. Running stays locked (the client asks you to pause first).
+      // Accum, pause clock, mode and target are left alone so a subject change is not a new session.
+      if (p === '/api/timer/subject' && M === 'POST') {
+        if (!ud.active || !ud.active.paused) return send(res, 409, { error: 'Pause the timer to switch subjects' });
+        const sub = str(j.subject, 60);
+        if (!sub || !ud.subjects.includes(sub)) return send(res, 400, { error: 'unknown subject' });
+        ud.active.subject = sub; save(); return send(res, 200, ud.active);
+      }
       if (p === '/api/timer/stop' && M === 'POST') {
         const a = ud.active; if (!a) return send(res, 409, { error: 'Timer not running' });
         const secs = a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000);

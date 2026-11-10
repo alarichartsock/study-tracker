@@ -348,7 +348,15 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-async function load() { [S, ST] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]); if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); }
+// A paused subject switch, and the 60s poll, both fetch /api/state. The response that started first must not
+// paint over a newer one: that was snapping the ring and the paused label back to the subject the timer was started on.
+let stateGen = 0;
+async function load() {
+  const gen = ++stateGen;
+  const [s, st] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]);
+  if (gen !== stateGen) return;
+  S = s; ST = st; if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent();
+}
 async function refresh() { settleLogo(); await load(); render(); } // same view, fresh data: keep the poll, don't replay the load-in
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
 const VIEWS = {}, AFTER = {}, ACT = {};
@@ -386,7 +394,7 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color((a && a.subject) || sel)}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
+    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
@@ -425,7 +433,7 @@ const NOW = (() => { let el = null, key = '';
     el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.querySelector('.now-body')) { e.preventDefault(); go('timer'); } }); document.body.appendChild(el); };
   const set = m => { localStorage.nowMin = m ? '1' : ''; key = ''; draw(); };
   const draw = () => { const a = S && S.active, show = !!(ME && a && view !== 'timer'); if (!show) { if (el) el.hidden = true; key = ''; return; } if (!el) mk(); el.hidden = false;
-    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, min, a.targetSec].join('|'), c = color(a.subject);
+    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, sel, min, a.targetSec].join('|'), c = color(sel || a.subject);
     if (k !== key) { key = k; el.classList.toggle('min', min); el.classList.toggle('paused', !!a.paused); el.style.setProperty('--subj', c);
       const ring = '<svg class="now-ring" viewBox="0 0 200 200" aria-hidden="true"><circle class="ring-bg" cx="100" cy="100" r="84"/>' + (a.paused ? '' : '<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ' + (2 * Math.PI * 84 - 60) + ';stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ' + (2 * Math.PI * 84 - 30) + '"/></g>') + '</svg>';
       el.innerHTML = min ? '<button class="now-pill" data-now="max" aria-label="Show session card: ' + esc(a.subject) + '">' + ring + '<span class="dot" style="background:' + c + '"></span><b class="now-t"></b></button>'
@@ -439,7 +447,13 @@ ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.tar
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
 ACT.useSuggestion = () => { UI.target = Math.round(ST.suggestion / 60); localStorage.countdownMin = UI.target; render(); };
 ACT.goto = b => go(b.dataset.v);
-ACT.pick = async b => { if (S.active && !S.active.paused) return toast('Pause or stop the timer to switch subjects'); sel = localStorage.subject = b.dataset.s; if (S.active) S.active.subject = sel; applyAccent(); ST = await api('/api/stats?subject=' + encodeURIComponent(sel)); render(); };
+ACT.pick = async b => {
+  if (S.active && !S.active.paused) return toast('Pause or stop the timer to switch subjects');
+  sel = localStorage.subject = b.dataset.s; if (S.active) S.active.subject = sel; applyAccent(); ++stateGen; render(); // accent follows sel immediately; drop a poll already in flight
+  try { if (S.active?.paused) { await api('/api/timer/subject', 'POST', { subject: sel }); timerPing(); } } // paused session keeps this subject across refresh, resume and the 60s poll
+  catch (e) { toast(e.message); }
+  await refresh();
+};
 const tFields = () => ({ subject: sel, activity: $('tAct')?.value || '', note: $('tNote')?.value || '' });
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {

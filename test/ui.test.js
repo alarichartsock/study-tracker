@@ -311,6 +311,28 @@ test('trophy cards: every line-art card gets its visible .t-face, and the sheen 
 test('whole-app accent follows the selected subject colour (clamped), falling back to the Settings accent', () => {
   const app = pub('app.js');
   assert.match(app, /const a = \(S && sel && S\.subjectMeta\[sel\]\?\.color && color\(sel\)\) \|\| S\?\.settings\.accent,/);
-  assert.match(app, /ACT\.pick = [^\n]*sel = localStorage\.subject = b\.dataset\.s;[^\n]*applyAccent\(\);/);
-  assert.match(app, /async function load\(\) \{[^\n]*applyAccent\(\);/);
+  const pick = app.slice(app.indexOf('ACT.pick = async'), app.indexOf('const tFields'));
+  assert.match(pick, /sel = localStorage\.subject = b\.dataset\.s;/);
+  assert.match(pick, /if \(S\.active\) S\.active\.subject = sel; applyAccent\(\);/);
+  assert.match(pick, /S\.active && !S\.active\.paused/);
+  assert.match(app, /function load\(\) \{[\s\S]*?applyAccent\(\);/);
+});
+
+test('paused subject switch is stored, so a later state refresh cannot snap the ring back', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const app = pub('app.js'), sv = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  const pick = app.slice(app.indexOf('ACT.pick = async'), app.indexOf('const tFields'));
+  assert.match(pick, /\/api\/timer\/subject/);
+  assert.match(pick, /S\.active\?\.paused/);
+  assert.match(pick, /\+\+stateGen/);
+  assert.match(pick, /await refresh\(\)/);
+  assert.doesNotMatch(pick, /location\.reload|shTabReload/);
+  assert.match(app, /if \(gen !== stateGen\) return/);
+  assert.match(app, /--subj:\$\{color\(sel \|\| \(a && a\.subject\)\)\}/);
+  assert.match(app, /color\(sel \|\| a\.subject\)/);
+  const route = sv.slice(sv.indexOf("p === '/api/timer/subject'"), sv.indexOf("p === '/api/timer/stop'"));
+  assert.match(route, /!ud\.active\.paused/);
+  assert.match(route, /ud\.subjects\.includes\(sub\)/);
+  assert.match(route, /ud\.active\.subject = sub/);
+  assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
 });

@@ -79,6 +79,35 @@ test('sessions: activities, breaks, focus, bulk update/delete/restore, retroacti
   assert.equal((await c('/api/report?from=bad')).status, 400);
 });
 
+test('paused timer keeps a switched subject across refresh and resume', async t => {
+  const app = await start(); t.after(app.close); const c = app.admin;
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'CARS' })).status, 409); // nothing running
+  await c('/api/timer/start', 'POST', { subject: 'Chem/Phys', activity: 'Flashcards', mode: 'countdown', targetSec: 1500, note: 'ch3' });
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'CARS' })).status, 409); // still running: subject stays locked
+  assert.equal((await c('/api/state')).body.active.subject, 'Chem/Phys');
+  const paused = (await c('/api/timer/pause', 'POST')).body;
+  assert.equal(paused.paused, true); assert.equal(paused.subject, 'Chem/Phys');
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'Nope' })).status, 400);
+  assert.equal((await c('/api/timer/subject', 'POST', {})).status, 400);
+  const switched = (await c('/api/timer/subject', 'POST', { subject: 'CARS' })).body;
+  assert.equal(switched.subject, 'CARS'); assert.equal(switched.paused, true);
+  assert.equal(switched.accum, paused.accum); assert.equal(switched.pausedAt, paused.pausedAt);
+  assert.equal(switched.start, paused.start); assert.equal(switched.mode, 'countdown'); assert.equal(switched.targetSec, 1500);
+  assert.equal(switched.activity, 'Flashcards'); assert.equal(switched.note, 'ch3');
+  assert.equal((await c('/api/state')).body.active.subject, 'CARS'); // the poll / a reload reads this
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'Bio/Biochem' })).body.subject, 'Bio/Biochem');
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'Psych/Soc' })).body.subject, 'Psych/Soc'); // switch back and forth
+  const resumed = (await c('/api/timer/start', 'POST', {})).body;
+  assert.equal(resumed.paused, false); assert.equal(resumed.subject, 'Psych/Soc'); assert.equal(resumed.accum, paused.accum);
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'CARS' })).status, 409);
+  assert.equal((await c('/api/state')).body.active.subject, 'Psych/Soc');
+  await c('/api/timer/pause', 'POST');
+  await c('/api/timer/subject', 'POST', { subject: 'CARS' });
+  const saved = (await c('/api/timer/stop', 'POST', {})).body.session;
+  assert.equal(saved.subject, 'CARS'); assert.equal(saved.activity, 'Flashcards'); assert.equal(saved.mode, 'countdown');
+  assert.equal((await c('/api/state')).body.active, null);
+});
+
 test('timer modes: pomodoro/countdown recorded, discard', async t => {
   const app = await start(); t.after(app.close); const c = app.admin;
   const a = (await c('/api/timer/start', 'POST', { subject: 'CARS', activity: 'Passages', mode: 'countdown', targetSec: 1500 })).body;
