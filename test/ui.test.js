@@ -56,6 +56,41 @@ test('goal rings use HTML labels instead of scaled SVG text', () => {
   assert.match(pub('style.css'), /\.goal-ring\{[^}]*width:160px/);
 });
 
+test('stats activity, weekday and hour bars stack by subject color', () => {
+  const vm = require('vm'), js = pub('app.js'), css = pub('style.css');
+  const start = js.indexOf('const subjOrder = '), end = js.indexOf('\nfunction cumHits(');
+  assert.ok(start > 0 && end > start);
+  const ctx = { S: { subjects: ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc', 'General'] },
+    color: s => ({ CARS: '#c8841d', 'Bio/Biochem': '#10a76d', General: '#4c6ef5' }[s] || '#868e96'),
+    esc: s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    fmtH: s => { s = Math.round((s || 0) / 60); const h = Math.floor(s / 60), m = s % 60; return h ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + 'm'; },
+    tip: (t, focus = true) => ' data-tip="' + String(t).replace(/"/g, '&quot;') + '"' + (focus ? ' tabindex="0"' : ''),
+    pad: n => String(n).padStart(2, '0'), niceT: () => ({ top: 21600, ticks: [0, 7200, 14400, 21600] }), tickT: () => '0', yGrid: () => '' };
+  vm.createContext(ctx); vm.runInContext(js.slice(start, end) + '\nthis.bars = bars; this.colChart = colChart;', ctx);
+  const parts = { Lecture: { 'Bio/Biochem': 7200, CARS: 3600, General: 1800 }, Anki: { CARS: 1800 }, Quiz: { Other: 900 } };
+  const html = ctx.bars({ Lecture: 12600, Anki: 1800, Quiz: 900 }, 15300, () => 'var(--acc)', parts);
+  const row = name => html.slice(html.indexOf('>' + name + '<'), html.indexOf('class="sbar"', html.indexOf('>' + name + '<') + 1) >>> 0 || html.length);
+  const bgs = row => [...row.matchAll(/background:([^";]+)/g)].map(m => m[1]);
+  assert.deepEqual(bgs(row('Lecture')), ['#c8841d', '#10a76d', '#4c6ef5'], 'segments follow the subject list, not bar size');
+  assert.deepEqual(bgs(row('Quiz')), ['#868e96'], 'no subject uses the muted color() fallback');
+  assert.match(row('Lecture'), /class="bar segs"/); assert.match(row('Lecture'), /3h 30m/); assert.match(row('Lecture'), /82%/);
+  assert.match(row('Lecture'), /data-tip="Lecture · CARS: 1h 00m"/); assert.doesNotMatch(html, /var\(--acc\)/);
+  const plain = ctx.bars({ CARS: 100, 'Bio/Biochem': 40 }, 140, ctx.color);
+  assert.equal((plain.match(/<i /g) || []).length, 2); assert.doesNotMatch(plain, /bar segs/); assert.match(plain, /background:#c8841d/);
+  const cols = ctx.colChart([5400, 0, 900], ['Mon', 'Tue', 'Wed'], ['Monday', 'Tuesday', 'Wednesday'], [{ CARS: 3600, 'Bio/Biochem': 1800 }, {}, { Other: 900 }]);
+  assert.match(cols, /class="hcols yax stack"/); assert.match(cols, /data-tip="Monday · 1h 30m · 86%"/); assert.match(cols, />Mon</); assert.match(cols, />Tue</); assert.match(cols, />Wed</);
+  assert.deepEqual(bgs(cols.slice(cols.indexOf('Monday'), cols.indexOf('Tuesday'))), ['#c8841d', '#10a76d']);
+  assert.deepEqual(bgs(cols.slice(cols.indexOf('Wednesday'))), ['#868e96']);
+  assert.equal((cols.slice(cols.indexOf('Tuesday'), cols.indexOf('Wednesday')).match(/<i /g) || []).length, 0, 'empty day draws no bar');
+  assert.doesNotMatch(cols, /var\(--acc\)/);
+  assert.match(js, /bars\(c\.byActivity, c\.total, \(\) => 'var\(--acc\)', c\.matrix\.activitySubject\)/);
+  assert.match(js, /c\.byWeekdaySubject\)/); assert.match(js, /c\.byHourSubject\)/);
+  assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
+  assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
+  assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v172/);
+});
+
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
   const js = pub('app.js'), css = pub('style.css');
   assert.ok((js.match(/\$\{tip\(/g) || []).length >= 10, 'chart markup uses tip()');
