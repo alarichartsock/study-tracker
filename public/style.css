@@ -125,10 +125,12 @@ textarea{padding:10px 12px;font-size:var(--control-fs);line-height:1.45;box-sizi
 --spring:cubic-bezier(.34,1.56,.64,1);--ease:cubic-bezier(.22,1,.36,1);--r-xl:28px;--r-lg:22px;--r-md:16px;--pad:16px;--control-h:44px}
 [data-theme=dark]{--bg:#0b0d18;--card:rgba(24,27,40,.86);--card2:rgba(255,255,255,.07);--line:rgba(255,255,255,.10);--text:#f2f4fa;--muted:#a3aabd;--acc:#7c9bff;--acc2:#5b7cfa;
 --glass:rgba(40,44,64,.42);--glass-strong:rgba(30,33,50,.72);--glass-edge:rgba(255,255,255,.22);--glass-hi:rgba(255,255,255,.14);--shadow:0 10px 30px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.3);
---wp1:#4338ca;--wp2:#0e7490;--wp3:#9d174d}
+--wp1:#4338ca;--wp2:#0e7490;--wp3:#9d174d;
+--gold:#e6b422;--gold-2:#f5c518;--gold-3:#ffe7a8;--gold-ink:#f6d56a}
 [data-theme=light]{--bg:#eef1f8;--card:rgba(255,255,255,.86);--card2:rgba(20,30,70,.05);--line:rgba(20,30,70,.10);--text:#111827;--muted:#5b6478;--acc:#3a5bf0;--acc2:#2f4cd6;
 --glass:rgba(255,255,255,.48);--glass-strong:rgba(255,255,255,.78);--glass-edge:rgba(255,255,255,.85);--glass-hi:rgba(255,255,255,.6);--shadow:0 10px 30px rgba(30,40,90,.12),0 1px 2px rgba(30,40,90,.08);
---wp1:#a5b4fc;--wp2:#67e8f9;--wp3:#f9a8d4}
+--wp1:#a5b4fc;--wp2:#67e8f9;--wp3:#f9a8d4;
+--gold:#b8860b;--gold-2:#c49212;--gold-3:#e6b422;--gold-ink:#8a6208}
 html,body{font-family:var(--font);background:var(--bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overflow-x:hidden;max-width:100%}
 html{overscroll-behavior-x:none}
 body{min-height:100vh;min-height:100dvh}
@@ -765,6 +767,31 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .running .tring .t-comet-svg .g-comet{opacity:1}
 .g-comet.g-stay,[data-run] .g-comet.g-stay,.running .tring .t-comet-svg .g-comet.g-stay{opacity:1;transition:none} /* same session rebuilt by a refresh: don't fade the hairline in again */
 .tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
+/* Overtime past the daily goal. The accent stroke stays full (r 88, width 12). Gold is a
+   thinner arc inset of it (r 77, so its outer edge sits just inside the green) and a lap
+   past 200% is a brighter core on that same path. The thin arc on the accent stroke while
+   a session runs is the comet hairline above (.t-comet-svg): a short var(--text) dash
+   orbiting r 88 on its own svg, so a per-second ring redraw does not restart it. Gold
+   stays inset of that stroke so the hairline keeps reading. Trophy gold is #e6b422 / #f5c518. */
+.tring .t-gold-svg{position:absolute;inset:0;pointer-events:none}
+.tring .t-gold-svg circle{fill:none;stroke-linecap:round;transition:stroke-dashoffset .6s var(--ease),opacity .35s}
+.tring .ring-gold.g1{stroke:var(--gold);stroke-width:6.5;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--gold) 55%,transparent))}
+.tring .ring-gold.g2{stroke:var(--gold-2);stroke-width:4.25;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--gold-2) 60%,transparent))}
+.tring .ring-gold.g3{stroke:var(--gold-3);stroke-width:2.75;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--gold-3) 70%,transparent))}
+[data-theme=light] .tring .ring-gold.g1{filter:drop-shadow(0 0 1px rgba(90,60,0,.55)) drop-shadow(0 0 3px color-mix(in srgb,var(--gold) 50%,transparent))}
+.t-gold-svg[data-hot="1"] .ring-gold.g2{filter:drop-shadow(0 0 6px color-mix(in srgb,var(--gold-3) 75%,transparent))}
+.tring #tGoalLbl.goal-over{color:var(--gold-ink);font-weight:600}
+.tring.goal-shimmer::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:2;
+background:conic-gradient(from 0deg,transparent 0 68%,color-mix(in srgb,var(--gold-2) 82%,white) 84%,transparent 96%);
+-webkit-mask:radial-gradient(farthest-side,transparent 66%,#000 71%,#000 95%,transparent 99%);
+mask:radial-gradient(farthest-side,transparent 66%,#000 71%,#000 95%,transparent 99%);
+animation:goal-shimmer 1.15s var(--ease) 1 both}
+@keyframes goal-shimmer{0%{transform:rotate(0deg);opacity:0}18%{opacity:.9}100%{transform:rotate(360deg);opacity:0}}
+[data-anim="0"] .tring .t-gold-svg circle{transition:none}
+[data-anim="0"] .tring.goal-shimmer::after,[data-anim="1"] .tring.goal-shimmer::after{animation:none;display:none}
+[data-anim="3"][data-theme=dark] .tring .ring-gold.g1{filter:drop-shadow(0 0 5px color-mix(in srgb,var(--gold) 65%,transparent))}
+[data-anim="3"][data-theme=light] .tring .ring-gold.g1{filter:drop-shadow(0 0 1px rgba(90,60,0,.55)) drop-shadow(0 0 5px color-mix(in srgb,var(--gold) 55%,transparent))}
+@media (prefers-reduced-motion:reduce){.tring .t-gold-svg circle{transition:none}.tring.goal-shimmer::after{animation:none;display:none}}
 /* Timer copy stays inside the stroke. The ring is the container (cqi). The status and goal
    lines use the inscribed width of the inner circle (r 88, stroke 12 → about 56% of the box)
    and wrap; the clock scales with the ring so 10:00:00 fits. A percentage max-width is the

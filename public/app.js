@@ -387,6 +387,9 @@ const stars = (name, v) => `<div class="stars">${[1, 2, 3, 4, 5].map(i => `<butt
 dialog.acts.star = b => { const w = b.parentElement, v = +b.dataset.v, cur = +w.querySelector('input').value, nv = cur === v ? '' : v; w.querySelector('input').value = nv; w.querySelectorAll('button').forEach(x => x.classList.toggle('on', !!nv && +x.dataset.v <= nv)); };
 
 // ================= TIMER =================
+// Gold overtime sits on r 77: accent ring is r 88 with a 12-wide stroke (inner edge 82),
+// so a 6.5-wide gold stroke ends near 80, just inside the green and clear of the comet.
+const GOLD_R = 77, GOLD_C = 2 * Math.PI * GOLD_R;
 VIEWS.timer = () => {
   const a = S.active, mode = a ? a.mode || 'stopwatch' : UI.mode, p = UI.pomo;
   const sug = ST.suggestion ? `<button class="link small" data-act="useSuggestion">Suggested: ${fmtH(ST.suggestion)}</button>` : '';
@@ -395,7 +398,7 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
+    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-gold-svg" id="tGoldSvg" aria-hidden="true">${[1, 2, 3].map(n => `<circle cx="100" cy="100" r="${GOLD_R}" class="ring-gold g${n}" style="stroke-dasharray:${GOLD_C};stroke-dashoffset:${GOLD_C};opacity:0"/>`).join('')}</svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
@@ -471,6 +474,60 @@ function fitRingText() {
     fitRingText.key = key;
   } finally { fitRingText.busy = false; }
 }
+// Overtime past the daily goal, as laps of that goal. 2h30 against a 2h goal is a quarter
+// lap (gold arc 25%). The first lap is the base gold; a finished lap stays drawn and the
+// next one is a brighter core. Past two laps the bright ring stays full and a hot edge
+// shows the current fraction. Exactly on the goal is not overtime.
+function goalOvertime(todaySec, goalSec) {
+  const today = +todaySec || 0, goal = +goalSec || 0;
+  if (!(goal > 0) || !(today > goal)) return { over: false, extra: 0, arcs: [] };
+  const extra = (today - goal) / goal;
+  const arcs = [{ pct: Math.min(extra, 1), tier: 0 }];
+  if (extra > 1) arcs.push({ pct: Math.min(extra - 1, 1), tier: 1 });
+  if (extra > 2) {
+    const done = Math.floor(extra + 1e-9), frac = extra - done;
+    if (frac > 1e-6) arcs.push({ pct: frac, tier: 2 });
+  }
+  return { over: true, extra, arcs };
+}
+// Persistent gold svg (not inside the accent svg, which tick replaces every second).
+// grow: one-shot fill when this view watches the goal get crossed. Level 0 jumps.
+function paintGoalGold(ot, grow) {
+  const svg = $('tGoldSvg');
+  if (!svg) return;
+  const want = [0, 0, 0];
+  for (const a of ot.arcs) if (a && a.tier >= 0 && a.tier < 3) want[a.tier] = a.pct;
+  const C = 2 * Math.PI * GOLD_R;
+  const fresh = !svg.dataset.ready;
+  svg.dataset.ready = '1';
+  svg.dataset.laps = String(Math.min(9, Math.floor((ot.extra || 0) + 1e-9)));
+  svg.dataset.hot = ot.extra >= 2 ? '1' : '0';
+  const still = animLevel() < 1;
+  svg.querySelectorAll('circle').forEach((el, i) => {
+    const pct = want[i] || 0, off = C * (1 - Math.min(1, Math.max(0, pct))), show = pct > 0;
+    el.style.strokeDasharray = String(C);
+    if (grow && show) {
+      el.style.transition = 'none';
+      el.style.strokeDashoffset = String(C);
+      el.style.opacity = '1';
+      el.dataset.off = String(off);
+      el.dataset.show = '1';
+    } else {
+      el.style.transition = (still || fresh) ? 'none' : '';
+      el.style.strokeDashoffset = String(off);
+      el.style.opacity = show ? '1' : '0';
+      el.dataset.off = '';
+    }
+  });
+  if (grow || fresh) requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!svg.isConnected) return;
+    const move = animLevel() >= 1;
+    svg.querySelectorAll('circle').forEach(el => {
+      el.style.transition = move ? '' : 'none';
+      if (grow && el.dataset.off) { el.style.strokeDashoffset = el.dataset.off; el.style.opacity = el.dataset.show === '1' ? '1' : '0'; }
+    });
+  }));
+}
 function tick() {
   const now = Date.now();
   if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
@@ -483,15 +540,30 @@ function tick() {
   syncTabWorker();
   if (view !== 'timer' || !$('clock')) return;
   const today = ST.today + l;
-  let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
-  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; }
-  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; }
+  // The ring is the daily goal unless a countdown/pomodoro block or a break owns it.
+  let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '', goalRing = true;
+  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; goalRing = false; }
+  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; goalRing = false; }
   else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
   else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
+  const ot = goalRing ? goalOvertime(today, ST.goalSec) : { over: false, extra: 0, arcs: [] };
+  const over = !!(ST.goalSec && today > ST.goalSec);
+  if (tick.wasOver === undefined) tick.wasOver = over;
+  const grow = over && tick.wasOver === false && animLevel() >= 1;
+  if (over && tick.wasOver === false && animLevel() >= 2) {
+    const box = document.querySelector('#tw .tring');
+    if (box) { box.classList.remove('goal-shimmer'); void box.offsetWidth; box.classList.add('goal-shimmer'); }
+  }
+  tick.wasOver = over;
+  paintGoalGold(ot, grow);
   const act = a ? (a.activity || '') : (localStorage.activity || '');
   $('tSubLbl').textContent = timerLabel(a, a ? a.subject : (sel || ''), act);
-  $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
+  const goalEl = $('tGoalLbl');
+  goalEl.textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
+  goalEl.classList.toggle('goal-over', over);
+  if (over) { const m = Math.round((today - ST.goalSec) / 60); goalEl.title = (m >= 1 ? fmtH(today - ST.goalSec) + ' over goal' : 'Over goal'); }
+  else goalEl.removeAttribute('title');
   fitRingText();
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
