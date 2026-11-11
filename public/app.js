@@ -797,6 +797,26 @@ const bars = (obj, total, colFn, parts) => { const e = Object.entries(obj).filte
 const colChart = (arr, labels, names = labels, parts) => { const Y = niceT(Math.max(60, ...arr)), mx = Y.top, tot = arr.reduce((a, b) => a + b, 0), stack = !!(parts && parts.some(p => p && Object.values(p).some(v => v > 0)));
   return `<div class="hcols yax${stack ? ' stack' : ''}">${yGrid(Y.ticks, mx, f => `calc(22px + (100% - 22px) * ${f.toFixed(4)})`)}${arr.map((v, i) => { const p = parts && parts[i], segs = stack && p ? subjOrder(Object.keys(p)).filter(s => p[s] > 0).map(s => `<i style="height:${(p[s] / mx * 100).toFixed(2)}%;background:${color(s)}"${segTip(names[i], s, p[s])}></i>`).join('') : '';
     return `<div class="hcol"${tip(names[i] + ' \u00b7 ' + fmtH(v) + (tot ? ' \u00b7 ' + Math.round(v / tot * 100) + '%' : ''))}><div class="hcol-bar">${segs || (v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : '')}</div><span>${labels[i]}</span></div>`; }).join('')}</div>`; };
+// Stacked cumulative areas, one band per subject (listed order, bottom to top), so the
+// top edge is the total line. One vertex per day; the series is already daily.
+function cumChart(cum, cMax, cY) {
+  if (!cum.length) return '';
+  const W = 700, H = 160, base = 155, plot = 145, n = cum.length, rows = n > 1 ? cum : [cum[0], cum[0]];
+  const xOf = i => rows.length > 1 ? i / (rows.length - 1) * W : 0, yOf = v => base - (cMax ? v / cMax * plot : 0), xy = (x, y) => x.toFixed(2) + ',' + y.toFixed(2);
+  const names = []; for (const row of cum) for (const s of Object.keys(row[2] || {})) if (row[2][s] > 0 && !names.includes(s)) names.push(s);
+  const order = subjOrder(names), bands = [];
+  for (const subj of order) {
+    const top = [], bot = [];
+    rows.forEach((row, i) => { const parts = row[2] || {}; let below = 0; for (const s of order) { if (s === subj) break; below += +parts[s] || 0; } const mine = +parts[subj] || 0; top.push(xy(xOf(i), yOf(below + mine))); bot.push(xy(xOf(i), yOf(below))); });
+    const total = +((cum[n - 1][2] || {})[subj] || 0); if (!(total > 0)) continue;
+    const i0 = Math.max(0, cum.findIndex(row => (row[2] || {})[subj] > 0));
+    bands.push({ subj, c: color(subj), total, top, bot, edge: top.slice(n > 1 ? Math.max(0, i0 - 1) : 0) });
+  }
+  const areas = bands.map(b => `<path class="cum-band" data-subj="${esc(b.subj)}" d="M${b.top.join('L')}L${b.bot.slice().reverse().join('L')}Z" fill="${b.c}" stroke="none"/><polyline class="cum-edge" data-subj="${esc(b.subj)}" points="${b.edge.join(' ')}" fill="none" stroke="${b.c}" stroke-width="1.75" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
+  const line = `<polyline class="cum-total" vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="1.5" points="${rows.map(([, v], i) => xy(xOf(i), yOf(v))).join(' ')}"/>`;
+  const legend = bands.length ? `<div class="cum-legend">${bands.map(b => `<button type="button" class="cum-leg" data-subj="${esc(b.subj)}" style="--c:${esc(b.c)}" aria-pressed="false"><i class="dot" style="background:${b.c}"></i><span>${esc(b.subj)}</span><b>${fmtH(b.total)}</b></button>`).join('')}</div>` : '';
+  return `<div class="cum-block"><div class="cum-wrap yax">${yGrid(cY.ticks, cMax, f => ((5 + f * plot) / H * 100).toFixed(2) + '%')}<div class="cum-draw"><svg class="cum-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${areas}${line}</svg></div>${cumHits(cum, cMax)}</div>${legend}</div>`;
+}
 function cumHits(cum, top = Math.max(1, ...cum.map(x => x[1]))) { const n = Math.min(cum.length, 60), seg = [...Array(n)].map((_, i) => cum[Math.round((i + 1) / n * cum.length) - 1]);
   return '<div class="cum-hit">' + seg.map(([k, v], i) => { const pk = i ? seg[i - 1][0] : null, d = i ? v - seg[i - 1][1] : 0;
     return '<i' + tip(fmtDate(k2d(k), { month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + ' total' + (i ? ' \u00b7 ' + (d > 0 ? '+' + fmtH(d) : 'no change') + ' since ' + fmtDate(k2d(pk), { month: 'short', day: 'numeric' }) : ''), i === 0 || i === n - 1) + '><b style="bottom:' + ((5 + v / top * 145) / 160 * 100).toFixed(2) + '%"></b></i>'; }).join('') + '</div>'; }
@@ -826,13 +846,23 @@ VIEWS.stats = async () => {
       <div class="subj-row"><span>Longest session</span><b>${fmtH(c.longestSession)}</b></div><div class="subj-row"><span>Longest streak</span><b>${c.streak} days</b></div><div class="subj-row"><span>Breaks</span><b>${fmtH(c.breakSec)}</b></div>
       <div class="subj-row"><span>Medals</span><b>${MEDAL_ORDER.map(m => `<span class="medal m-${m}"></span> ${c.medals[m]}`).join(' &nbsp;')}</b></div></div></div>
   <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], c.byWeekdaySubject)}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))), [...Array(24)].map((_, i) => pad(i) + ':00-' + pad((i + 1) % 24) + ':00'), c.byHourSubject)}</div></div>
-  <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? `<div class="cum-wrap yax">${yGrid(cY.ticks, cMax, f => ((5 + f * 145) / 160 * 100).toFixed(2) + '%')}<svg viewBox="0 0 700 160" preserveAspectRatio="none" style="width:100%;height:160px"><polyline vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="2" points="${cum.map(([, v], i) => `${cum.length > 1 ? i / (cum.length - 1) * 700 : 0},${155 - v / cMax * 145}`).join(' ')}"/></svg>${cumHits(cum, cMax)}</div><p class="muted small">${fmtH(cTot)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
+  <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? cumChart(cum, cMax, cY) + `<p class="muted small">${fmtH(cTot)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
   <div class="card scroll"><h3>Data room · activities × subjects</h3>${acts.length ? dataRoom(acts, subjects, c.matrix.activitySubject, cell) : '<p class="muted small">No data</p>'}</div>
   <div class="card scroll"><h3>Data room · subjects × weeks</h3>${weeks.length ? `<table class="tbl"><tr><th></th>${weeks.map(w => `<th class="num">${esc(w.slice(5))}</th>`).join('')}</tr>${subjects.map(s => `<tr><th><span class="dot" style="background:${color(s)}"></span> ${esc(s)}</th>${weeks.map(w => cell((c.matrix.subjectWeek[s] || {})[w])).join('')}</tr>`).join('')}<tr><th>Total</th>${weeks.map(w => `<td class="num"><b>${fmtH(c.byWeek[w])}</b></td>`).join('')}</tr></table>` : '<p class="muted small">No data</p>'}</div>`;
 };
 ACT.range = b => { UI.range = localStorage.statsRange = b.dataset.r; render(); };
 ACT.sSubj = b => { UI.sSubj = b.value; render(); };
 ACT.cRange = b => { UI[b.dataset.k] = b.value; render(); };
+// Legend hover (mouse) or tap pins one subject's band. A second tap on it clears the pin.
+function cumHi(block, name) {
+  if (!block) return; if (name) block.dataset.hi = name; else delete block.dataset.hi;
+  block.querySelectorAll('.cum-band, .cum-edge, .cum-leg').forEach(el => { const on = !!name && el.dataset.subj === name; el.classList.toggle('on', on); if (el.classList.contains('cum-leg')) el.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+}
+document.addEventListener('pointerover', e => { if (e.pointerType && e.pointerType !== 'mouse') return; const leg = e.target.closest && e.target.closest('.cum-leg'); if (!leg) return; const block = leg.closest('.cum-block'); if (!block || block.dataset.pin) return; cumHi(block, leg.dataset.subj); });
+document.addEventListener('pointerout', e => { if (e.pointerType && e.pointerType !== 'mouse') return; const leg = e.target.closest && e.target.closest('.cum-leg'); if (!leg) return; const block = leg.closest('.cum-block'); if (!block || block.dataset.pin) return; const to = e.relatedTarget; if (to && leg.contains(to)) return; if (to && to.closest && to.closest('.cum-leg') && to.closest('.cum-block') === block) return; cumHi(block, ''); });
+document.addEventListener('click', e => { const leg = e.target.closest && e.target.closest('.cum-leg'); if (leg) { const block = leg.closest('.cum-block'); if (!block) return; const next = block.dataset.pin === leg.dataset.subj ? '' : leg.dataset.subj; if (next) block.dataset.pin = next; else delete block.dataset.pin; cumHi(block, next || (leg.matches(':hover') ? leg.dataset.subj : '')); return; } document.querySelectorAll('.cum-block[data-pin]').forEach(b => { if (e.target.closest && e.target.closest('.cum-block') === b) return; delete b.dataset.pin; cumHi(b, ''); }); });
+document.addEventListener('focusin', e => { const leg = e.target.closest && e.target.closest('.cum-leg'); if (!leg) return; const block = leg.closest('.cum-block'); if (!block || block.dataset.pin) return; cumHi(block, leg.dataset.subj); });
+document.addEventListener('focusout', e => { const leg = e.target.closest && e.target.closest('.cum-leg'); if (!leg) return; const block = leg.closest('.cum-block'); if (!block || block.dataset.pin) return; setTimeout(() => { if (block.isConnected && !block.contains(document.activeElement)) cumHi(block, ''); }, 0); });
 
 // ================= EXAMS & TO-DOS =================
 const PRI = { high: 0, normal: 1, low: 2 };

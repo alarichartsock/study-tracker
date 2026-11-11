@@ -72,6 +72,25 @@ test('cumulative series and duration suggestion', () => {
   assert.equal(a.suggestDuration([S(10, 1, 9, 50), S(10, 2, 9, 52), S(10, 3, 9, 90)]), 3000);
   assert.equal(a.suggestDuration([], 'CARS'), null);
 });
+test('cumulative share price stacks by subject, one point per day', () => {
+  const list = [
+    S(10, 1, 9, 60, 'CARS'), S(10, 1, 14, 30, 'Bio/Biochem'), S(10, 1, 18, 15, ''),
+    S(10, 2, 9, 60, 'CARS', { breakSec: 600 }), S(10, 3, 9, 30, 'Psych/Soc'),
+  ];
+  for (let i = 0; i < 40; i++) list.push(S(10, 4, 8, 10, i % 2 ? 'CARS' : 'Bio/Biochem'));
+  const series = a.cumulative(list);
+  assert.equal(series.length, 4, 'sessions on one day collapse to one point');
+  assert.deepEqual(series.map(x => x[0]), ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04']);
+  const sum = p => Object.values(p).reduce((s, n) => s + n, 0);
+  for (const row of series) assert.equal(sum(row[2]), row[1], row[0] + ' parts stack to the total');
+  assert.equal(series[0][2].CARS, 3600); assert.equal(series[0][2]['Bio/Biochem'], 1800); assert.equal(series[0][2].Other, 900);
+  assert.equal(series[1][2].CARS, 6600, 'a break is excluded from the subject total');
+  assert.equal(series[1][2]['Bio/Biochem'], 1800, 'quiet days keep the running total');
+  assert.equal(series[1][2].Other, 900); assert.equal(series[1][2]['Psych/Soc'], undefined, 'a subject stays out until it has time');
+  assert.equal(series[2][2]['Psych/Soc'], 1800);
+  assert.equal(series[3][2].CARS, 6600 + 20 * 600); assert.equal(series[3][2]['Bio/Biochem'], 1800 + 20 * 600);
+  assert.deepEqual(a.cumulative([]), []);
+});
 test('achievements: shape, categories, renamed set, no idiosyncratic badges', () => {
   const ud = blankUserData(); ud.sessions = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'].map((x, i) => S(10, 19 + i, 9, 200, x, { activity: i ? 'Anki' : 'UBook' })); ud.sessions[0].mode = 'pomodoro';
   const R = a.achievements(ud); assert.ok(Array.isArray(R.global) && Array.isArray(R.personal) && Array.isArray(R.categories));
