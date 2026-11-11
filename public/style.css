@@ -79,6 +79,7 @@ pre{white-space:pre-wrap}.maps{margin:10px 0}
 .phase{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc)}
 .stars{display:flex;gap:4px}.stars button{background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted)}.stars button.on{color:#f5c518}
 .chk{width:18px;height:18px;flex:none}.item.sel{border-color:var(--acc)}
+.row.ex-when{align-items:flex-start}.row.ex-when>div{min-width:0}.row.ex-when label{margin-top:0}
 label.ex-sched{display:flex;align-items:flex-start;gap:8px;margin:8px 0 0;font-size:13px;line-height:1.35;color:var(--text);cursor:pointer}
 label.ex-sched input{width:18px;height:18px;min-height:0;flex:none;margin:1px 0 0;padding:0;accent-color:var(--acc)}
 #exScore.score-off label{color:var(--muted)}
