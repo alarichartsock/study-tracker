@@ -431,6 +431,46 @@ function syncTabTitle(now, force) {
   if (!force && syncTabTitle.last === t) return;
   syncTabTitle.last = t; document.title = t;
 }
+// Shrink ring text only after it has wrapped and still crosses the inner edge of the stroke.
+// The whole string stays in the DOM; this never ellipsizes it.
+function fitRingText() {
+  const ring = document.querySelector('#tw .tring');
+  if (!ring || view !== 'timer') return;
+  if (fitRingText.busy) return;
+  if (!fitRingText.ro && typeof ResizeObserver === 'function') {
+    fitRingText.ro = new ResizeObserver(() => { fitRingText.key = ''; if (!fitRingText.busy) fitRingText(); });
+  }
+  if (fitRingText.ro && fitRingText.watch !== ring) {
+    if (fitRingText.watch) fitRingText.ro.unobserve(fitRingText.watch);
+    fitRingText.ro.observe(ring); fitRingText.watch = ring; fitRingText.key = '';
+  }
+  const clock = $('clock'), phase = $('tPhase'), label = $('tSubLbl'), goal = $('tGoalLbl');
+  const key = [ring.clientWidth, clock && clock.textContent, phase && phase.textContent, label && label.textContent, goal && goal.textContent].join('\n');
+  if (key === fitRingText.key) return;
+  fitRingText.busy = true;
+  try {
+    const D = ring.clientWidth; if (D < 20) return;
+    const R = D * 0.40, rc = ring.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2;
+    const els = [clock, phase, label, goal].filter(Boolean);
+    for (const el of els) el.style.fontSize = '';
+    const outside = el => {
+      if (!el.textContent || !String(el.textContent).trim()) return false;
+      const b = el.getBoundingClientRect(); if (b.width < 1 || b.height < 1) return false;
+      const extra = Math.max(0, el.scrollWidth - b.width) / 2, left = b.left - extra, right = b.right + extra;
+      return [[left, b.top], [right, b.top], [left, b.bottom], [right, b.bottom]].some(([x, y]) => Math.hypot(x - cx, y - cy) > R + 0.5);
+    };
+    for (let n = 0; n < 16; n++) {
+      const bad = els.filter(outside); if (!bad.length) break;
+      let moved = false;
+      for (const el of bad) {
+        const cur = parseFloat(getComputedStyle(el).fontSize), floor = (el === clock ? 0.09 : 0.03) * D, next = Math.max(floor, cur * 0.9);
+        if (next < cur - 0.25) { el.style.fontSize = next.toFixed(2) + 'px'; moved = true; }
+      }
+      if (!moved) break;
+    }
+    fitRingText.key = key;
+  } finally { fitRingText.busy = false; }
+}
 function tick() {
   const now = Date.now();
   if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
@@ -452,6 +492,7 @@ function tick() {
   const act = a ? (a.activity || '') : (localStorage.activity || '');
   $('tSubLbl').textContent = timerLabel(a, a ? a.subject : (sel || ''), act);
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
+  fitRingText();
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
 // shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard

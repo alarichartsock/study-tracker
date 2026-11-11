@@ -396,3 +396,27 @@ test('activity dropdown updates the ring and tab title immediately and is stored
   assert.match(route, /!ud\.active\.paused/);
   assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
 });
+
+test('timer ring copy wraps inside the stroke and the clock scales with the ring', () => {
+  const css = pub('style.css'), app = pub('app.js');
+  const block = css.slice(css.indexOf('.tring{container-type:inline-size}'), css.indexOf('/* Trophy art'));
+  assert.ok(block.length > 40, 'ring text rules');
+  assert.match(block, /\.tring\{container-type:inline-size\}/);
+  assert.match(block, /\.tring \.ring-center\{[^}]*inset:9%/);
+  assert.match(block, /\.tring \.clock,\.fs \.tring \.clock\{[^}]*clamp\(30px,18cqi,72px\)/);
+  assert.match(block, /max-width:92%;max-width:76cqi/);
+  assert.match(block, /\.tring #tPhase,\.tring #tSubLbl,\.tring #tGoalLbl\{[^}]*max-width:68%;max-width:56cqi/);
+  assert.match(block, /overflow-wrap:anywhere/);
+  assert.match(block, /word-break:break-word/);
+  assert.match(block, /\.tring #tSubLbl\{[^}]*clamp\(12px,4\.5cqi,15px\)/);
+  assert.doesNotMatch(block, /line-clamp|text-overflow:\s*ellipsis/);
+  const fn = app.slice(app.indexOf('function fitRingText('), app.indexOf('function tick('));
+  assert.match(fn, /R = D \* 0\.40/);
+  assert.match(fn, /el\.style\.fontSize = ''/);
+  assert.match(fn, /el\.style\.fontSize = next\.toFixed\(2\) \+ 'px'/);
+  assert.match(fn, /ResizeObserver/);
+  assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
+  const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
+  assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
+  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
+});
