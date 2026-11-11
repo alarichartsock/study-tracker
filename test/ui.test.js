@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v172/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -262,6 +262,8 @@ test('ui: trophy hover uses a static hit box + debounced sheen; session card siz
   assert.match(js, /<div class="t-face">/); assert.match(js, /now - \(el\._shT \|\| 0\) < 600/); assert.match(css, /\.trophy\.t-lp:hover>\.t-face/);
   assert.match(js, /const lean = \(\) => \{\};/); assert.doesNotMatch(js, /dataset\.yaw = Math/); assert.doesNotMatch(css, /\.trophy[^{]*\{[^}]*rotate[XY]/); assert.doesNotMatch(css, /\.t-art \.ta\{transform:perspective/);
   assert.match(js, /ACT\.nowSize = /); assert.match(css, /html\[data-now="l"\]\{--nz:1\.3\}/);
+  assert.match(js, /id="apprThemeLbl">Theme</); assert.match(js, /class="appr-grid"/); assert.match(js, /class="appr-accent-row"/); assert.match(js, /class="acc-custom"/);
+  assert.match(css, /\.appr-grid\{display:flex;flex-wrap:wrap;align-items:flex-end/); assert.match(css, /input\[type=color\]\.acc-custom\{/); assert.match(css, /\.appr-field>label\{margin:0 0 4px/);
 });
 test('Thirty Down: hover lifts the top page within the stack (never the flipped-over page), tap turns it up and it lands flat', () => {
   const fs = require('fs'), path = require('path'), w = {}; new Function('window', fs.readFileSync(path.join(__dirname, '../public/trophy-art.js'), 'utf8'))(w); const T = w.TrophyArt;
