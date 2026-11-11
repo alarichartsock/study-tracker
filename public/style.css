@@ -477,6 +477,30 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 
 .t3dq .tabs{max-width:420px}.t3dq p{margin:6px 0 0}
 .row.wrap>.tabs.grow{flex:1 1 180px}
+/* Settings > Appearance: every group is a label above a control of one height, so the rows share a baseline. */
+.appr-grid{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px 22px}
+.appr-field{display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:100%}
+.appr-field>label{margin:0 0 4px;line-height:1.3}
+.appr-field>.tabs{height:var(--control-h);box-sizing:border-box;align-items:stretch;padding:3px;width:max-content;max-width:100%}
+.appr-field>.tabs button{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;line-height:1;height:auto}
+.appr-accent{flex:1 1 420px}
+.appr-accent-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-height:var(--control-h);max-width:100%}
+.appr-accent-row .acc-row{margin:0;flex:0 1 auto}
+.acc-actions{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;flex:0 0 auto}
+input[type=color].acc-custom{-webkit-appearance:none;appearance:none;width:24px;height:24px;min-height:24px;padding:0;margin:0;border:2px solid var(--card);border-radius:7px;background:transparent;box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 18%,transparent);cursor:pointer;flex:0 0 24px;overflow:hidden}
+input[type=color].acc-custom::-webkit-color-swatch-wrapper{padding:0}
+input[type=color].acc-custom::-webkit-color-swatch{border:none;border-radius:5px}
+input[type=color].acc-custom::-moz-color-swatch{border:none;border-radius:5px}
+input[type=color].acc-custom:focus{outline:none}
+input[type=color].acc-custom:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.t3dq.appr-field{margin-top:16px;width:100%}
+@media(max-width:760px){
+  .appr-grid{flex-direction:column;align-items:stretch;gap:14px}
+  .appr-accent{flex-basis:auto}
+  .appr-field>.tabs{width:100%}
+  .appr-field>.tabs button{flex:1 1 0;min-width:0;padding:0 4px}
+}
+@media(max-width:340px){.appr-accent-row .acc-row{gap:4px}}
 
 .ach-cele{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;width:min(440px,calc(100vw - 24px));transform:translate(-50%,24px) scale(.96);opacity:0;transition:transform .35s var(--ease),opacity .3s;display:flex;gap:12px;align-items:center;padding:12px 40px 12px 12px;border-radius:18px;background:var(--glass-strong,var(--card));border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.25);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);cursor:pointer;overflow:hidden}
 .ach-cele.show{transform:translate(-50%,0) scale(1);opacity:1}.ach-cele.still{transition:none}

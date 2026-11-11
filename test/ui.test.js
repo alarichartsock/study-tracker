@@ -262,6 +262,8 @@ test('ui: trophy hover uses a static hit box + debounced sheen; session card siz
   assert.match(js, /<div class="t-face">/); assert.match(js, /now - \(el\._shT \|\| 0\) < 600/); assert.match(css, /\.trophy\.t-lp:hover>\.t-face/);
   assert.match(js, /const lean = \(\) => \{\};/); assert.doesNotMatch(js, /dataset\.yaw = Math/); assert.doesNotMatch(css, /\.trophy[^{]*\{[^}]*rotate[XY]/); assert.doesNotMatch(css, /\.t-art \.ta\{transform:perspective/);
   assert.match(js, /ACT\.nowSize = /); assert.match(css, /html\[data-now="l"\]\{--nz:1\.3\}/);
+  assert.match(js, /id="apprThemeLbl">Theme</); assert.match(js, /class="appr-grid"/); assert.match(js, /class="appr-accent-row"/); assert.match(js, /class="acc-custom"/);
+  assert.match(css, /\.appr-grid\{display:flex;flex-wrap:wrap;align-items:flex-end/); assert.match(css, /input\[type=color\]\.acc-custom\{/); assert.match(css, /\.appr-field>label\{margin:0 0 4px/);
 });
 test('Thirty Down: hover lifts the top page within the stack (never the flipped-over page), tap turns it up and it lands flat', () => {
   const fs = require('fs'), path = require('path'), w = {}; new Function('window', fs.readFileSync(path.join(__dirname, '../public/trophy-art.js'), 'utf8'))(w); const T = w.TrophyArt;
