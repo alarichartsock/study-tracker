@@ -29,6 +29,8 @@ const DAY = 864e5;
 const INDEXNOW = require('./lib/indexnow');
 const i18n = require('./lib/i18n');
 const affiliates = require('./lib/affiliates');
+const mailerLib = require('./lib/mailer');
+const emailVerify = require('./lib/email-verify');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
 const EXAMS = require('./lib/exams');
@@ -196,7 +198,7 @@ function createApp(opts = {}) {
   const checkoutLimiter = new auth.RateLimiter(opts.checkoutMax || 20, 60 * 60e3);
   const baseUrl = req => String(opts.baseUrl || process.env.PUBLIC_BASE_URL || process.env.OAUTH_BASE_URL || ('http://' + (req.headers.host || 'localhost'))).replace(/\/$/, '');
   // paths an expired trial may still POST to (read-only otherwise; data is never deleted)
-  const READONLY_OK = new Set(['/api/password', '/api/account/email', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen', '/api/attribution', '/api/affiliates/apply', '/api/affiliates/connect']);
+  const READONLY_OK = new Set(['/api/password', '/api/account/email', '/api/email/verify/resend', '/api/reports', '/api/achievements/seen', '/api/flags', '/api/timer/stop', '/api/timer/discard', '/api/referral/seen', '/api/attribution', '/api/affiliates/apply', '/api/affiliates/connect']);
   // affiliate program (Connect payouts: test key only unless AFFILIATE_PAYOUTS_LIVE=1)
   const aff = affiliates.create(store.sql.db, { env: process.env, connectKey: opts.affConnectKey, payoutsLive: opts.affPayoutsLive, fetch: opts.affFetch, now: opts.now,
     secret: 'aff:' + (process.env.SESSION_SECRET || store.dbFile || 'sh'), secure: /^https:/.test(String(opts.baseUrl || process.env.PUBLIC_BASE_URL || 'https://studyhertz.com')), emailsOfUser: id => { const x = store.userById(id); return x ? emailsOf(x) : new Set(); } });
@@ -226,6 +228,26 @@ function createApp(opts = {}) {
     return send(res, e.stripe ? 502 : 500, { error: e.stripe ? 'We could not cancel the subscription with Stripe, so nothing was deleted. Please try again in a few minutes.' : 'Deleting the account failed, so nothing was deleted. Please try again.' }); };
   const delLimiter = new auth.RateLimiter(5, 15 * 60e3);
   const emailLimiter = new auth.RateLimiter(10, 15 * 60e3);
+  // Resend is separate from the email-change limiter: 3 messages per hour per account. Sign-up and email changes send on their own.
+  const verifyResendLimiter = new auth.RateLimiter(opts.verifyResendMax ?? 3, opts.verifyResendWindowMs ?? 60 * 60e3);
+  const mailer = opts.mailer || mailerLib.create({ env: process.env, fetch: fetchImpl, log: opts.quiet ? () => {} : s => console.log(s) });
+  // Unverified accounts stay fully usable. emailVerified is exposed on /api/me for a later gate; nothing here checks it.
+  async function sendVerification(user, req) {
+    if (!user || !user.email || user.emailVerified) return { sent: false, skipped: true };
+    const token = emailVerify.issue(user);
+    store.save();
+    const origin = baseUrl(req);
+    const url = origin + '/api/email/verify?token=' + encodeURIComponent(token);
+    const msg = emailVerify.message({ to: user.email, url, username: user.username, logoUrl: origin + '/icon-192.png' });
+    if (!mailer.configured && String(process.env.MAIL_LOG_LINKS || '') === '1' && !opts.quiet) console.log('verification link (mailer not configured) ' + url);
+    try {
+      const r = await mailer.send(msg);
+      return { sent: !!(r && r.sent), provider: r && r.provider };
+    } catch (e) {
+      if (!opts.quiet) console.error('verification email', e.message);
+      return { sent: false, error: true };
+    }
+  }
   const uidFor = (cid, meta) => { const m = Number(meta && meta.uid); if (m && store.userById(m)) return m; const r = cid && store.sql.subByCustomer(typeof cid === 'string' ? cid : cid.id); return r ? r.user_id : null; };
   // Server-side GA4 purchase via the Measurement Protocol. Only when an API secret is configured AND the browser passed its
   // GA client id at checkout (it does that only after analytics consent was granted). Never throws; returns true when sent.
@@ -344,7 +366,9 @@ function createApp(opts = {}) {
   }
   const publicUser = u => ({ id: u.id, username: u.username, admin: !!u.admin, hasPassword: !!u.hash, email: u.email || null, emailVerified: !!(u.email && u.emailVerified), ...(u.displayName ? { displayName: u.displayName } : {}) });
   // Email for username/password accounts: normalized (trim + lowercase), basic shape check, unique across every account's
-  // primary and linked-provider emails. Self-entered emails are stored unverified, so they never auto-link an OAuth login.
+  // primary and linked-provider emails. Self-entered emails start unverified (a link is emailed) and never auto-link an
+  // OAuth login. Provider-verified OAuth emails are already emailVerified and are not sent a second link. Unverified
+  // users can still sign in; existing accounts are not blocked.
   const normEmail = e => String(e == null ? '' : e).trim().toLowerCase();
   const validEmail = e => e.length <= 254 && /^[^\s@<>()",;:]{1,64}@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(e) && /\.[a-z]{2,}$/.test(e);
   const emailTaken = (e, exceptId) => store.db.users.some(x => x.id !== exceptId && [x.email, ...(x.identities || []).map(i => i.email)].some(m => m && String(m).toLowerCase() === e));
@@ -441,6 +465,16 @@ function createApp(opts = {}) {
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
+      // Public, single-use link from the verification email. The raw token is not logged (request logs redact ?token=).
+      if (p === '/api/email/verify' && (M === 'GET' || M === 'HEAD')) {
+        const token = u.searchParams.get('token') || '';
+        const who = emailVerify.findUser(store.db.users, token);
+        const result = who ? emailVerify.consume(who, token) : { ok: false, reason: 'invalid' };
+        if (who) store.save();
+        const q = result.ok ? 'verified' : (result.reason === 'expired' ? 'expired' : 'invalid');
+        res.writeHead(302, { Location: '/?email=' + q, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
+        return res.end();
+      }
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.plansFor(bcfg) } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
@@ -466,7 +500,8 @@ function createApp(opts = {}) {
         let tpl = null; if (j.template !== undefined) { try { tpl = TEMPLATES.resolve(j.template, j.subjects, j.activities); } catch (e) { return send(res, 400, { error: e.message }); } }
         const nu = store.addUser({ username: j.username, ...(await auth.hashPassword(j.password)) }); nu.email = em; nu.emailVerified = false; if (tpl) applyTemplate(store.data(nu.id), j); if (stats.TZ.valid(j.timezone)) store.data(nu.id).settings.timezone = j.timezone; store.save();
         recordConsent(nu, 'password', req); saveSignupMeta(nu, req, j); const affd = aff.attribute(nu, auth.parseCookies(req.headers.cookie).sh_aff, rip, emailsOf(nu)); const referred = !affd && j.ref ? applyReferral(nu, j.ref) : false;
-        return send(res, 200, { user: publicUser(nu), onboarding: true, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
+        const ver = await sendVerification(nu, req);
+        return send(res, 200, { user: publicUser(nu), onboarding: true, verificationSent: !!ver.sent, ...(referred ? { referral: true } : {}), ...(affd ? { affiliate: true } : {}) }, 'application/json', { 'Set-Cookie': [startSession(nu.id), ...(affd ? [clearAff] : [])] });
       }
       if (p === '/api/oauth/pending' && M === 'GET') { const t = auth.parseCookies(req.headers.cookie).ps, pe = t && pendingSignups.get(t);
         return send(res, 200, pe ? { pending: true, provider: oauthLib.PROVIDERS[pe.id.provider].label } : { pending: false }); }
@@ -510,8 +545,16 @@ function createApp(opts = {}) {
         if (user.email && String(user.email).toLowerCase() === em) return send(res, 200, { user: publicUser(user) });
         if (user.email && user.hash && !(await auth.verifyPassword(j.password || '', user.salt, user.hash))) return send(res, 403, { error: 'Enter your current password to change your email.' });
         if (emailTaken(em, user.id)) return send(res, 409, { error: EMAIL_TAKEN });
-        user.email = em; user.emailVerified = false; user.emailAdded = new Date().toISOString(); store.save(); if (res.log) res.log.flags.push('email_set');
-        return send(res, 200, { user: publicUser(user) });
+        user.email = em; user.emailVerified = false; delete user.emailVerifiedAt; user.emailAdded = new Date().toISOString(); store.save(); if (res.log) res.log.flags.push('email_set');
+        const ver = await sendVerification(user, req);
+        return send(res, 200, { user: publicUser(user), verificationSent: !!ver.sent });
+      }
+      if (p === '/api/email/verify/resend' && M === 'POST') {
+        if (!user.email) return send(res, 400, { error: 'Add an email address first' });
+        if (user.emailVerified) return send(res, 200, { ok: true, sent: false, verified: true, user: publicUser(user) });
+        const k = 'ev:' + user.id; if (verifyResendLimiter.blocked(k)) return send(res, 429, { error: 'Too many verification emails. Try again later.' }); verifyResendLimiter.fail(k);
+        const ver = await sendVerification(user, req);
+        return send(res, 200, { ok: true, sent: !!ver.sent, user: publicUser(user) });
       }
       if (p === '/api/terms/accept' && M === 'POST') { if (j.agree !== true) return send(res, 400, { error: 'Please check the box to continue' }); recordConsent(user, 'reaccept', req); return send(res, 200, { ok: true }); }
       if (user.termsVersion !== LEGAL.terms) return send(res, 403, { error: 'Please review and accept the updated Terms', termsRequired: true });

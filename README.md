@@ -8,7 +8,7 @@ Zero runtime dependencies: plain Node.js, vanilla JS/CSS, data in a local JSON f
 ## Features
 Full Athenify parity checklist: [docs/athenify-parity.md](docs/athenify-parity.md).
 
-- **Accounts**: register / login / logout, `crypto.scrypt` + per-user salt, HttpOnly SameSite=Lax cookies (tokens stored only as SHA-256), login rate limiting. First user is admin; open registration switches off once the admin exists (toggle in Settings).
+- **Accounts**: register / login / logout, `crypto.scrypt` + per-user salt, HttpOnly SameSite=Lax cookies (tokens stored only as SHA-256), login rate limiting. First user is admin; open registration switches off once the admin exists (toggle in Settings). Sign-up and email changes send a single-use verification link (see [docs/email-verification.md](docs/email-verification.md)). Unverified accounts can still sign in.
 - **Per-user data**: sessions, subjects, activities, goals, exams, to-dos, plans and Busy Bar settings are isolated per account.
 - **Timer**: stopwatch, Pomodoro (focus/short/long breaks, cycles, auto-start) and countdown modes; subject + activity + note; fullscreen focus mode with keyboard shortcuts (Space, F, Esc); screen wake lock; sound + notifications; focus/progress rating after each session. The running timer lives on the server, so it survives restarts and follows you across devices.
 - **Sessions**: list or table view, filters (subject, activity, dates, text), manual & retroactive entries with breaks, quick durations, bulk edit/delete, undo.
@@ -66,6 +66,8 @@ Then open `https://<machine-name>.<tailnet>.ts.net/` on your devices. Without it
 ```
 server.js          HTTP server + API (createApp() for tests)
 lib/auth.js        scrypt hashing, tokens, cookies, rate limiter
+lib/email-verify.js  single-use email verification tokens (hash only) and the message
+lib/mailer.js      Resend, Postmark, SMTP, or a log fallback when unconfigured
 lib/csv.js         CSV parsing, column mapping, export
 lib/stats.js       totals, streaks, day keys, goals
 lib/analytics.js   reports, data room, pace/forecast, medals, achievements

@@ -29,3 +29,6 @@ services:
         value: https://studyhertz.com
       - key: TRUST_PROXY
         value: "1"
+      # Email verification is off until a provider is set. Do not put secrets in this file.
+      # See docs/email-verification.md: RESEND_API_KEY (or POSTMARK_SERVER_TOKEN, or SMTP_*)
+      # plus MAIL_FROM. PUBLIC_BASE_URL defaults to OAUTH_BASE_URL.
