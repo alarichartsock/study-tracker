@@ -58,6 +58,41 @@ test('countdown and pomodoro titles show time remaining and clamp at zero', () =
   assert.equal(tabTitleFor(switched, start + 1000, true, 'StudyHertz', 'L'), '0:24:29 · Psych/Soc');
 });
 
+test('running tab title includes the activity and changes in the same second it is switched', () => {
+  const a = running({ activity: 'Passages' });
+  assert.equal(tabTitleFor(a, start + 1500, true, 'StudyHertz', 'Land'), '0:00:01 · CARS · Passages');
+  assert.equal(tabTitleFor(running({ activity: '' }), start + 1500, true, 'StudyHertz', 'Land'), '0:00:01 · CARS');
+  assert.equal(tabTitleFor(running({ activity: 'Passages', paused: true }), start + 1500, true, 'StudyHertz', 'Land'), 'StudyHertz');
+  const document = { title: '' };
+  const S = { active: a };
+  const sync = new Function('document', 'S', 'ME', 'BRAND', 'LANDING_TITLE', `${padLine}\n${fmtLine}\n${sliceFn(js, 'tabTitleFor')}\n${sliceFn(js, 'syncTabTitle')}\nreturn syncTabTitle;`)(document, S, { id: 1 }, 'StudyHertz', 'Land');
+  sync(start + 1500);
+  assert.equal(document.title, '0:00:01 · CARS · Passages');
+  S.active.activity = 'Review mistakes';
+  sync(start + 1500); // same displayed second: the activity still has to land
+  assert.equal(document.title, '0:00:01 · CARS · Review mistakes');
+  S.active.activity = '';
+  sync(start + 1600);
+  assert.equal(document.title, '0:00:01 · CARS');
+});
+
+test('ring label follows the selected activity when idle, running, and paused', () => {
+  const timerLabel = new Function(`${sliceFn(js, 'timerLabel')}\nreturn timerLabel;`)();
+  assert.equal(timerLabel(null, 'Bio/Biochem', ''), 'Bio/Biochem');
+  assert.equal(timerLabel(null, 'Bio/Biochem', 'Reading'), 'Bio/Biochem · Reading');
+  assert.equal(timerLabel(null, 'Bio/Biochem', 'Content review'), 'Bio/Biochem · Content review');
+  assert.equal(timerLabel(null, '', 'Reading'), 'Pick a subject');
+  assert.equal(timerLabel(null, '', ''), 'Pick a subject');
+  const run = { paused: false };
+  assert.equal(timerLabel(run, 'Bio/Biochem', 'Reading'), 'Bio/Biochem · Reading');
+  assert.equal(timerLabel(run, 'Bio/Biochem', 'Practice questions'), 'Bio/Biochem · Practice questions');
+  assert.equal(timerLabel(run, 'Bio/Biochem', ''), 'Bio/Biochem');
+  const paused = { paused: true };
+  assert.equal(timerLabel(paused, 'Bio/Biochem', 'Reading'), 'Paused · Bio/Biochem · Reading');
+  assert.equal(timerLabel(paused, 'Bio/Biochem', 'Flashcards'), 'Paused · Bio/Biochem · Flashcards');
+  assert.equal(timerLabel(paused, 'CARS', ''), 'Paused · CARS');
+});
+
 test('stopped and signed-out titles reset; a running subject rename is the title subject', () => {
   assert.equal(tabTitleFor(null, start + 5000, true, 'StudyHertz', 'Land'), 'StudyHertz');
   assert.equal(tabTitleFor(undefined, start, false, 'StudyHertz', 'Land'), 'Land');
@@ -148,6 +183,6 @@ test('title sync is not tied to the timer view and wakes on visibility, focus, p
   const clock = js.slice(js.indexOf('function tabTitleFor'), js.indexOf('ACT.mode'));
   assert.doesNotMatch(clock, /location\.reload|shTabReload/);
   assert.doesNotMatch(clock, /accentFavicon|favSvg/); // favicon stays on the accent path
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v172/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v173/);
   assert.match(js, /addEventListener\('pageshow', pinIosWash\)/); // mobile Safari wash fix stays
 });
