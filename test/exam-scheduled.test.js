@@ -104,5 +104,5 @@ test('exam list ignores a scheduled score and the dialog can grey the score box'
   assert.match(js, /class="row ex-when"><div><label>Date<\/label><input type="date"[^]*?<\/div><\/div><label class="ex-sched">/);
   assert.match(css, /label\.ex-sched input\{[^}]*accent-color:var\(--acc\)/);
   assert.match(css, /#exScore\.score-off input:disabled\{[^}]*var\(--muted\)/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v173/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v174/);
 });
