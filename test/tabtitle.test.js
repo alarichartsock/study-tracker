@@ -148,6 +148,6 @@ test('title sync is not tied to the timer view and wakes on visibility, focus, p
   const clock = js.slice(js.indexOf('function tabTitleFor'), js.indexOf('ACT.mode'));
   assert.doesNotMatch(clock, /location\.reload|shTabReload/);
   assert.doesNotMatch(clock, /accentFavicon|favSvg/); // favicon stays on the accent path
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v172/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v173/);
   assert.match(js, /addEventListener\('pageshow', pinIosWash\)/); // mobile Safari wash fix stays
 });
