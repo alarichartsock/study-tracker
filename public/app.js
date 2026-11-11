@@ -349,8 +349,8 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-// A paused subject switch, and the 60s poll, both fetch /api/state. The response that started first must not
-// paint over a newer one: that was snapping the ring and the paused label back to the subject the timer was started on.
+// A paused subject switch, an activity change, and the 60s poll all fetch /api/state. The response that started first must not
+// paint over a newer one: that was snapping the ring and the paused label back to the subject and activity the timer was started on.
 let stateGen = 0;
 async function load() {
   const gen = ++stateGen;
@@ -387,6 +387,9 @@ const stars = (name, v) => `<div class="stars">${[1, 2, 3, 4, 5].map(i => `<butt
 dialog.acts.star = b => { const w = b.parentElement, v = +b.dataset.v, cur = +w.querySelector('input').value, nv = cur === v ? '' : v; w.querySelector('input').value = nv; w.querySelectorAll('button').forEach(x => x.classList.toggle('on', !!nv && +x.dataset.v <= nv)); };
 
 // ================= TIMER =================
+// Gold overtime sits on r 77: accent ring is r 88 with a 12-wide stroke (inner edge 82),
+// so a 6.5-wide gold stroke ends near 80, just inside the green and clear of the comet.
+const GOLD_R = 77, GOLD_C = 2 * Math.PI * GOLD_R;
 VIEWS.timer = () => {
   const a = S.active, mode = a ? a.mode || 'stopwatch' : UI.mode, p = UI.pomo;
   const sug = ST.suggestion ? `<button class="link small" data-act="useSuggestion">Suggested: ${fmtH(ST.suggestion)}</button>` : '';
@@ -395,12 +398,12 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
+    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-gold-svg" id="tGoldSvg" aria-hidden="true">${[1, 2, 3].map(n => `<circle cx="100" cy="100" r="${GOLD_R}" class="ring-gold g${n}" style="stroke-dasharray:${GOLD_C};stroke-dashoffset:${GOLD_C};opacity:0"/>`).join('')}</svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
     <div class="chips">${S.subjects.map(s => `<button class="chip ${s === sel ? 'on' : ''}" style="--c:${color(s)}" data-act="pick" data-s="${esc(s)}"><span class="dot" style="background:${color(s)}"></span>${esc(s)}</button>`).join('')}</div>
-    <div class="row gap" style="width:min(520px,100%)"><select id="tAct">${opt(S.activities, a?.activity ?? localStorage.activity ?? '', 'Activity (optional)')}</select><input id="tNote" placeholder="Note (optional)" value="${esc(a?.note || '')}"></div>
+    <div class="row gap" style="width:min(520px,100%)"><select id="tAct" data-chg="tAct">${opt(S.activities, a?.activity ?? localStorage.activity ?? '', 'Activity (optional)')}</select><input id="tNote" placeholder="Note (optional)" value="${esc(a?.note || '')}"></div>
     <div class="ctrl">${ctrl}<button class="btn xl" data-act="fullscreen" title="Fullscreen focus (F)">⛶</button></div>
   </div>
   ${statCards([[fmtH(ST.today + live()), 'Today'], [fmtH(ST.week + live()), 'This week'], [ST.streak + (ST.streak === 1 ? ' day' : ' days'), 'Streak'], [Math.round(Math.min(100, ST.goalSec ? (ST.today + live()) / ST.goalSec * 100 : 0)) + '%', 'Daily goal']])}
@@ -408,14 +411,21 @@ VIEWS.timer = () => {
 };
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
+// Ring status. Idle shows the picked subject and activity. A session shows its own, with a Paused prefix.
+function timerLabel(active, subject, activity) {
+  const act = activity ? ' · ' + activity : '';
+  if (active) return (active.paused ? 'Paused · ' : '') + subject + act;
+  return subject ? subject + act : 'Pick a subject';
+}
 // Tab title: the running clock is elapsed study time (or remaining, for a countdown) from timestamps —
 // accum + (now - start) — never a count of ticks. Date.now, not performance.now, so sleep moves it forward.
 // Written on every view. A re-render used to leave a stale title because the write lived behind the timer-view return.
+// The activity rides along with the subject so a dropdown change shows up in the same second.
 function tabTitleFor(active, now, signedIn, brand, landing) {
   if (active && !active.paused) {
     const elapsed = (+active.accum || 0) + (now - new Date(active.start).getTime()) / 1000;
     const shown = active.targetSec ? +active.targetSec - elapsed : elapsed;
-    return fmtClock(shown) + ' · ' + active.subject;
+    return fmtClock(shown) + ' · ' + active.subject + (active.activity ? ' · ' + active.activity : '');
   }
   return signedIn ? brand : landing;
 }
@@ -423,6 +433,100 @@ function syncTabTitle(now, force) {
   const t = tabTitleFor(S && S.active, now || Date.now(), !!ME, BRAND, LANDING_TITLE);
   if (!force && syncTabTitle.last === t) return;
   syncTabTitle.last = t; document.title = t;
+}
+// Shrink ring text only after it has wrapped and still crosses the inner edge of the stroke.
+// The whole string stays in the DOM; this never ellipsizes it.
+function fitRingText() {
+  const ring = document.querySelector('#tw .tring');
+  if (!ring || view !== 'timer') return;
+  if (fitRingText.busy) return;
+  if (!fitRingText.ro && typeof ResizeObserver === 'function') {
+    fitRingText.ro = new ResizeObserver(() => { fitRingText.key = ''; if (!fitRingText.busy) fitRingText(); });
+  }
+  if (fitRingText.ro && fitRingText.watch !== ring) {
+    if (fitRingText.watch) fitRingText.ro.unobserve(fitRingText.watch);
+    fitRingText.ro.observe(ring); fitRingText.watch = ring; fitRingText.key = '';
+  }
+  const clock = $('clock'), phase = $('tPhase'), label = $('tSubLbl'), goal = $('tGoalLbl');
+  const key = [ring.clientWidth, clock && clock.textContent, phase && phase.textContent, label && label.textContent, goal && goal.textContent].join('\n');
+  if (key === fitRingText.key) return;
+  fitRingText.busy = true;
+  try {
+    const D = ring.clientWidth; if (D < 20) return;
+    const R = D * 0.40, rc = ring.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2;
+    const els = [clock, phase, label, goal].filter(Boolean);
+    for (const el of els) el.style.fontSize = '';
+    const outside = el => {
+      if (!el.textContent || !String(el.textContent).trim()) return false;
+      const b = el.getBoundingClientRect(); if (b.width < 1 || b.height < 1) return false;
+      const extra = Math.max(0, el.scrollWidth - b.width) / 2, left = b.left - extra, right = b.right + extra;
+      return [[left, b.top], [right, b.top], [left, b.bottom], [right, b.bottom]].some(([x, y]) => Math.hypot(x - cx, y - cy) > R + 0.5);
+    };
+    for (let n = 0; n < 16; n++) {
+      const bad = els.filter(outside); if (!bad.length) break;
+      let moved = false;
+      for (const el of bad) {
+        const cur = parseFloat(getComputedStyle(el).fontSize), floor = (el === clock ? 0.09 : 0.03) * D, next = Math.max(floor, cur * 0.9);
+        if (next < cur - 0.25) { el.style.fontSize = next.toFixed(2) + 'px'; moved = true; }
+      }
+      if (!moved) break;
+    }
+    fitRingText.key = key;
+  } finally { fitRingText.busy = false; }
+}
+// Overtime past the daily goal, as laps of that goal. 2h30 against a 2h goal is a quarter
+// lap (gold arc 25%). The first lap is the base gold; a finished lap stays drawn and the
+// next one is a brighter core. Past two laps the bright ring stays full and a hot edge
+// shows the current fraction. Exactly on the goal is not overtime.
+function goalOvertime(todaySec, goalSec) {
+  const today = +todaySec || 0, goal = +goalSec || 0;
+  if (!(goal > 0) || !(today > goal)) return { over: false, extra: 0, arcs: [] };
+  const extra = (today - goal) / goal;
+  const arcs = [{ pct: Math.min(extra, 1), tier: 0 }];
+  if (extra > 1) arcs.push({ pct: Math.min(extra - 1, 1), tier: 1 });
+  if (extra > 2) {
+    const done = Math.floor(extra + 1e-9), frac = extra - done;
+    if (frac > 1e-6) arcs.push({ pct: frac, tier: 2 });
+  }
+  return { over: true, extra, arcs };
+}
+// Persistent gold svg (not inside the accent svg, which tick replaces every second).
+// grow: one-shot fill when this view watches the goal get crossed. Level 0 jumps.
+function paintGoalGold(ot, grow) {
+  const svg = $('tGoldSvg');
+  if (!svg) return;
+  const want = [0, 0, 0];
+  for (const a of ot.arcs) if (a && a.tier >= 0 && a.tier < 3) want[a.tier] = a.pct;
+  const C = 2 * Math.PI * GOLD_R;
+  const fresh = !svg.dataset.ready;
+  svg.dataset.ready = '1';
+  svg.dataset.laps = String(Math.min(9, Math.floor((ot.extra || 0) + 1e-9)));
+  svg.dataset.hot = ot.extra >= 2 ? '1' : '0';
+  const still = animLevel() < 1;
+  svg.querySelectorAll('circle').forEach((el, i) => {
+    const pct = want[i] || 0, off = C * (1 - Math.min(1, Math.max(0, pct))), show = pct > 0;
+    el.style.strokeDasharray = String(C);
+    if (grow && show) {
+      el.style.transition = 'none';
+      el.style.strokeDashoffset = String(C);
+      el.style.opacity = '1';
+      el.dataset.off = String(off);
+      el.dataset.show = '1';
+    } else {
+      el.style.transition = (still || fresh) ? 'none' : '';
+      el.style.strokeDashoffset = String(off);
+      el.style.opacity = show ? '1' : '0';
+      el.dataset.off = '';
+    }
+  });
+  if (grow || fresh) requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!svg.isConnected) return;
+    const move = animLevel() >= 1;
+    svg.querySelectorAll('circle').forEach(el => {
+      el.style.transition = move ? '' : 'none';
+      if (grow && el.dataset.off) { el.style.strokeDashoffset = el.dataset.off; el.style.opacity = el.dataset.show === '1' ? '1' : '0'; }
+    });
+  }));
 }
 function tick() {
   const now = Date.now();
@@ -436,14 +540,31 @@ function tick() {
   syncTabWorker();
   if (view !== 'timer' || !$('clock')) return;
   const today = ST.today + l;
-  let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '';
-  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; }
-  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; }
+  // The ring is the daily goal unless a countdown/pomodoro block or a break owns it.
+  let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '', goalRing = true;
+  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; goalRing = false; }
+  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; goalRing = false; }
   else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
   else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
-  $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
-  $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
+  const ot = goalRing ? goalOvertime(today, ST.goalSec) : { over: false, extra: 0, arcs: [] };
+  const over = !!(ST.goalSec && today > ST.goalSec);
+  if (tick.wasOver === undefined) tick.wasOver = over;
+  const grow = over && tick.wasOver === false && animLevel() >= 1;
+  if (over && tick.wasOver === false && animLevel() >= 2) {
+    const box = document.querySelector('#tw .tring');
+    if (box) { box.classList.remove('goal-shimmer'); void box.offsetWidth; box.classList.add('goal-shimmer'); }
+  }
+  tick.wasOver = over;
+  paintGoalGold(ot, grow);
+  const act = a ? (a.activity || '') : (localStorage.activity || '');
+  $('tSubLbl').textContent = timerLabel(a, a ? a.subject : (sel || ''), act);
+  const goalEl = $('tGoalLbl');
+  goalEl.textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
+  goalEl.classList.toggle('goal-over', over);
+  if (over) { const m = Math.round((today - ST.goalSec) / 60); goalEl.title = (m >= 1 ? fmtH(today - ST.goalSec) + ' over goal' : 'Over goal'); }
+  else goalEl.removeAttribute('title');
+  fitRingText();
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
 // shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard
@@ -455,7 +576,7 @@ const NOW = (() => { let el = null, key = '';
     el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.querySelector('.now-body')) { e.preventDefault(); go('timer'); } }); document.body.appendChild(el); };
   const set = m => { localStorage.nowMin = m ? '1' : ''; key = ''; draw(); };
   const draw = () => { const a = S && S.active, show = !!(ME && a && view !== 'timer'); if (!show) { if (el) el.hidden = true; key = ''; return; } if (!el) mk(); el.hidden = false;
-    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, sel, min, a.targetSec].join('|'), c = color(sel || a.subject);
+    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, a.activity || '', sel, min, a.targetSec].join('|'), c = color(sel || a.subject);
     if (k !== key) { key = k; el.classList.toggle('min', min); el.classList.toggle('paused', !!a.paused); el.style.setProperty('--subj', c);
       const ring = '<svg class="now-ring" viewBox="0 0 200 200" aria-hidden="true"><circle class="ring-bg" cx="100" cy="100" r="84"/>' + (a.paused ? '' : '<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ' + (2 * Math.PI * 84 - 60) + ';stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ' + (2 * Math.PI * 84 - 30) + '"/></g>') + '</svg>';
       el.innerHTML = min ? '<button class="now-pill" data-now="max" aria-label="Show session card: ' + esc(a.subject) + '">' + ring + '<span class="dot" style="background:' + c + '"></span><b class="now-t"></b></button>'
@@ -526,6 +647,12 @@ ACT.pick = async b => {
   await refresh();
 };
 const tFields = () => ({ subject: sel, activity: $('tAct') ? $('tAct').value : (localStorage.activity || ''), note: $('tNote') ? $('tNote').value : '' });
+ACT.tAct = async b => {
+  const activity = b.value; localStorage.activity = activity; if (S.active) S.active.activity = activity; ++stateGen; tick(); NOW.draw(); // ring label and tab title follow the dropdown now; drop a poll already in flight
+  try { if (S.active) { await api('/api/timer/subject', 'POST', { activity }); timerPing(); } } // running or paused: a reload, resume and the 60s poll keep this activity, and the saved session gets it
+  catch (e) { toast(e.message); }
+  await refresh();
+};
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {
   const f = tFields(), mode = UI.mode, body = { ...f, mode }; localStorage.activity = f.activity;
@@ -590,7 +717,7 @@ VIEWS.dash = () => {
   const goalTile = (lbl, g, extra = '', key = lbl) => { if (!g) return ''; const pct = g.goal ? g.done / g.goal : 0, from = GA.from(key, pct), run = S.active && !S.active.paused, c = 2 * Math.PI * 84;
     return `<div class="center"><div class="goal-ring"${tip(lbl + " goal \u00b7 " + fmtH(g.done) + " of " + fmtH(g.goal) + " (" + Math.round(pct * 100) + "%)")} data-gk="${esc(key)}" data-p="${pct}"${pct >= 1 ? ' data-done' : ''}${run ? ' data-run' : ''}><svg viewBox="0 0 200 200" class="ring">${ring(84, from)}${run ? `<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g>` : ''}</svg><svg class="g-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7"/></svg><div class="ring-center"><b class="g-pct">${Math.round(from * 100)}%</b><span class="g-sub"><span class="g-done-t">${ringH(g.done)}</span><span>of ${ringH(g.goal)}</span></span></div></div><b>${lbl}</b><div class="muted small">${extra}</div></div>`; };
   const paceTxt = g => g ? (g.remainingSec <= 0 ? 'Goal reached 🎉' : `need ${fmtH(g.perDaySec)}/day for ${g.daysLeft}d · forecast ${fmtH(g.forecastSec)}${g.onTrack ? ' ✓' : ''}`) : '';
-  const exams = S.exams.filter(e => daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+  const exams = S.exams.filter(e => e.scheduled || daysUntil(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const week = [...Array(7)].map((_, i) => addD(k2d(ST.todayKey), i - 6)), subjGoals = Object.entries(G.subjects || {});
   return `${statCards([[fmtH(ST.today + l), 'Today'], [fmtH(ST.week + l), 'This week'], [fmtH(ST.month + l), 'This month'], [`${ST.streak}d <small class="muted">best ${ST.bestStreak}d</small>`, 'Streak']])}
   <div class="card"><h3>Goals</h3><div class="goalgrid">${goalTile('Today', (UI.gaBase = { day: G.day.goal ? { done: G.day.done, goal: G.day.goal } : null, week: G.week, month: G.month, term: G.term }).day && { done: G.day.done + l, goal: G.day.goal }, G.day.goal ? `${fmtH(Math.max(0, G.day.goal - G.day.done - l))} to go` : 'Set a daily goal in Settings', 'day')}
@@ -599,7 +726,7 @@ VIEWS.dash = () => {
   ${isMcat() ? pxHomeCard() : gpxHomeCard()}
   ${todoCard()}
   <div class="grid2">
-    <div class="card"><h3>Upcoming exams</h3>${exams.map(e => `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${daysUntil(e.date) === 0 ? 'Today' : daysUntil(e.date) + ' days'}</b></div>`).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
+    <div class="card"><h3>Upcoming exams</h3>${exams.map(e => { const d = daysUntil(e.date); return `<div class="subj-row"><span>${esc(e.name)} <small class="muted">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric' })}</small></span><b>${e.scheduled && d < 0 ? 'Scheduled' : d === 0 ? 'Today' : d + ' days'}</b></div>`; }).join('') || '<p class="muted small">No exams yet. <a href="#" class="link" data-act="goto" data-v="plan">Add your MCAT date</a></p>'}
 </div>
     <div class="card"><h3>Last 7 days</h3>${(() => { const vals = week.map(d => (ST.byDay[dk(d)] || 0) + (dk(d) === ST.todayKey ? l : 0)), mx = Math.max(ST.goalSec || 0, 3600, ...vals); return `<div class="week7">${week.map((d, i) => { const v = vals[i], m = medalOf(v); return `<div class="w7-row${dk(d) === ST.todayKey ? ' today' : ''}"${tip(fmtDate(d, { weekday: 'short', month: 'short', day: 'numeric' }) + ' \u00b7 ' + fmtH(v) + (m ? ' \u00b7 ' + m + ' medal' : '') + (ST.goalSec ? ' \u00b7 ' + Math.round(v / ST.goalSec * 100) + '% of goal' : ''))}><span class="w7-lbl">${fmtDate(d, { weekday: 'short', day: 'numeric' })}</span><div class="w7-track">${v > 0 ? `<i style="width:max(6px,${(v / mx * 100).toFixed(1)}%)"></i>` : ''}</div><span class="w7-medal">${m ? `<span class="medal m-${m}"></span>` : ''}</span><b class="w7-val${v ? '' : ' muted'}">${fmtH(v)}</b></div>`; }).join('')}</div>`; })()}</div>
   </div>
@@ -781,12 +908,14 @@ ACT.cRange = b => { UI[b.dataset.k] = b.value; render(); };
 
 // ================= EXAMS & TO-DOS =================
 const PRI = { high: 0, normal: 1, low: 2 };
+const examCountsScore = e => e.grade != null && !e.scheduled && daysUntil(e.date) <= 0;
+const examMark = e => { const d = daysUntil(e.date); if (e.scheduled) return d > 0 ? d + ' days' : d === 0 ? 'Today' : 'Scheduled'; return d > 0 ? d + ' days' : d === 0 ? 'Today' : e.grade != null ? 'Score ' + esc(e.grade) : 'Done'; };
 VIEWS.plan = () => {
-  const ex = S.exams.slice().sort((a, b) => a.date.localeCompare(b.date)), graded = ex.filter(e => e.grade != null && daysUntil(e.date) <= 0);
+  const ex = S.exams.slice().sort((a, b) => a.date.localeCompare(b.date)), graded = ex.filter(examCountsScore);
   const wavg = graded.length ? graded.reduce((a, e) => a + +e.grade, 0) / graded.length : null, tv = UI.taskView;
   const tasks = S.tasks.filter(t => (tv === 'done' ? t.done : !t.done && (tv === 'scheduled' ? !!t.due : !t.due))).sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || PRI[a.priority] - PRI[b.priority]);
   return `<div class="card"><div class="row" style="margin:0 0 8px"><h3 class="grow" style="margin:0">Exams &amp; practice tests</h3><button class="btn primary" data-act="examEdit">+ Exam</button></div>
-    ${ex.map(e => { const d = daysUntil(e.date); return `<div class="item" data-act="examEdit" data-id="${e.id}"><span class="dot" style="background:var(--acc)"></span><div class="grow"><div>${esc(e.name)}</div><div class="n">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}${e.notes ? ' · ' + esc(e.notes) : ''}</div></div><div class="t">${d > 0 ? d + ' days' : d === 0 ? 'Today' : e.grade != null ? 'Score ' + esc(e.grade) : 'Done'}${d >= 0 && examTest(e.test).goal != null ? '<div class="n">Target ' + esc(examTest(e.test).goal) + '</div>' : ''}</div></div>`; }).join('') || (isMcat() ? '<p class="muted small">Add your MCAT test date and AAMC full-lengths to get countdowns.</p>' : `<p class="muted small">Add your ${esc(tplOf().id === 'custom' ? 'test' : tplOf().name)} test date and practice tests to get countdowns.</p>`)}
+    ${ex.map(e => { const d = daysUntil(e.date); return `<div class="item" data-act="examEdit" data-id="${e.id}"><span class="dot" style="background:var(--acc)"></span><div class="grow"><div>${esc(e.name)}</div><div class="n">${fmtDate(k2d(e.date), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}${e.notes ? ' · ' + esc(e.notes) : ''}</div></div><div class="t">${examMark(e)}${e.scheduled ? (d >= 0 ? '<div class="n">Scheduled</div>' : '') : d >= 0 && examTest(e.test).goal != null ? '<div class="n">Target ' + esc(examTest(e.test).goal) + '</div>' : ''}</div></div>`; }).join('') || (isMcat() ? '<p class="muted small">Add your MCAT test date and AAMC full-lengths to get countdowns.</p>' : `<p class="muted small">Add your ${esc(tplOf().id === 'custom' ? 'test' : tplOf().name)} test date and practice tests to get countdowns.</p>`)}
     ${wavg != null ? `<p class="muted small">Average score: <b>${Math.round(wavg)}</b> (${graded.length} scored)</p>` : ''}</div>
   <div class="card"><div class="row" style="margin:0 0 8px"><h3 class="grow" style="margin:0">To-dos / study plan</h3><div class="tabs">${['inbox', 'scheduled', 'done'].map(v => `<button data-act="taskView" data-v="${v}" class="${tv === v ? 'on' : ''}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div></div>
     <div class="row wrap gap"><input id="nTask" placeholder="${isMcat() ? 'Add a to-do, e.g. UWorld 40 Qs Bio' : 'Add a to-do, e.g. timed practice section'}" class="grow"><input type="date" id="nDue" style="width:auto"><select id="nPri" style="width:auto"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select><select id="nTS" style="width:auto">${opt(S.subjects, '', 'Subject')}</select><button class="btn primary" data-act="taskAdd">Add</button></div>
@@ -800,12 +929,20 @@ const examTest = id => { const ct = id && ctests().find(t => t.id === id); if (c
   const t = tplOf(); return { name: t.exam, range: t.score || null, goal: isMcat() ? S.settings.mcatGoal ?? null : (S.settings.practiceGoals || {})[t.id] ?? null }; };
 ACT.examEdit = b => { const e = b.dataset.id ? S.exams.find(x => x.id === +b.dataset.id) : null, T = ctests(), t0 = e?.test || '', x0 = examTest(t0);
   const lbl = x => x.range ? 'Score (' + x.range[0] + '\u2013' + x.range[1] + ')' : 'Score';
-  dialog(`<h3>${e ? 'Edit exam' : 'Add exam'}</h3>${T.length ? `<label>Test</label><select name="test"><option value="">${esc(tplOf().id === 'custom' ? 'My test' : tplOf().name)}</option>${T.map(t => `<option value="${t.id}"${t0 === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>` : ''}<label>Name</label><input name="name" value="${esc(e?.name || x0.name)}" required><div class="row"><div><label>Date</label><input type="date" name="date" value="${e?.date || ''}" required></div><div><label id="exGl">${lbl(x0)}</label><input type="number" name="grade" min="${x0.range ? x0.range[0] : ''}" max="${x0.range ? x0.range[1] : ''}" step="1" inputmode="numeric" value="${e ? e.grade ?? '' : isMcat() && !t0 ? 500 : ''}"></div></div><p class="muted small" id="exTg">${x0.goal != null ? 'Target score: ' + x0.goal : ''}</p><label>Notes</label><input name="notes" value="${esc(e?.notes || '')}">
+  dialog(`<h3>${e ? 'Edit exam' : 'Add exam'}</h3>${T.length ? `<label>Test</label><select name="test"><option value="">${esc(tplOf().id === 'custom' ? 'My test' : tplOf().name)}</option>${T.map(t => `<option value="${t.id}"${t0 === t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>` : ''}<label>Name</label><input name="name" value="${esc(e?.name || x0.name)}" required><div class="row ex-when"><div><label>Date</label><input type="date" name="date" value="${e?.date || ''}" required></div><div id="exScore"><label id="exGl">${lbl(x0)}</label><input type="number" name="grade" min="${x0.range ? x0.range[0] : ''}" max="${x0.range ? x0.range[1] : ''}" step="1" inputmode="numeric" value="${e?.scheduled ? '' : e ? e.grade ?? '' : isMcat() && !t0 ? 500 : ''}"></div></div><label class="ex-sched"><input type="checkbox" name="scheduled" class="chk"${e?.scheduled ? ' checked' : ''}> Scheduled (upcoming)</label><p class="muted small" id="exTg">${x0.goal != null ? 'Target score: ' + x0.goal : ''}</p><label>Notes</label><input name="notes" value="${esc(e?.notes || '')}">
     <div class="row">${e ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
-  async (v, f) => { if (v === 'del') await api('/api/exams/' + e.id, 'DELETE'); else { await api(e ? '/api/exams/' + e.id : '/api/exams', e ? 'PUT' : 'POST', { name: f.name.value, date: f.date.value, grade: f.grade.value, notes: f.notes.value, ...(f.test ? { test: f.test.value } : {}) }); if (!e) track('exam_created', { is_mcat: /mcat/i.test(f.name.value) }); } refresh(); });
-  const f = $('dlgForm'); let prevT = t0; if (f.test) f.test.onchange = () => { const old = examTest(prevT), x = examTest(f.test.value); prevT = f.test.value; if (!f.name.value || f.name.value === old.name) f.name.value = x.name;
-    if (f.grade.value !== '' && x.range && (+f.grade.value < x.range[0] || +f.grade.value > x.range[1])) f.grade.value = ''; // e.g. the MCAT 500 default
-    $('exGl').textContent = lbl(x); f.grade.min = x.range ? x.range[0] : ''; f.grade.max = x.range ? x.range[1] : ''; $('exTg').textContent = x.goal != null ? 'Target score: ' + x.goal : ''; }; };
+  async (v, f) => { if (v === 'del') await api('/api/exams/' + e.id, 'DELETE'); else { const scheduled = !!f.scheduled.checked; await api(e ? '/api/exams/' + e.id : '/api/exams', e ? 'PUT' : 'POST', { name: f.name.value, date: f.date.value, grade: scheduled ? '' : f.grade.value, notes: f.notes.value, scheduled, ...(f.test ? { test: f.test.value } : {}) }); if (!e) track('exam_created', { is_mcat: /mcat/i.test(f.name.value) }); } refresh(); });
+  const f = $('dlgForm');
+  const lockScore = () => { const on = f.scheduled.checked, box = $('exScore'); box.classList.toggle('score-off', on);
+    if (on) { if (f.grade.dataset.held == null) f.grade.dataset.held = f.grade.value; f.grade.value = ''; f.grade.disabled = true; f.grade.placeholder = 'No score yet'; }
+    else { f.grade.disabled = false; f.grade.placeholder = ''; if (f.grade.dataset.held != null) { f.grade.value = f.grade.dataset.held; delete f.grade.dataset.held; } } };
+  f.scheduled.onchange = lockScore;
+  f.date.onchange = () => { if (f.date.value > ik(Date.now())) f.scheduled.checked = true; lockScore(); }; // suggest only; unchecking leaves the score editable
+  let prevT = t0; if (f.test) f.test.onchange = () => { const old = examTest(prevT), x = examTest(f.test.value); prevT = f.test.value; if (!f.name.value || f.name.value === old.name) f.name.value = x.name;
+    const shown = f.scheduled.checked ? f.grade.dataset.held : f.grade.value;
+    if (shown != null && shown !== '' && x.range && (+shown < x.range[0] || +shown > x.range[1])) { if (f.scheduled.checked) delete f.grade.dataset.held; else f.grade.value = ''; } // e.g. the MCAT 500 default
+    $('exGl').textContent = lbl(x); f.grade.min = x.range ? x.range[0] : ''; f.grade.max = x.range ? x.range[1] : ''; $('exTg').textContent = x.goal != null ? 'Target score: ' + x.goal : ''; };
+  lockScore(); };
 
 // ================= TROPHIES =================
 let ACH = null;
@@ -958,7 +1095,7 @@ function t3dInfo() { const ov = localStorage.t3dQuality; let a = null; try { a =
   if (T3DQ.includes(ov) && ov !== 'auto') return 'Forced to ' + capW(ov) + ' on this device.';
   return a && a.tier ? 'Auto picked ' + capW(a.tier) + (a.ms != null ? ' (test frame ' + a.ms + ' ms)' : '') + (a.why && a.why.length ? ': ' + a.why.join(', ') : '') + '.' : 'Auto-detects from this device.'; }
 function t3dQualityRow() { const cur = T3DQ.includes(localStorage.t3dQuality) ? localStorage.t3dQuality : 'auto';
-  return '<div class="t3dq mt"><label>Trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
+  return '<div class="t3dq appr-field"><label id="apprTrophyLbl">Trophy &amp; animation quality <span class="muted small">(this device)</span></label><div class="tabs" role="group" aria-labelledby="apprTrophyLbl">' + T3DQ.map(v => '<button data-act="t3dQ" data-q="' + v + '" class="' + (v === cur ? 'on' : '') + '">' + capW(v) + '</button>').join('') + '</div><p class="muted small" id="t3dInfo">' + esc(t3dInfo()) + '</p><p class="muted small">Animations: Low keeps one-time fills only; Medium adds the timer lines and trophy actions; High adds richer trails. Your system\u2019s reduce-motion setting turns them all off.</p></div>'; }
 async function setT3dQuality(v) { if (v === 'auto') { localStorage.removeItem('t3dQuality'); localStorage.removeItem('t3dAuto'); } else localStorage.t3dQuality = v; applyAnimLevel(); if (v === 'auto') tierAuto(); applyAnimLevel(); cometSync(true); }
 ACT.nowSize = async b => { const v = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); localStorage.nowSize = v; if (S) S.settings.nowSize = v; applyNowSize(); try { await api('/api/settings', 'POST', { nowSize: v }); } catch { toast('Could not save card size'); } };
 ACT.t3dQ = async b => { const v = b.dataset.q; b.parentNode.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); const p = setT3dQuality(v), i = $('t3dInfo'); if (i) i.textContent = v === 'auto' ? 'Re-detecting\u2026' : t3dInfo(); await p; if (i && i.isConnected) i.textContent = t3dInfo(); };
@@ -1069,9 +1206,7 @@ async function refRewards() { const r = await api('/api/referral').catch(() => n
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = SHTheme.pref(), rf = await api('/api/referral').catch(() => null);
   const af = await api('/api/affiliates/me').catch(() => null);
-  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="row wrap gap"><div class="tabs grow"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div>
-    <div class="mt"><label>Session card size</label><div class="tabs" id="sNowSize">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
-    <span class="muted small">Accent color ${s.accent ? '(manual override)' : '(follows selected subject)'}</span><span class="acc-row" role="group" aria-label="Accent swatches">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}</span><input type="color" id="sAccent" value="${s.accent || color(sel) || '#6c8cff'}" style="width:60px;padding:2px"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</div>${t3dQualityRow()}</div>${bgSettingsCard()}
+  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="appr-grid"><div class="appr-field"><label id="apprThemeLbl">Theme</label><div class="tabs" role="group" aria-labelledby="apprThemeLbl"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div></div><div class="appr-field"><label id="apprSizeLbl">Session card size</label><div class="tabs" id="sNowSize" role="group" aria-labelledby="apprSizeLbl">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div><div class="appr-field appr-accent"><label id="apprAccLbl">Accent color <span class="muted small">${s.accent ? '(manual override)' : '(follows selected subject)'}</span></label><div class="appr-accent-row" role="group" aria-labelledby="apprAccLbl"><span class="acc-row">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}<input type="color" id="sAccent" class="acc-custom" aria-label="Custom accent color" value="${s.accent || color(sel) || '#6c8cff'}"></span><span class="acc-actions"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</span></div></div></div>${t3dQualityRow()}</div>${bgSettingsCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
