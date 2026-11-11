@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v172/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -369,5 +369,30 @@ test('paused subject switch is stored, so a later state refresh cannot snap the 
   assert.match(route, /!ud\.active\.paused/);
   assert.match(route, /ud\.subjects\.includes\(sub\)/);
   assert.match(route, /ud\.active\.subject = sub/);
+  assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
+});
+
+test('activity dropdown updates the ring and tab title immediately and is stored while running or paused', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const app = pub('app.js'), sv = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert.match(app, /<select id="tAct" data-chg="tAct">/);
+  const h = app.slice(app.indexOf('ACT.tAct = async'), app.indexOf('const savePomo'));
+  assert.match(h, /localStorage\.activity = activity/);
+  assert.match(h, /if \(S\.active\) S\.active\.activity = activity/);
+  assert.match(h, /\+\+stateGen/);
+  assert.match(h, /tick\(\); NOW\.draw\(\)/);
+  assert.match(h, /\/api\/timer\/subject', 'POST', \{ activity \}/);
+  assert.match(h, /if \(S\.active\) \{ await api/);
+  assert.doesNotMatch(h, /S\.active\?\.paused/); // not paused-only: a running session keeps the new activity too
+  assert.match(h, /await refresh\(\)/);
+  assert.doesNotMatch(h, /location\.reload|shTabReload/);
+  assert.match(app, /const act = a \? \(a\.activity \|\| ''\) : \(localStorage\.activity \|\| ''\);/);
+  assert.match(app, /\$\('tSubLbl'\)\.textContent = timerLabel\(a, a \? a\.subject : \(sel \|\| ''\), act\)/);
+  assert.match(app, /active\.subject \+ \(active\.activity \? ' · ' \+ active\.activity : ''\)/);
+  const route = sv.slice(sv.indexOf("p === '/api/timer/subject'"), sv.indexOf("p === '/api/timer/stop'"));
+  assert.match(route, /j\.activity !== undefined/);
+  assert.match(route, /ud\.activities\.includes\(act\)/);
+  assert.match(route, /ud\.active\.activity = act/);
+  assert.match(route, /!ud\.active\.paused/);
   assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
 });

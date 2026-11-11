@@ -349,8 +349,8 @@ function syncTplNav() { const b = document.querySelector('#nav [data-v=mcat]'), 
 let tzFilling = false;
 function tzBackfill() { if (!S || S.settings.timezone || tzFilling) return; const z = TZ.guess() || TZ.DEFAULT; tzFilling = true;
   api('/api/settings', 'POST', { timezone: z }).then(() => { S.settings.timezone = z; toast('Time zone set to ' + z.replace(/_/g, ' ') + '. You can change it in Settings.'); return refresh(); }).catch(() => {}).finally(() => { tzFilling = false; }); }
-// A paused subject switch, and the 60s poll, both fetch /api/state. The response that started first must not
-// paint over a newer one: that was snapping the ring and the paused label back to the subject the timer was started on.
+// A paused subject switch, an activity change, and the 60s poll all fetch /api/state. The response that started first must not
+// paint over a newer one: that was snapping the ring and the paused label back to the subject and activity the timer was started on.
 let stateGen = 0;
 async function load() {
   const gen = ++stateGen;
@@ -400,7 +400,7 @@ VIEWS.timer = () => {
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
     <div class="chips">${S.subjects.map(s => `<button class="chip ${s === sel ? 'on' : ''}" style="--c:${color(s)}" data-act="pick" data-s="${esc(s)}"><span class="dot" style="background:${color(s)}"></span>${esc(s)}</button>`).join('')}</div>
-    <div class="row gap" style="width:min(520px,100%)"><select id="tAct">${opt(S.activities, a?.activity ?? localStorage.activity ?? '', 'Activity (optional)')}</select><input id="tNote" placeholder="Note (optional)" value="${esc(a?.note || '')}"></div>
+    <div class="row gap" style="width:min(520px,100%)"><select id="tAct" data-chg="tAct">${opt(S.activities, a?.activity ?? localStorage.activity ?? '', 'Activity (optional)')}</select><input id="tNote" placeholder="Note (optional)" value="${esc(a?.note || '')}"></div>
     <div class="ctrl">${ctrl}<button class="btn xl" data-act="fullscreen" title="Fullscreen focus (F)">⛶</button></div>
   </div>
   ${statCards([[fmtH(ST.today + live()), 'Today'], [fmtH(ST.week + live()), 'This week'], [ST.streak + (ST.streak === 1 ? ' day' : ' days'), 'Streak'], [Math.round(Math.min(100, ST.goalSec ? (ST.today + live()) / ST.goalSec * 100 : 0)) + '%', 'Daily goal']])}
@@ -408,14 +408,21 @@ VIEWS.timer = () => {
 };
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
 AFTER.timer = () => tick();
+// Ring status. Idle shows the picked subject and activity. A session shows its own, with a Paused prefix.
+function timerLabel(active, subject, activity) {
+  const act = activity ? ' · ' + activity : '';
+  if (active) return (active.paused ? 'Paused · ' : '') + subject + act;
+  return subject ? subject + act : 'Pick a subject';
+}
 // Tab title: the running clock is elapsed study time (or remaining, for a countdown) from timestamps —
 // accum + (now - start) — never a count of ticks. Date.now, not performance.now, so sleep moves it forward.
 // Written on every view. A re-render used to leave a stale title because the write lived behind the timer-view return.
+// The activity rides along with the subject so a dropdown change shows up in the same second.
 function tabTitleFor(active, now, signedIn, brand, landing) {
   if (active && !active.paused) {
     const elapsed = (+active.accum || 0) + (now - new Date(active.start).getTime()) / 1000;
     const shown = active.targetSec ? +active.targetSec - elapsed : elapsed;
-    return fmtClock(shown) + ' · ' + active.subject;
+    return fmtClock(shown) + ' · ' + active.subject + (active.activity ? ' · ' + active.activity : '');
   }
   return signedIn ? brand : landing;
 }
@@ -442,7 +449,8 @@ function tick() {
   else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
   else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
   $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
-  $('tSubLbl').textContent = a ? (a.paused ? 'Paused · ' : '') + a.subject + (a.activity ? ' · ' + a.activity : '') : sel || 'Pick a subject';
+  const act = a ? (a.activity || '') : (localStorage.activity || '');
+  $('tSubLbl').textContent = timerLabel(a, a ? a.subject : (sel || ''), act);
   $('tGoalLbl').textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
@@ -455,7 +463,7 @@ const NOW = (() => { let el = null, key = '';
     el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el.querySelector('.now-body')) { e.preventDefault(); go('timer'); } }); document.body.appendChild(el); };
   const set = m => { localStorage.nowMin = m ? '1' : ''; key = ''; draw(); };
   const draw = () => { const a = S && S.active, show = !!(ME && a && view !== 'timer'); if (!show) { if (el) el.hidden = true; key = ''; return; } if (!el) mk(); el.hidden = false;
-    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, sel, min, a.targetSec].join('|'), c = color(sel || a.subject);
+    const min = !!localStorage.nowMin, k = [a.start, a.paused, a.subject, a.activity || '', sel, min, a.targetSec].join('|'), c = color(sel || a.subject);
     if (k !== key) { key = k; el.classList.toggle('min', min); el.classList.toggle('paused', !!a.paused); el.style.setProperty('--subj', c);
       const ring = '<svg class="now-ring" viewBox="0 0 200 200" aria-hidden="true"><circle class="ring-bg" cx="100" cy="100" r="84"/>' + (a.paused ? '' : '<g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ' + (2 * Math.PI * 84 - 60) + ';stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ' + (2 * Math.PI * 84 - 30) + '"/></g>') + '</svg>';
       el.innerHTML = min ? '<button class="now-pill" data-now="max" aria-label="Show session card: ' + esc(a.subject) + '">' + ring + '<span class="dot" style="background:' + c + '"></span><b class="now-t"></b></button>'
@@ -526,6 +534,12 @@ ACT.pick = async b => {
   await refresh();
 };
 const tFields = () => ({ subject: sel, activity: $('tAct') ? $('tAct').value : (localStorage.activity || ''), note: $('tNote') ? $('tNote').value : '' });
+ACT.tAct = async b => {
+  const activity = b.value; localStorage.activity = activity; if (S.active) S.active.activity = activity; ++stateGen; tick(); NOW.draw(); // ring label and tab title follow the dropdown now; drop a poll already in flight
+  try { if (S.active) { await api('/api/timer/subject', 'POST', { activity }); timerPing(); } } // running or paused: a reload, resume and the 60s poll keep this activity, and the saved session gets it
+  catch (e) { toast(e.message); }
+  await refresh();
+};
 const savePomo = () => (localStorage.pomo = JSON.stringify(UI.pomo));
 ACT.start = async () => {
   const f = tFields(), mode = UI.mode, body = { ...f, mode }; localStorage.activity = f.activity;
