@@ -88,7 +88,46 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v172/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v174/);
+});
+
+test('share price chart stacks cumulative hours in each subject color', () => {
+  const vm = require('vm'), js = pub('app.js'), css = pub('style.css');
+  const start = js.indexOf('const subjOrder = '), end = js.indexOf('\nVIEWS.stats');
+  assert.ok(start > 0 && end > start);
+  const ctx = { S: { subjects: ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'] },
+    color: s => ({ CARS: '#c8841d', 'Bio/Biochem': '#10a76d', General: '#4c6ef5' }[s] || '#868e96'),
+    esc: s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    fmtH: s => { s = Math.round((s || 0) / 60); const h = Math.floor(s / 60), m = s % 60; return h ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + 'm'; },
+    tip: (t, focus = true) => ' data-tip="' + String(t).replace(/"/g, '&quot;') + '"' + (focus ? ' tabindex="0"' : ''),
+    fmtDate: () => 'Oct 1, 2026', k2d: k => k, yGrid: () => '<span class="yg"></span>' };
+  vm.createContext(ctx); vm.runInContext(js.slice(start, end) + '\nthis.cumChart = cumChart;', ctx);
+  const cum = [
+    ['2026-10-01', 3600, { CARS: 3600 }],
+    ['2026-10-02', 5400, { CARS: 3600, 'Bio/Biochem': 1800 }],
+    ['2026-10-03', 7200, { CARS: 3600, 'Bio/Biochem': 1800, Other: 1800 }],
+  ];
+  const html = ctx.cumChart(cum, 7200, { top: 7200, ticks: [0, 3600, 7200] });
+  const fills = [...html.matchAll(/class="cum-band"[^>]*fill="([^"]+)"/g)].map(m => m[1]);
+  assert.deepEqual(fills, ['#c8841d', '#10a76d', '#868e96'], 'bands follow the subject list; no subject is gray');
+  assert.deepEqual([...html.matchAll(/class="cum-edge"[^>]*stroke="([^"]+)"/g)].map(m => m[1]), fills);
+  const pts = d => d.replace(/^M/, '').replace(/Z$/, '').split('L');
+  const paths = [...html.matchAll(/class="cum-band"[^>]*d="([^"]+)"/g)].map(m => m[1]);
+  const total = html.match(/class="cum-total"[^>]*points="([^"]+)"/)[1].split(' ');
+  assert.equal(total.length, 3, 'one vertex per day');
+  assert.deepEqual(pts(paths[paths.length - 1]).slice(0, 3), total, 'top of the stack is the total line');
+  assert.match(html, /class="cum-total"[^>]*stroke="var\(--ok\)"/); assert.match(html, /class="yg"/); assert.match(html, /class="cum-hit"/);
+  assert.match(html, /data-subj="CARS"/); assert.match(html, />CARS<\/span><b>1h 00m<\/b>/); assert.match(html, />Other<\/span><b>30m<\/b>/);
+  assert.match(html, /aria-pressed="false"/); assert.doesNotMatch(html, /var\(--acc\)/);
+  const one = ctx.cumChart([['2026-10-01', 1800, { CARS: 1800 }]], 3600, { ticks: [0, 1800, 3600] });
+  const oneTotal = one.match(/class="cum-total"[^>]*points="([^"]+)"/)[1].split(' ');
+  const oneTop = pts(one.match(/class="cum-band"[^>]*d="([^"]+)"/)[1]).slice(0, oneTotal.length);
+  assert.deepEqual(oneTop, oneTotal, 'a single day still stacks to the total');
+  assert.match(js, /cumChart\(cum, cMax, cY\)/); assert.match(js, /total since \$\{fmtDate\(k2d\(cum\[0\]\[0\]\)/);
+  assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
+  assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
+  assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v174/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -262,6 +301,8 @@ test('ui: trophy hover uses a static hit box + debounced sheen; session card siz
   assert.match(js, /<div class="t-face">/); assert.match(js, /now - \(el\._shT \|\| 0\) < 600/); assert.match(css, /\.trophy\.t-lp:hover>\.t-face/);
   assert.match(js, /const lean = \(\) => \{\};/); assert.doesNotMatch(js, /dataset\.yaw = Math/); assert.doesNotMatch(css, /\.trophy[^{]*\{[^}]*rotate[XY]/); assert.doesNotMatch(css, /\.t-art \.ta\{transform:perspective/);
   assert.match(js, /ACT\.nowSize = /); assert.match(css, /html\[data-now="l"\]\{--nz:1\.3\}/);
+  assert.match(js, /id="apprThemeLbl">Theme</); assert.match(js, /class="appr-grid"/); assert.match(js, /class="appr-accent-row"/); assert.match(js, /class="acc-custom"/);
+  assert.match(css, /\.appr-grid\{display:flex;flex-wrap:wrap;align-items:flex-end/); assert.match(css, /input\[type=color\]\.acc-custom\{/); assert.match(css, /\.appr-field>label\{margin:0 0 4px/);
 });
 test('Thirty Down: hover lifts the top page within the stack (never the flipped-over page), tap turns it up and it lands flat', () => {
   const fs = require('fs'), path = require('path'), w = {}; new Function('window', fs.readFileSync(path.join(__dirname, '../public/trophy-art.js'), 'utf8'))(w); const T = w.TrophyArt;
@@ -370,4 +411,53 @@ test('paused subject switch is stored, so a later state refresh cannot snap the 
   assert.match(route, /ud\.subjects\.includes\(sub\)/);
   assert.match(route, /ud\.active\.subject = sub/);
   assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
+});
+
+test('activity dropdown updates the ring and tab title immediately and is stored while running or paused', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const app = pub('app.js'), sv = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
+  assert.match(app, /<select id="tAct" data-chg="tAct">/);
+  const h = app.slice(app.indexOf('ACT.tAct = async'), app.indexOf('const savePomo'));
+  assert.match(h, /localStorage\.activity = activity/);
+  assert.match(h, /if \(S\.active\) S\.active\.activity = activity/);
+  assert.match(h, /\+\+stateGen/);
+  assert.match(h, /tick\(\); NOW\.draw\(\)/);
+  assert.match(h, /\/api\/timer\/subject', 'POST', \{ activity \}/);
+  assert.match(h, /if \(S\.active\) \{ await api/);
+  assert.doesNotMatch(h, /S\.active\?\.paused/); // not paused-only: a running session keeps the new activity too
+  assert.match(h, /await refresh\(\)/);
+  assert.doesNotMatch(h, /location\.reload|shTabReload/);
+  assert.match(app, /const act = a \? \(a\.activity \|\| ''\) : \(localStorage\.activity \|\| ''\);/);
+  assert.match(app, /\$\('tSubLbl'\)\.textContent = timerLabel\(a, a \? a\.subject : \(sel \|\| ''\), act\)/);
+  assert.match(app, /active\.subject \+ \(active\.activity \? ' · ' \+ active\.activity : ''\)/);
+  const route = sv.slice(sv.indexOf("p === '/api/timer/subject'"), sv.indexOf("p === '/api/timer/stop'"));
+  assert.match(route, /j\.activity !== undefined/);
+  assert.match(route, /ud\.activities\.includes\(act\)/);
+  assert.match(route, /ud\.active\.activity = act/);
+  assert.match(route, /!ud\.active\.paused/);
+  assert.doesNotMatch(route, /accum|pausedAt|ud\.active = null/);
+});
+
+test('timer ring copy wraps inside the stroke and the clock scales with the ring', () => {
+  const css = pub('style.css'), app = pub('app.js');
+  const block = css.slice(css.indexOf('.tring{container-type:inline-size}'), css.indexOf('/* Trophy art'));
+  assert.ok(block.length > 40, 'ring text rules');
+  assert.match(block, /\.tring\{container-type:inline-size\}/);
+  assert.match(block, /\.tring \.ring-center\{[^}]*inset:9%/);
+  assert.match(block, /\.tring \.clock,\.fs \.tring \.clock\{[^}]*clamp\(30px,18cqi,72px\)/);
+  assert.match(block, /max-width:92%;max-width:76cqi/);
+  assert.match(block, /\.tring #tPhase,\.tring #tSubLbl,\.tring #tGoalLbl\{[^}]*max-width:68%;max-width:56cqi/);
+  assert.match(block, /overflow-wrap:anywhere/);
+  assert.match(block, /word-break:break-word/);
+  assert.match(block, /\.tring #tSubLbl\{[^}]*clamp\(12px,4\.5cqi,15px\)/);
+  assert.doesNotMatch(block, /line-clamp|text-overflow:\s*ellipsis/);
+  const fn = app.slice(app.indexOf('function fitRingText('), app.indexOf('function tick('));
+  assert.match(fn, /R = D \* 0\.40/);
+  assert.match(fn, /el\.style\.fontSize = ''/);
+  assert.match(fn, /el\.style\.fontSize = next\.toFixed\(2\) \+ 'px'/);
+  assert.match(fn, /ResizeObserver/);
+  assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
+  const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
+  assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
+  assert.match(pub('sw.js'), /studyhertz-shell-v174/);
 });

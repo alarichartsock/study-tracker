@@ -79,6 +79,11 @@ pre{white-space:pre-wrap}.maps{margin:10px 0}
 .phase{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc)}
 .stars{display:flex;gap:4px}.stars button{background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted)}.stars button.on{color:#f5c518}
 .chk{width:18px;height:18px;flex:none}.item.sel{border-color:var(--acc)}
+.row.ex-when{align-items:flex-start}.row.ex-when>div{min-width:0}.row.ex-when label{margin-top:0}
+label.ex-sched{display:flex;align-items:flex-start;gap:8px;margin:8px 0 0;font-size:13px;line-height:1.35;color:var(--text);cursor:pointer}
+label.ex-sched input{width:18px;height:18px;min-height:0;flex:none;margin:1px 0 0;padding:0;accent-color:var(--acc)}
+#exScore.score-off label{color:var(--muted)}
+#exScore.score-off input:disabled{cursor:not-allowed;color:var(--muted);-webkit-text-fill-color:var(--muted);background:color-mix(in srgb,var(--muted) 24%,var(--bg));border-color:color-mix(in srgb,var(--muted) 45%,var(--line))}
 .bulkbar{position:sticky;bottom:12px;display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--acc);border-radius:12px;padding:10px;margin-top:10px;box-shadow:var(--shadow)}
 #toast{display:flex;gap:12px;align-items:center}#toast .link{color:var(--bg);text-decoration:underline;pointer-events:auto}#toast.show{pointer-events:auto}
 textarea{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-height:80px}
@@ -441,6 +446,22 @@ rect.tip-hot{stroke:var(--acc);stroke-width:1.5}path.tip-hot{filter:brightness(1
 @media(max-width:600px){.todo-card{max-height:400px}.todo-add{grid-template-columns:1fr 1fr auto}.todo-add #tdT{grid-column:1/-1}.todo-add input[type=date],.todo-add select{max-width:none;width:100%;min-width:0}}
 @media (prefers-reduced-motion:reduce){.todo-it{transition:none}}
 
+/* share-price chart: stacked subject areas, a subtle total line, compact legend */
+.cum-svg{width:100%;height:160px;display:block}
+.cum-band{fill-opacity:.55}.cum-edge{fill:none}
+.cum-total{stroke:var(--ok);opacity:.7}
+.cum-band,.cum-edge{transition:opacity .16s var(--ease)}
+.cum-block[data-hi] .cum-band,.cum-block[data-hi] .cum-edge{opacity:.22}
+.cum-block[data-hi] .cum-band.on,.cum-block[data-hi] .cum-edge.on{opacity:1}
+.cum-legend{display:flex;flex-wrap:wrap;gap:4px 6px;margin:8px 0 0}
+.cum-leg{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-width:0;margin:0;padding:3px 8px 3px 6px;border:1px solid transparent;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;line-height:1.2;cursor:pointer}
+.cum-leg .dot{width:8px;height:8px}.cum-leg span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cum-leg b{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cum-leg:hover,.cum-leg.on,.cum-leg[aria-pressed="true"]{background:color-mix(in srgb,var(--c) 16%,var(--card));border-color:color-mix(in srgb,var(--c) 45%,transparent);color:var(--text)}
+.cum-leg:focus-visible{outline:2px solid var(--c,var(--acc));outline-offset:2px}
+html:not([data-anim="0"]) .cum-draw{animation:cum-draw .9s var(--ease) both}
+@keyframes cum-draw{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+[data-anim="0"] .cum-draw,[data-anim="0"] .cum-band,[data-anim="0"] .cum-edge{animation:none;transition:none}
+@media (prefers-reduced-motion:reduce){.cum-draw{animation:none!important;clip-path:none}.cum-band,.cum-edge{transition:none}}
 /* share-price chart hover: hit strips above the line, with a marker dot */
 .cum-wrap .cum-hit{z-index:2;touch-action:pan-y}.cum-hit i{position:relative;cursor:crosshair}.cum-hit i b{position:absolute;left:50%;width:10px;height:10px;margin:0 0 -5px -5px;border-radius:50%;background:var(--card);border:2.5px solid var(--ok);opacity:0;transition:opacity .15s}
 .cum-hit i.tip-hot b,.cum-hit i:focus-visible b{opacity:1}.cum-hit i:focus-visible{outline:none}
@@ -477,6 +498,30 @@ input.mt,select.mt,textarea.mt{margin-top:10px}
 
 .t3dq .tabs{max-width:420px}.t3dq p{margin:6px 0 0}
 .row.wrap>.tabs.grow{flex:1 1 180px}
+/* Settings > Appearance: every group is a label above a control of one height, so the rows share a baseline. */
+.appr-grid{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px 22px}
+.appr-field{display:flex;flex-direction:column;align-items:flex-start;min-width:0;max-width:100%}
+.appr-field>label{margin:0 0 4px;line-height:1.3}
+.appr-field>.tabs{height:var(--control-h);box-sizing:border-box;align-items:stretch;padding:3px;width:max-content;max-width:100%}
+.appr-field>.tabs button{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;line-height:1;height:auto}
+.appr-accent{flex:1 1 420px}
+.appr-accent-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-height:var(--control-h);max-width:100%}
+.appr-accent-row .acc-row{margin:0;flex:0 1 auto}
+.acc-actions{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;flex:0 0 auto}
+input[type=color].acc-custom{-webkit-appearance:none;appearance:none;width:24px;height:24px;min-height:24px;padding:0;margin:0;border:2px solid var(--card);border-radius:7px;background:transparent;box-shadow:0 0 0 1px color-mix(in srgb,var(--text) 18%,transparent);cursor:pointer;flex:0 0 24px;overflow:hidden}
+input[type=color].acc-custom::-webkit-color-swatch-wrapper{padding:0}
+input[type=color].acc-custom::-webkit-color-swatch{border:none;border-radius:5px}
+input[type=color].acc-custom::-moz-color-swatch{border:none;border-radius:5px}
+input[type=color].acc-custom:focus{outline:none}
+input[type=color].acc-custom:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.t3dq.appr-field{margin-top:16px;width:100%}
+@media(max-width:760px){
+  .appr-grid{flex-direction:column;align-items:stretch;gap:14px}
+  .appr-accent{flex-basis:auto}
+  .appr-field>.tabs{width:100%}
+  .appr-field>.tabs button{flex:1 1 0;min-width:0;padding:0 4px}
+}
+@media(max-width:340px){.appr-accent-row .acc-row{gap:4px}}
 
 .ach-cele{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;width:min(440px,calc(100vw - 24px));transform:translate(-50%,24px) scale(.96);opacity:0;transition:transform .35s var(--ease),opacity .3s;display:flex;gap:12px;align-items:center;padding:12px 40px 12px 12px;border-radius:18px;background:var(--glass-strong,var(--card));border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.25);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);cursor:pointer;overflow:hidden}
 .ach-cele.show{transform:translate(-50%,0) scale(1);opacity:1}.ach-cele.still{transition:none}
@@ -736,6 +781,17 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .running .tring .t-comet-svg .g-comet{opacity:1}
 .g-comet.g-stay,[data-run] .g-comet.g-stay,.running .tring .t-comet-svg .g-comet.g-stay{opacity:1;transition:none} /* same session rebuilt by a refresh: don't fade the hairline in again */
 .tring .t-comet-svg circle{r:88px;stroke-dasharray:32 520.9}
+/* Timer copy stays inside the stroke. The ring is the container (cqi). The status and goal
+   lines use the inscribed width of the inner circle (r 88, stroke 12 → about 56% of the box)
+   and wrap; the clock scales with the ring so 10:00:00 fits. A percentage max-width is the
+   fallback where cqi is ignored. fitRingText only shrinks the font when wrapping is still too tall. */
+.tring{container-type:inline-size}
+.tring .ring-center{inset:9%;width:auto;height:auto;min-width:0;gap:2px}
+.tring .ring-center>*{min-width:0;max-width:100%;flex-shrink:0}
+.tring .clock,.fs .tring .clock{font-size:clamp(30px,18cqi,72px);line-height:1;white-space:nowrap;max-width:92%;max-width:76cqi}
+.tring #tPhase,.tring #tSubLbl,.tring #tGoalLbl{max-width:68%;max-width:56cqi;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.3}
+.tring #tSubLbl{font-size:clamp(12px,4.5cqi,15px)}
+.tring #tPhase,.tring #tGoalLbl{font-size:clamp(11px,3.6cqi,13px)}
 /* Trophy art (trophy-art.js): isometric hairline drawings. One 1.15px round stroke; faces painted with the card colour hide what's behind;
    tops carry a faint accent tint. Earned: accent. Locked: muted, lighter, accent details dashed. */
 .t-art{color:var(--muted)}.trophy.on .t-art,.t-art.on{color:var(--tro,var(--acc))}.pv-art{--tro:var(--acc)}

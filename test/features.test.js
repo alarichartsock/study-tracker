@@ -76,6 +76,7 @@ test('sessions: activities, breaks, focus, bulk update/delete/restore, retroacti
   assert.equal((await c('/api/sessions')).body.length, 2);
   assert.equal((await app.user('/api/sessions/bulk', 'POST', { ids: [s1.id], action: 'delete' })).body.deleted, 0); // isolation
   const r = (await c('/api/report?from=2026-10-01&to=2026-10-07')).body; assert.equal(r.current.total, 2 * 3600 - 600 + 3600); assert.ok(r.previous); assert.ok(Array.isArray(r.cumulative));
+  for (const row of r.cumulative) assert.equal(Object.values(row[2]).reduce((s, n) => s + n, 0), row[1]);
   assert.equal((await c('/api/report?from=bad')).status, 400);
 });
 
@@ -105,6 +106,37 @@ test('paused timer keeps a switched subject across refresh and resume', async t 
   await c('/api/timer/subject', 'POST', { subject: 'CARS' });
   const saved = (await c('/api/timer/stop', 'POST', {})).body.session;
   assert.equal(saved.subject, 'CARS'); assert.equal(saved.activity, 'Flashcards'); assert.equal(saved.mode, 'countdown');
+  assert.equal((await c('/api/state')).body.active, null);
+});
+
+test('activity change is stored while the timer is running or paused', async t => {
+  const app = await start(); t.after(app.close); const c = app.admin;
+  assert.equal((await c('/api/timer/subject', 'POST', { activity: 'Practice questions' })).status, 409); // nothing running
+  const started = (await c('/api/timer/start', 'POST', { subject: 'Bio/Biochem', activity: 'Reading', mode: 'countdown', targetSec: 1500, note: 'ch3' })).body;
+  assert.equal((await c('/api/timer/subject', 'POST', { activity: 'Nope' })).status, 400);
+  assert.equal((await c('/api/state')).body.active.activity, 'Reading'); // rejected name does not stick
+  const switched = (await c('/api/timer/subject', 'POST', { activity: 'Practice questions' })).body;
+  assert.equal(switched.activity, 'Practice questions'); assert.equal(switched.subject, 'Bio/Biochem');
+  assert.equal(switched.paused, false); assert.equal(switched.accum, started.accum); assert.equal(switched.start, started.start);
+  assert.equal(switched.mode, 'countdown'); assert.equal(switched.targetSec, 1500); assert.equal(switched.note, 'ch3');
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'CARS', activity: 'Flashcards' })).status, 409); // running subject stays locked, and the activity is not applied either
+  assert.equal((await c('/api/state')).body.active.activity, 'Practice questions');
+  assert.equal((await c('/api/state')).body.active.subject, 'Bio/Biochem');
+  const paused = (await c('/api/timer/pause', 'POST')).body;
+  assert.equal((await c('/api/timer/subject', 'POST', { activity: '' })).body.activity, ''); // clear
+  const again = (await c('/api/timer/subject', 'POST', { activity: 'Flashcards' })).body;
+  assert.equal(again.activity, 'Flashcards'); assert.equal(again.paused, true);
+  assert.equal(again.accum, paused.accum); assert.equal(again.pausedAt, paused.pausedAt); assert.equal(again.start, paused.start);
+  assert.equal((await c('/api/timer/subject', 'POST', { subject: 'Nope', activity: 'Content review' })).status, 400);
+  assert.equal((await c('/api/state')).body.active.activity, 'Flashcards'); // invalid subject rolls back the whole body
+  assert.equal((await c('/api/state')).body.active.subject, 'Bio/Biochem');
+  const both = (await c('/api/timer/subject', 'POST', { subject: 'CARS', activity: 'Content review' })).body;
+  assert.equal(both.subject, 'CARS'); assert.equal(both.activity, 'Content review'); assert.equal(both.accum, paused.accum);
+  const resumed = (await c('/api/timer/start', 'POST', {})).body;
+  assert.equal(resumed.activity, 'Content review'); assert.equal(resumed.subject, 'CARS'); assert.equal(resumed.paused, false);
+  await c('/api/timer/subject', 'POST', { activity: 'Review mistakes' });
+  const saved = (await c('/api/timer/stop', 'POST', {})).body.session;
+  assert.equal(saved.activity, 'Review mistakes'); assert.equal(saved.subject, 'CARS'); assert.equal(saved.note, 'ch3'); assert.equal(saved.mode, 'countdown');
   assert.equal((await c('/api/state')).body.active, null);
 });
 
