@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v174/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -418,5 +418,5 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v174/);
 });
