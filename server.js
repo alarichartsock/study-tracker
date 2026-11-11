@@ -380,13 +380,17 @@ function createApp(opts = {}) {
     if (M === 'DELETE') ud[coll].splice(i, 1); else if (M === 'PUT') Object.assign(ud[coll][i], clean(j, ud[coll][i])); else return send(res, 405, { error: 'method' });
     store.save(); return send(res, 200, M === 'DELETE' ? { ok: true } : ud[coll][i]);
   }
-  // Exams are MCAT sittings: one combined score (472-528). Legacy subject/weight fields are no longer written or used,
-  // but are left in place on existing records (PUT merges), so no data is lost.
+  // Exams are sittings on the active template's scale (MCAT 472-528, and the same field for Step 2, the Bar, and the rest).
+  // Legacy subject/weight fields are no longer written or used, but are left in place on existing records (PUT merges).
+  // scheduled marks an upcoming sitting: the score is stored empty and left out of averages. Missing flag = false.
+  const examScheduled = v => v === true || v === 1 || v === '1' || v === 'true' || v === 'on';
   const cleanExam = (j, old, ud) => { const tests = (ud && ud.settings && ud.settings.customTests) || [], tid = j.test !== undefined ? j.test : old.test;
     const ct = PRACTICE.isTest(tid) ? tests.find(t => t.id === tid) : null; if (PRACTICE.isTest(tid) && !ct) throw new Error('unknown test');
     const sp = ct ? PRACTICE.testSpec(ct) : null, [lo, hi] = sp ? (sp.total.none ? [0, 100000] : [Math.floor(sp.total.min), Math.ceil(sp.total.max)]) : TEMPLATES.scoreRange(ud && ud.template); const date = j.date ?? old.date; if (!isDateKey(date)) throw new Error('exam date required (YYYY-MM-DD)');
     let grade = old.grade ?? null; if (j.grade !== undefined) { if (j.grade === '' || j.grade === null) grade = null; else { const g = Number(j.grade); if (!Number.isInteger(g) || g < lo || g > hi) throw new Error(`score must be a whole number from ${lo} to ${hi}`); grade = g; } }
-    return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade, ...(ct ? { test: ct.id } : {}) }; };
+    const scheduled = j.scheduled !== undefined ? examScheduled(j.scheduled) : examScheduled(old.scheduled);
+    if (scheduled) grade = null;
+    return { name: str(j.name ?? old.name, 100) || 'Exam', date, notes: str(j.notes ?? old.notes, 1000), grade, scheduled, ...(ct ? { test: ct.id } : {}) }; };
   const cleanTask = (j, old) => { const due = j.due !== undefined ? j.due : old.due; if (due && !isDateKey(due)) throw new Error('due must be YYYY-MM-DD');
     const done = j.done !== undefined ? !!j.done : !!old.done;
     return { title: str(j.title ?? old.title, 200) || 'Task', due: due || '', priority: ['low', 'normal', 'high'].includes(j.priority) ? j.priority : old.priority || 'normal',

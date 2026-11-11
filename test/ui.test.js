@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v172/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v173/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
