@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });
 
 test('share price chart stacks cumulative hours in each subject color', () => {
@@ -127,7 +127,7 @@ test('share price chart stacks cumulative hours in each subject color', () => {
   assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
   assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
   assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
-  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -459,5 +459,26 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v176/);
+});
+
+test('settings subject rows put the name and weekly goal on the left', () => {
+  const js = pub('app.js'), css = pub('style.css');
+  const start = js.indexOf('<h3>Subjects</h3>${S.subjects.map');
+  const row = js.slice(start, js.indexOf('<h3>Activities', start));
+  assert.match(row, /class="subj-row subj-cfg"/);
+  assert.match(row, /<div class="subj-main"><input type="color" class="subj-sw"[^>]*><span class="subj-nm">\$\{esc\(n\)\}<\/span><input type="number" class="subj-goal"/);
+  assert.match(row, /<div class="subj-acts"><button class="icon" data-act="subjRename"/);
+  assert.match(row, /data-act="subjDel"/);
+  assert.match(row, /data-chg="subjGoal"/);
+  assert.match(row, /data-chg="subjColor"/);
+  const block = css.slice(css.indexOf('.subj-row.subj-cfg{'), css.indexOf('.switch{display:flex'));
+  assert.match(block, /\.subj-row\.subj-cfg\{[^}]*align-items:center/);
+  assert.match(block, /\.subj-row\.subj-cfg \.subj-nm\{[^}]*flex:0 1 auto[^}]*text-align:left[^}]*text-overflow:ellipsis/);
+  assert.match(block, /\.subj-row\.subj-cfg>\.subj-acts\{[^}]*margin-left:auto/);
+  assert.match(block, /\.subj-row\.subj-cfg \.subj-goal\{[^}]*width:120px/);
+  assert.match(block, /@media\(max-width:640px\)\{[\s\S]*\.subj-row\.subj-cfg \.subj-goal\{width:4\.5rem\}/);
+  const act = js.slice(js.indexOf('<h3>Activities (study types)</h3>'), js.indexOf('<h3>Timer</h3>'));
+  assert.match(act, /class="pill"/);
+  assert.doesNotMatch(act, /subj-cfg|subj-nm|subj-goal/);
 });

@@ -45,6 +45,23 @@ main{max-width:980px;margin:0 auto;padding:20px}
 .item{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:6px;cursor:pointer}
 .item:hover{border-color:var(--acc)}.item .grow{flex:1;min-width:0}.item .t{font-variant-numeric:tabular-nums;font-weight:600}.item .n{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list .item{cursor:default}.subj-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}.subj-row>span:first-child,.subj-row>input+span{flex:1;min-width:0}
+/* Settings subjects only: swatch, name, weekly goal sit together on the left; rename and remove stay on the right.
+   The shared rule above stretches the empty color note, which is what pushed the name and goal to the right. */
+.subj-row.subj-cfg{align-items:center;min-width:0}
+.subj-row.subj-cfg>.subj-main{display:flex;align-items:center;gap:10px;min-width:0;flex:0 1 auto}
+.subj-row.subj-cfg>.subj-acts{display:flex;align-items:center;flex:none;margin-left:auto;gap:10px}
+.subj-row.subj-cfg .subj-sw{flex:none;width:40px;min-width:40px;padding:2px}
+.subj-row.subj-cfg .subj-nm{flex:0 1 auto;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subj-row.subj-cfg .subj-goal{flex:none;width:120px;min-width:0}
+.subj-row.subj-cfg .sc-note{flex:0 1 auto;min-width:0;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subj-row.subj-cfg .sc-note:empty{display:none}
+@media(max-width:640px){
+  .subj-row.subj-cfg{gap:8px}
+  .subj-row.subj-cfg>.subj-main{gap:8px}
+  .subj-row.subj-cfg>.subj-acts{gap:2px}
+  .subj-row.subj-cfg>.subj-acts .icon{padding-left:4px;padding-right:4px}
+  .subj-row.subj-cfg .subj-goal{width:4.5rem}
+}
 .switch{display:flex;align-items:center;gap:10px;color:var(--text);font-size:15px}.switch input{width:auto}
 dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);padding:0;width:min(420px,92vw)}dialog::backdrop{background:rgba(0,0,0,.5)}
 .dlg{padding:20px}#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none}#toast.show{opacity:1}
