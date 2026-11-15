@@ -86,9 +86,9 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.byActivity, c\.total, \(\) => 'var\(--acc\)', c\.matrix\.activitySubject\)/);
   assert.match(js, /c\.byWeekdaySubject\)/); assert.match(js, /c\.byHourSubject\)/);
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
-  assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
+  assert.match(js, /const enter = \(!render\.painted \|\| render\.view !== view\) && !render\.suppressEnter/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });
 
 test('share price chart stacks cumulative hours in each subject color', () => {
@@ -127,7 +127,7 @@ test('share price chart stacks cumulative hours in each subject color', () => {
   assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
   assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
   assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
-  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -248,8 +248,9 @@ test('trophy drawings track the cursor while hovered (one part each, faint when 
 test('load-in plays on a cold open or a view change, not on the periodic same-view refresh', () => {
   const js = pub('app.js'), css = pub('style.css');
   assert.match(js, /setInterval\(\(\) => \{ if \(ME && !document\.hidden && !\$\('dlg'\)\.open && \['timer', 'dash'\]\.includes\(view\)\) refresh\(\)/); // the poll stays
-  assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
+  assert.match(js, /const enter = \(!render\.painted \|\| render\.view !== view\) && !render\.suppressEnter/);
   assert.match(js, /if \(enter\) \{ m\.classList\.remove\('enter'\); void m\.offsetWidth; m\.classList\.add\('enter'\); \} else settleLogo\(\)/);
+  assert.match(js, /render\.suppressEnter = !!shUpdateBoot; render\.painted = false; go\(view\)/); // a real cold open still plays; an update reload sets suppressEnter
   assert.match(js, /render\.painted = false; go\(view\)/); // boot is a cold open
   assert.match(js, /async function refresh\(\) \{ settleLogo\(\); await load\(\); render\(\); \}/);
   assert.match(js, /function armLogo\(\)/); assert.match(js, /if \(app\.classList\.contains\('hid'\)\) armLogo\(\)/);
@@ -459,5 +460,5 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });

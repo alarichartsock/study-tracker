@@ -51,6 +51,21 @@ const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
 const isDateKey = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const numIn = (v, lo, hi) => { const n = Number(v); if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`value must be between ${lo} and ${hi}`); return n; };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
+// Build id for /api/version and the studyhertz-build meta tag. Content hash of the shell files
+// the service worker must refresh; memoized on size+mtime so a deploy is visible without a restart.
+const BUILD_FILES = ['public/sw.js', 'public/index.html', 'public/app.js', 'public/style.css'];
+let buildMemo = { sig: '', id: '' };
+function buildId() {
+  const sig = BUILD_FILES.map(rel => { const st = fs.statSync(path.join(__dirname, rel)); return st.size + ':' + st.mtimeMs; }).join('|');
+  if (sig === buildMemo.sig) return buildMemo.id;
+  const h = crypto.createHash('sha1'); for (const rel of BUILD_FILES) h.update(fs.readFileSync(path.join(__dirname, rel)));
+  buildMemo = { sig, id: h.digest('base64url').slice(0, 16) }; return buildMemo.id;
+}
+function stampBuild(html) {
+  const id = buildId();
+  if (html.includes('name="studyhertz-build"')) return html.replace(/(<meta name="studyhertz-build" content=")[^"]*/, '$1' + id);
+  return html.replace('<head>', '<head><meta name="studyhertz-build" content="' + id + '">');
+}
 // Tab icon for one accent: same tile + contrasting wave as the in-app mark. The hex is the path, so the URL can be cached forever.
 function accentIconSvg(hex) {
   const n = parseInt(hex, 16), lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
@@ -399,18 +414,21 @@ function createApp(opts = {}) {
   // Static assets: ETag + 304, gzip/brotli for text, cache policy by type (HTML/JS/CSS revalidate; images 1 day; vendor immutable).
   const SCACHE = new Map();
   function asset(p) {
-    const f = path.join(PUBLIC, STATIC[p]), m = fs.statSync(f).mtimeMs, hit = SCACHE.get(p); if (hit && hit.m === m) return hit;
+    const rel = STATIC[p], f = path.join(PUBLIC, rel), m = fs.statSync(f).mtimeMs, shell = rel === 'index.html', b = shell ? buildId() : '';
+    const hit = SCACHE.get(p); if (hit && hit.m === m && hit.b === b) return hit;
     let buf = fs.readFileSync(f); if (p === '/pricing') buf = Buffer.from(pricingHead(buf.toString('utf8')));
     else if (EXAMS.EXAMS[p.slice(1)]) buf = Buffer.from(EXAMS.examHead(buf.toString('utf8'), p.slice(1), SITE)); // per-test landing (English only, so no hreflang set)
     else if (p === '/' || p === '/index.html' || i18n.ROUTES[p]) { const h = i18n.withAlternates(buf.toString('utf8'), SITE); buf = Buffer.from(i18n.ROUTES[p] ? i18n.localize(h, i18n.ROUTES[p], SITE) : h); }
+    if (shell) buf = Buffer.from(stampBuild(buf.toString('utf8')));
     const type = MIME[path.extname(f)] || 'application/octet-stream', text = /text|javascript|json|svg|xml|manifest/.test(type) && buf.length > 860;
-    const a = { m, buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 22) + '"',
+    const a = { m, b, buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 22) + '"',
       br: text ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 10 } }) : null, gz: text ? zlib.gzipSync(buf, { level: 9 }) : null };
     SCACHE.set(p, a); return a;
   }
   function serveStatic(req, res, p) {
     const a = asset(p), ext = path.extname(STATIC[p]);
-    const cc = p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : ['.png', '.svg', '.webp'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
+    // sw.js, the HTML shell, app.js and styles must revalidate. A CDN that serves a stale copy is why a deploy used to need several refreshes.
+    const cc = p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : (p === '/sw.js' || p === '/app.js' || p === '/style.css' || STATIC[p] === 'index.html') ? 'no-cache, must-revalidate' : ['.png', '.svg', '.webp'].includes(ext) ? 'public, max-age=86400' : 'no-cache';
     const hd = { 'Content-Type': a.type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'Cache-Control': cc, ETag: a.etag, Vary: 'Accept-Encoding', ...(p === '/sw.js' ? { 'Service-Worker-Allowed': '/' } : {}) };
     if (req.headers['if-none-match'] === a.etag) { res.writeHead(304, hd); return res.end(); }
     const ae = String(req.headers['accept-encoding'] || ''), body = a.br && /\bbr\b/.test(ae) ? (hd['Content-Encoding'] = 'br', a.br) : a.gz && /\bgzip\b/.test(ae) ? (hd['Content-Encoding'] = 'gzip', a.gz) : a.buf;
@@ -445,6 +463,7 @@ function createApp(opts = {}) {
 
       // ---- public auth endpoints ----
       if (p === '/api/health') return send(res, 200, { ok: true, users: store.db.users.length > 0 });
+      if (p === '/api/version' && M === 'GET') return send(res, 200, { version: buildId() });
       if (p === '/api/public-config') return send(res, 200, { signupLabel: ADS_SIGNUP_LABEL, gaId: opts.gaId ?? GA_ID, billing: billing.enabled(bcfg) ? { trialDays: bcfg.trialDays, plans: billing.plansFor(bcfg) } : null });
       if (p === '/api/me') return send(res, 200, { user: user && publicUser(user), needsSetup: store.db.users.length === 0, registrationOpen: store.db.users.length === 0 || !!store.db.config.openRegistration, oauth: oauthProviders(), ...(user ? { billing: bstat(user) } : {}), ...(user && user.termsVersion !== LEGAL.terms ? { termsRequired: { terms: LEGAL.terms, privacy: LEGAL.privacy, summary: LEGAL.summary, checkbox: LEGAL.checkbox } } : {}) });
       if (p === '/api/referral/check' && M === 'GET') return send(res, 200, { valid: !!refUser(u.searchParams.get('code')), days: REF_DAYS, trialDays: bcfg.trialDays + REF_DAYS });
