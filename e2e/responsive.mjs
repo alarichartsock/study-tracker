@@ -70,7 +70,7 @@ function pageChecks(phone) {
     if (ls.length < 3) fails.push('chart y-axis has ' + ls.length + ' tick labels');
     for (const q of ls) if (q.left < card.left - 1 || q.left < -1) fails.push('y-axis label clipped (' + Math.round(q.left) + ')');
     const sorted = ls.slice().sort((a, b) => a.top - b.top); for (let i = 1; i < sorted.length; i++) if (sorted[i].top < sorted[i - 1].bottom - 0.5) fails.push('y-axis labels overlap'); }
-  for (const h of document.querySelectorAll('.cum-hit')) { const w = h.closest('.cum-wrap'), svg = w.querySelector('svg'), q = h.getBoundingClientRect(), cy = q.top + q.height / 2, el = cy > 0 && cy < innerHeight ? document.elementFromPoint(q.left + q.width / 2, cy) : null; if (q.width && el && !el.closest('#nav, .topbar, header, .chart-tip') && !el.closest('.cum-hit')) fails.push('share-price hover strips are covered'); if (!h.querySelector('[data-tip]')) fails.push('share-price chart has no tooltips'); void svg; }
+  for (const h of document.querySelectorAll('.cum-hit')) { const w = h.closest('.cum-wrap'), svg = w.querySelector('svg'), q = h.getBoundingClientRect(), cy = q.top + q.height / 2, el = cy > 0 && cy < innerHeight ? document.elementFromPoint(q.left + q.width / 2, cy) : null; if (q.width && el && !el.closest('#nav, .topbar, header, .chart-tip') && !el.closest('.cum-hit')) fails.push('study momentum hover strips are covered'); if (!h.querySelector('[data-tip]')) fails.push('study momentum chart has no tooltips'); void svg; }
   for (const ch of document.querySelectorAll('.px-link, .mix-chip')) { if (!vis(ch)) continue; const r = ch.getBoundingClientRect(), nx = ch.parentElement.querySelector('.card'); if (nx) { const g = nx.getBoundingClientRect().top - r.bottom; if (g < 8) fails.push('Stats chip too close to the card below (' + Math.round(g) + 'px)'); } }
   { const lo = document.getElementById('logoutBtn'); if (lo && vis(lo)) { if (lo.getAttribute('aria-label') !== 'Sign out' || !lo.querySelector('svg')) fails.push('sign-out button lacks icon/label'); const r = lo.getBoundingClientRect(); if (r.right > vw + 1 || r.width < 30) fails.push('sign-out button clipped'); } }
   for (const c of document.querySelectorAll('.todo-card')) { const q = c.getBoundingClientRect(), want = parseFloat(getComputedStyle(c).height), list = c.querySelector('.todo-list'), lb = list.getBoundingClientRect();
@@ -88,9 +88,13 @@ function pageChecks(phone) {
     for (const d of c.querySelectorAll('.px-dot')) { const r = d.getBoundingClientRect(); if (r.right > vw + 1 || r.left < -1) fails.push('mcat chart point off screen'); } }
   for (const el of document.querySelectorAll('.px-sec b, .px-sec span, .px-secs')) if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== 'visible') fails.push('mcat section tile clipped');
   for (const bt of document.querySelectorAll('.bg-mode, .bg-win')) { const q = bt.closest('.card').getBoundingClientRect(); if (bt.scrollWidth > bt.clientWidth + 1) fails.push('background tabs overflow'); for (const b of bt.children) { const r = b.getBoundingClientRect(); if (r.right > q.right + 1 || r.right > bt.getBoundingClientRect().right + 1) fails.push('background tab clipped: ' + b.textContent); } }
-  for (const rt of document.querySelectorAll('.range-tabs')) { const row = rt.parentElement, rb = row.getBoundingClientRect();
-    if (rt.scrollWidth > rt.clientWidth + 1) fails.push('stats range tabs overflow (' + rt.scrollWidth + '>' + rt.clientWidth + ')');
-    for (const el of [...rt.children, ...row.children]) { const q = el.getBoundingClientRect(); if (q.width && (q.right > rb.right + 1 || q.left < rb.left - 1 || q.right > vw + 1)) fails.push('stats range control clipped: "' + (el.textContent || el.tagName).trim().slice(0, 20) + '"'); } }
+  for (const rt of document.querySelectorAll('.range-tabs')) { const row = rt.parentElement, card = rt.closest('.card'), rb = row.getBoundingClientRect(), cb = card ? card.getBoundingClientRect() : rb;
+    const scroll = /auto|scroll/.test(getComputedStyle(rt).overflowX);
+    if (!scroll && rt.scrollWidth > rt.clientWidth + 1) fails.push('stats range tabs overflow (' + rt.scrollWidth + '>' + rt.clientWidth + ')');
+    if (rb.right > vw + 1 || rb.left < -1 || cb.right > vw + 1 || (card && card.scrollWidth > card.clientWidth + 1)) fails.push('stats range card overflows the page');
+    const tops = [...rt.querySelectorAll('button')].filter(b => b.offsetWidth).map(b => Math.round(b.getBoundingClientRect().top));
+    if (innerWidth >= 1024 && tops.length && Math.max(...tops) - Math.min(...tops) > 8) fails.push('stats range tabs wrap at desktop');
+    for (const el of [...row.children]) { const q = el.getBoundingClientRect(); if (q.width && (q.right > rb.right + 1 || q.left < rb.left - 1 || q.right > vw + 1)) fails.push('stats range control clipped: "' + (el.textContent || el.tagName).trim().slice(0, 20) + '"'); } }
   for (const t of document.querySelectorAll('.tbl.dr')) { const rows = [...t.rows], n = rows[0] ? rows[0].cells.length : 0; if (rows.some(r => r.cells.length !== n)) fails.push('data room: row cell counts differ from header');
     if (t.getBoundingClientRect().right > vw + 1 && !t.closest('.tbl-wrap')) fails.push('data room table overflows page'); }
   return fails;
@@ -224,7 +228,7 @@ async function runWidth(browser, bname, w) {
     if (w === 1024 || w === 390) { await page.evaluate(() => document.querySelector('#nav button[data-v="stats"]').click()); await page.waitForTimeout(700);
       const strip = page.locator('.cum-hit i').nth(-3); await strip.scrollIntoViewIfNeeded(); if (phone) await strip.tap(); else await strip.hover(); await page.waitForTimeout(200);
       const tipTxt = await page.evaluate(() => { const t = document.getElementById('chartTip'); return t && t.classList.contains('on') ? t.textContent : ''; });
-      if (!/total/.test(tipTxt) || !/\d{4}/.test(tipTxt)) note(tag0 + ' share-price tooltip', ['no tooltip on ' + (phone ? 'tap' : 'hover') + ' (got "' + tipTxt + '")']); }
+      if (!/total/.test(tipTxt) || !/\d{4}/.test(tipTxt)) note(tag0 + ' study momentum tooltip', ['no tooltip on ' + (phone ? 'tap' : 'hover') + ' (got "' + tipTxt + '")']); }
     if (w === 1024) note(tag0 + ' live wallpaper', await page.evaluate(async () => { const f = [], wait = ms => new Promise(r => setTimeout(r, ms)), sig = () => [...document.querySelectorAll('#wallpaper i.on')].map(i => i.style.getPropertyValue('--c') + '@' + i.style.getPropertyValue('--s')).join('|');
       await refresh(); await wait(50); const a = sig(), now = Date.now();
       const s = await api('/api/sessions', 'POST', { subject: 'Live Mix Test', start: new Date(now - 3 * 3600e3).toISOString(), end: new Date(now - 60e3).toISOString() }); await refresh(); await wait(50); const b = sig(); if (a === b) f.push('wallpaper did not update after adding a session');

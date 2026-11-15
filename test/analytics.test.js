@@ -72,7 +72,7 @@ test('cumulative series and duration suggestion', () => {
   assert.equal(a.suggestDuration([S(10, 1, 9, 50), S(10, 2, 9, 52), S(10, 3, 9, 90)]), 3000);
   assert.equal(a.suggestDuration([], 'CARS'), null);
 });
-test('cumulative share price stacks by subject, one point per day', () => {
+test('study momentum stacks by subject, one point per day when unscoped', () => {
   const list = [
     S(10, 1, 9, 60, 'CARS'), S(10, 1, 14, 30, 'Bio/Biochem'), S(10, 1, 18, 15, ''),
     S(10, 2, 9, 60, 'CARS', { breakSec: 600 }), S(10, 3, 9, 30, 'Psych/Soc'),
@@ -90,6 +90,58 @@ test('cumulative share price stacks by subject, one point per day', () => {
   assert.equal(series[2][2]['Psych/Soc'], 1800);
   assert.equal(series[3][2].CARS, 6600 + 20 * 600); assert.equal(series[3][2]['Bio/Biochem'], 1800 + 20 * 600);
   assert.deepEqual(a.cumulative([]), []);
+});
+test('study momentum follows a date range: daily buckets, zero at the start, prior time dropped', () => {
+  const list = [
+    S(10, 18, 9, 120, 'CARS'), // Sunday before the week
+    S(10, 19, 9, 60, 'CARS'), // Monday
+    S(10, 21, 11, 30, 'Bio/Biochem'),
+    S(10, 21, 15, 15, ''),
+    S(10, 26, 9, 60, 'Psych/Soc'), // day after the week
+  ];
+  const sum = p => Object.values(p).reduce((s, n) => s + n, 0);
+  const week = a.cumulative(list, 0, { from: '2026-10-19', to: '2026-10-25' });
+  assert.equal(week[0][1], 0, 'the line starts at 0');
+  assert.deepEqual(week[0][2], {});
+  assert.deepEqual(week.map(x => x[0]), ['2026-10-19', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25']);
+  assert.equal(week[1][1], 3600); assert.equal(week[1][2].CARS, 3600);
+  assert.equal(week[2][1], 3600, 'a quiet day keeps the running total');
+  assert.equal(week[2][2].CARS, 3600); assert.equal(week[3][2]['Bio/Biochem'], 1800); assert.equal(week[3][2].Other, 900);
+  assert.equal(week.at(-1)[1], 3600 + 1800 + 900);
+  assert.equal(week.at(-1)[2]['Psych/Soc'], undefined, 'study after the range is excluded');
+  assert.ok(!week.some(row => row[1] === 120 * 60), 'study before the range is not the baseline');
+  for (const row of week) assert.equal(sum(row[2]), row[1], row[0]);
+  const swapped = a.cumulative(list, 0, { from: '2026-10-25', to: '2026-10-19' });
+  assert.deepEqual(swapped.map(x => x[1]), week.map(x => x[1]));
+  const empty = a.cumulative(list, 0, { from: '2026-11-02', to: '2026-11-04' });
+  assert.equal(empty.length, 4); assert.ok(empty.every(row => row[1] === 0 && sum(row[2]) === 0));
+});
+test('study momentum uses hourly buckets for a single day and honours day start hour', () => {
+  const list = [S(10, 21, 9, 60, 'CARS'), S(10, 21, 14, 30, 'Bio/Biochem'), S(10, 22, 1, 45, ''), S(10, 22, 9, 60, 'Psych/Soc')];
+  const sum = p => Object.values(p).reduce((s, n) => s + n, 0);
+  const day = a.cumulative(list, 0, { from: '2026-10-21', to: '2026-10-21' });
+  assert.ok(day.length >= 24, 'a day is more than one point');
+  assert.equal(day[0][1], 0); assert.match(day[0][0], /T\d{2}$/);
+  const at = h => day.find(row => row[0].startsWith('2026-10-21T') && row[0].endsWith('T' + String(h).padStart(2, '0')));
+  assert.equal(at(9)[1], 0, 'the 9:00 point is the start of that hour');
+  assert.equal(at(10)[1], 3600); assert.equal(at(10)[2].CARS, 3600);
+  assert.equal(at(15)[1], 3600 + 1800); assert.equal(at(15)[2]['Bio/Biochem'], 1800);
+  assert.equal(day.at(-1)[1], 3600 + 1800, 'the 1am session belongs to the next study day when the day starts at midnight');
+  assert.equal(day.at(-1)[2].Other, undefined); assert.equal(day.at(-1)[2]['Psych/Soc'], undefined);
+  for (const row of day) assert.equal(sum(row[2]), row[1]);
+  const owl = a.cumulative(list, 3, { from: '2026-10-21', to: '2026-10-21' });
+  assert.equal(owl[0][0], '2026-10-21T03'); assert.equal(owl[0][1], 0);
+  const late = owl.find(row => row[0] === '2026-10-22T02');
+  assert.ok(late, 'the study day runs through 3am');
+  assert.equal(late[1], 3600 + 1800 + 45 * 60, '1am counts toward the day that started at 3am');
+  assert.equal(late[2].Other, 45 * 60); assert.equal(late[2].CARS, 3600);
+  const next = a.cumulative(list, 3, { from: '2026-10-22', to: '2026-10-22' });
+  assert.equal(next[0][1], 0);
+  assert.equal(next.at(-1)[1], 3600, 'the 1am session stays on the previous study day');
+  assert.equal(next.at(-1)[2]['Psych/Soc'], 3600); assert.equal(next.at(-1)[2].Other, undefined);
+  const week = a.cumulative([S(10, 22, 1, 60, 'CARS')], 3, { from: '2026-10-19', to: '2026-10-25' });
+  const oct21 = week.filter(row => row[0] === '2026-10-21').at(-1), oct22 = week.filter(row => row[0] === '2026-10-22').at(-1);
+  assert.equal(oct21[2].CARS, 3600); assert.equal(oct22[2].CARS, 3600, 'the next calendar day does not gain the hour again');
 });
 test('achievements: shape, categories, renamed set, no idiosyncratic badges', () => {
   const ud = blankUserData(); ud.sessions = ['Chem/Phys', 'CARS', 'Bio/Biochem', 'Psych/Soc'].map((x, i) => S(10, 19 + i, 9, 200, x, { activity: i ? 'Anki' : 'UBook' })); ud.sessions[0].mode = 'pomodoro';
