@@ -331,7 +331,7 @@ dialog .link{font-size:14px}
 @media (prefers-reduced-motion:reduce){.mode-tabs.anim-out,.mode-tabs.anim-in{animation:none}}
 
 /* v14: timer ring uses the selected subject color */
-.tring .ring-fg,.running .tring .ring-fg{stroke:var(--subj,var(--acc));filter:drop-shadow(0 0 6px color-mix(in srgb,var(--subj,var(--acc)) 45%,transparent))}
+.tring .ring-fg,.running .tring .ring-fg{stroke:var(--subj,var(--acc));filter:drop-shadow(0 0 6px color-mix(in srgb,var(--subj,var(--acc)) 45%,transparent));transition:none}
 
 /* achievements categories */
 main,.card{min-width:0}.ach-wrap{position:relative;max-width:100%;min-width:0}.ach-cats{display:flex;flex-wrap:nowrap;gap:6px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 14px 8px;scroll-padding-inline:14px;-webkit-mask-image:linear-gradient(to right,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);mask-image:linear-gradient(to right,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%)}.ach-cats::-webkit-scrollbar{display:none}
@@ -777,7 +777,7 @@ html.tab-hidden .g-comet{animation-play-state:paused}
 .t-play.t-new .t-ic::after{content:"";position:absolute;left:50%;bottom:6px;width:1px;height:14px;margin-left:-.5px;background:var(--acc);opacity:0;transform-origin:top;animation:t-trail 1s var(--ease) .35s both}
 @keyframes t-trail{0%{opacity:0;transform:scaleY(0)}35%{opacity:.6;transform:scaleY(1)}100%{opacity:0;transform:scaleY(1) translateY(6px)}}
 @media (prefers-reduced-motion:reduce){.t-line,.t-sheen,.t-new .t-ic::after{display:none}.t-lp .t-prog i{animation:none!important;transform:none!important}.t-play.t-new .t-ic{animation:none}}
-/* Timer page: the same circling hairline as the goal rings while a session runs (own svg, so per-second ring redraws don't restart it) */
+/* Timer page: the same circling hairline as the goal rings while a session runs (own svg, so accent stroke updates don't restart it) */
 .tring .t-comet-svg{position:absolute;inset:0;pointer-events:none}
 .tring .t-comet-svg .g-comet{transition:opacity .6s var(--ease)}
 .running .tring .t-comet-svg .g-comet{opacity:1}
@@ -787,10 +787,10 @@ html.tab-hidden .g-comet{animation-play-state:paused}
    thinner arc inset of it (r 77, so its outer edge sits just inside the green) and a lap
    past 200% is a brighter core on that same path. The thin arc on the accent stroke while
    a session runs is the comet hairline above (.t-comet-svg): a short var(--text) dash
-   orbiting r 88 on its own svg, so a per-second ring redraw does not restart it. Gold
+   orbiting r 88 on its own svg, so an accent stroke update does not restart it. Gold
    stays inset of that stroke so the hairline keeps reading. Trophy gold is #e6b422 / #f5c518. */
 .tring .t-gold-svg{position:absolute;inset:0;pointer-events:none}
-.tring .t-gold-svg circle{fill:none;stroke-linecap:round;transition:stroke-dashoffset .6s var(--ease),opacity .35s}
+.tring .t-gold-svg circle{fill:none;stroke-linecap:round;transition:opacity .35s}
 .tring .ring-gold.g1{stroke:var(--gold);stroke-width:6.5;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--gold) 55%,transparent))}
 .tring .ring-gold.g2{stroke:var(--gold-2);stroke-width:4.25;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--gold-2) 60%,transparent))}
 .tring .ring-gold.g3{stroke:var(--gold-3);stroke-width:2.75;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--gold-3) 70%,transparent))}
