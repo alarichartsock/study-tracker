@@ -462,20 +462,21 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.match(pub('sw.js'), /studyhertz-shell-v176/);
 });
 
-test('settings subject rows put the name and weekly goal on the left', () => {
+test('settings subject rows keep the name on the left and the weekly goal with the buttons', () => {
   const js = pub('app.js'), css = pub('style.css');
   const start = js.indexOf('<h3>Subjects</h3>${S.subjects.map');
   const row = js.slice(start, js.indexOf('<h3>Activities', start));
   assert.match(row, /class="subj-row subj-cfg"/);
-  assert.match(row, /<div class="subj-main"><input type="color" class="subj-sw"[^>]*><span class="subj-nm">\$\{esc\(n\)\}<\/span><input type="number" class="subj-goal"/);
-  assert.match(row, /<div class="subj-acts"><button class="icon" data-act="subjRename"/);
+  assert.match(row, /<input type="color" class="subj-sw"[^>]*><span class="subj-nm"><span class="subj-nm-t">\$\{esc\(n\)\}<\/span>/);
+  assert.match(row, /<div class="subj-side"><input type="number" class="subj-goal"[^>]*><button class="icon" data-act="subjRename"/);
   assert.match(row, /data-act="subjDel"/);
   assert.match(row, /data-chg="subjGoal"/);
   assert.match(row, /data-chg="subjColor"/);
   const block = css.slice(css.indexOf('.subj-row.subj-cfg{'), css.indexOf('.switch{display:flex'));
   assert.match(block, /\.subj-row\.subj-cfg\{[^}]*align-items:center/);
-  assert.match(block, /\.subj-row\.subj-cfg \.subj-nm\{[^}]*flex:0 1 auto[^}]*text-align:left[^}]*text-overflow:ellipsis/);
-  assert.match(block, /\.subj-row\.subj-cfg>\.subj-acts\{[^}]*margin-left:auto/);
+  assert.match(block, /\.subj-row\.subj-cfg>\.subj-nm\{[^}]*flex:1 1 auto[^}]*text-align:left/);
+  assert.match(block, /\.subj-row\.subj-cfg \.subj-nm-t\{[^}]*text-overflow:ellipsis/);
+  assert.match(block, /\.subj-row\.subj-cfg>\.subj-side\{[^}]*flex:none/);
   assert.match(block, /\.subj-row\.subj-cfg \.subj-goal\{[^}]*width:120px/);
   assert.match(block, /@media\(max-width:640px\)\{[\s\S]*\.subj-row\.subj-cfg \.subj-goal\{width:4\.5rem\}/);
   const act = js.slice(js.indexOf('<h3>Activities (study types)</h3>'), js.indexOf('<h3>Timer</h3>'));
