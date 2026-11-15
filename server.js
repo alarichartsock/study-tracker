@@ -577,7 +577,7 @@ function createApp(opts = {}) {
         const r = from && to ? analytics.compare(list, from, to, o) : { current: analytics.report(list, { ...o, from, to }) };
         return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h) });
       }
-      const achFull = () => { const A = analytics.achievements(ud, h);
+      const achFull = () => { if (analytics.pruneOrphanTrophies(ud)) save(); const A = analytics.achievements(ud, h);
         const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, stats.ctxOf(d.settings)]; })); // aggregate counts only
         for (const x of A.global) { const n = E.counts[x.id] || 0; x.earnedBy = { count: n, users: E.users, pct: E.users ? Math.round(n / E.users * 100) : 0 }; }
         return A; };
@@ -670,7 +670,8 @@ function createApp(opts = {}) {
       }
       // ---- subjects & activities ----
       if (p === '/api/subjects' && M === 'POST') { ensureSubject(ud, str(j.name, 60)); save(); return send(res, 200, ud.subjects); }
-      if (p === '/api/subjects' && M === 'DELETE') { ud.subjects = ud.subjects.filter(s => s !== j.name); save(); return send(res, 200, ud.subjects); }
+      if (p === '/api/subjects' && M === 'DELETE') { // sessions stay (they still feed general trophies); this subject's ladder and earned-notification rows go in the same save
+        const name = ud.subjects.find(s => s === j.name); ud.subjects = ud.subjects.filter(s => s !== j.name); if (name) analytics.dropSubjectTrophies(ud, name); save(); return send(res, 200, ud.subjects); }
       if (p === '/api/subjects' && M === 'PUT') { // update meta and/or rename (renames past sessions too)
         const name = str(j.name, 60); if (!ud.subjects.includes(name)) return send(res, 404, { error: 'unknown subject' });
         const meta = ud.subjectMeta[name] ||= {};

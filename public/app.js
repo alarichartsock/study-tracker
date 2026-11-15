@@ -1121,7 +1121,7 @@ async function achSystem(a) { // system notification only when the tab is in the
     if (reg) await reg.showNotification(t, o); else new Notification(t, o); } catch { /* ignore */ } }
 function achNext() { if (achBusy || !achQ.length) return; achBusy = true; const a = achQ.shift(), el = document.createElement('div');
   const by = a.earnedBy ? 'Earned by ' + a.earnedBy.count + ' of ' + a.earnedBy.users + ' user' + (a.earnedBy.users === 1 ? '' : 's') : 'Personal trophy';
-  el.className = 'ach-cele' + (reduceMotion() ? ' still' : ''); el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.tabIndex = 0;
+  el.className = 'ach-cele' + (reduceMotion() ? ' still' : ''); el.dataset.kind = a.kind || ''; el.dataset.key = a.key || ''; el.dataset.id = a.id; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); el.tabIndex = 0;
   el.innerHTML = '<div class="ach-ic">&#127942;</div><div class="ach-tx"><small>Achievement unlocked' + (achQ.length ? ' &middot; ' + (achQ.length + 1) + ' new' : '') + '</small><b>' + esc(a.name) + (a.key ? ' <span class="muted small">' + esc(a.key) + '</span>' : '') + '</b><span>' + esc(a.desc) + '</span><span class="muted small">' + esc(by) + ' &middot; tap to view</span></div><button class="ach-x" aria-label="Dismiss">&times;</button>' +
     (reduceMotion() ? '' : '<div class="ach-conf" aria-hidden="true">' + Array.from({ length: 14 }, (_, i) => '<i style="--x:' + (i * 7 + 3) + '%;--d:' + (i % 5) * 90 + 'ms;--h:' + (i * 47 % 360) + '"></i>').join('') + '</div>');
   document.body.appendChild(el);
@@ -1483,7 +1483,20 @@ ACT.subjColor = async b => { const r = window.SubjectColor ? SubjectColor.clamp(
   await api('/api/subjects', 'PUT', { name: subjOf(b), color: r.color }); await load(); if (r.adjusted) { const m = document.querySelector('.subj-row[data-subj="' + CSS.escape(subjOf(b)) + '"] .sc-note'); if (m) { m.textContent = 'Adjusted for readability'; setTimeout(() => { if (m.isConnected) m.textContent = ''; }, 4000); } } };
 ACT.subjGoal = async b => { if (+b.value > 0) track('goal_created', { goal_type: 'subject_weekly' }); await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: Math.round((+b.value || 0) * 60) }); toast('Weekly subject goal saved'); await load(); };
 ACT.subjRename = async b => { const n = subjOf(b), nn = prompt('Rename subject (past sessions are renamed too):', n); if (nn && nn.trim() && nn !== n) { await api('/api/subjects', 'PUT', { name: n, rename: nn.trim() }); if (sel === n) sel = nn.trim(); refresh(); } };
-ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); refresh(); } };
+// Same slug as lib/analytics.js. Clears this device's copy of a removed subject's trophies (seen marks,
+// the open case, a queued or showing unlock card, and a background notification) without a full reload.
+function subjectAchPrefix(name) { const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x'; return 'subject:' + slug + ':'; }
+function dropSubjectTrophyClient(name) {
+  const prefix = subjectAchPrefix(name);
+  try { const seen = JSON.parse(localStorage.seenAch || '[]'); if (Array.isArray(seen)) localStorage.seenAch = JSON.stringify(seen.filter(id => !String(id).startsWith(prefix))); } catch { /* ignore */ }
+  if (ACH && ACH.A && Array.isArray(ACH.A.personal)) ACH.A.personal = ACH.A.personal.filter(a => !(a.kind === 'subject' && a.key === name));
+  if (ACH && ACH.seen) for (const id of [...ACH.seen]) if (String(id).startsWith(prefix)) ACH.seen.delete(id);
+  for (let i = achQ.length - 1; i >= 0; i--) if (achQ[i] && ((achQ[i].kind === 'subject' && achQ[i].key === name) || String(achQ[i].id || '').startsWith(prefix))) achQ.splice(i, 1);
+  document.querySelectorAll('.ach-cele').forEach(el => { if (el.dataset.kind === 'subject' && el.dataset.key === name) el.querySelector('.ach-x')?.click(); });
+  document.querySelectorAll('.trophy[data-id]').forEach(el => { if (String(el.dataset.id).startsWith(prefix)) el.remove(); });
+  try { navigator.serviceWorker?.getRegistration?.().then(reg => reg?.getNotifications?.().then(ns => { for (const n of ns) if (String(n.tag || '').startsWith('ach-' + prefix)) n.close(); })).catch(() => {}); } catch { /* ignore */ }
+}
+ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); dropSubjectTrophyClient(n); await refresh(); } };
 ACT.addSubj = async () => { const n = $('newSubj').value.trim(); if (n) { await api('/api/subjects', 'POST', { name: n }); refresh(); } };
 ACT.tplSwitch = b => { const t = TEMPLATES.get(b.dataset.t); if (!t || t.id === tplOf().id) return;
   dialog(`<h3>Switch to ${esc(t.name)}?</h3><p class="muted small">New subjects</p><p>${t.subjects.length ? t.subjects.map(esc).join(', ') : 'None yet. Add your own in Settings.'}</p><p class="muted small">Subjects and activities you have logged time on are kept. Past sessions are not changed.</p><div class="row"><span class="sp"></span><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok">Switch</button></div>`,
