@@ -77,7 +77,7 @@ Legend: ✅ already implemented before this phase · 🆕 added in this phase ·
 | Data room: activity × subject, subject × week | 🆕 | Weekly matrix as subjects × weeks table |
 | Key metrics (total, count, averages) | 🆕 | Plus active days, longest session, breaks, comparison to previous period |
 | Calendar heatmap with medal colors | ✅ / 🆕 | Medal dots added |
-| Stock chart ("share price") | 🆕 | Cumulative study-time line |
+| Study momentum | 🆕 | Cumulative study hours, stacked by subject |
 | Term review (best day/week/month, longest streak) | 🆕 | Stats → Term range |
 
 ## Gamification

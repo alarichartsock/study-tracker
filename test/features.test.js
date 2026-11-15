@@ -77,6 +77,9 @@ test('sessions: activities, breaks, focus, bulk update/delete/restore, retroacti
   assert.equal((await app.user('/api/sessions/bulk', 'POST', { ids: [s1.id], action: 'delete' })).body.deleted, 0); // isolation
   const r = (await c('/api/report?from=2026-10-01&to=2026-10-07')).body; assert.equal(r.current.total, 2 * 3600 - 600 + 3600); assert.ok(r.previous); assert.ok(Array.isArray(r.cumulative));
   for (const row of r.cumulative) assert.equal(Object.values(row[2]).reduce((s, n) => s + n, 0), row[1]);
+  assert.equal(r.cumulative[0][1], 0, 'study momentum starts at 0 for the selected range');
+  assert.equal(r.cumulative.at(-1)[1], r.current.total, 'study momentum total matches the range');
+  assert.ok(r.cumulative.length >= 8, 'the range spans every day, plus the starting zero');
   assert.equal((await c('/api/report?from=bad')).status, 400);
 });
 

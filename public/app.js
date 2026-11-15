@@ -369,7 +369,12 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 // Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
-async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
+async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; render.enter = enter; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'), sig = view + '\n' + html;
+  if (!enter && render.sig === sig) { AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); return; } // same markup: the 30s stats poll must not rebuild the chart
+  render.sig = sig; const top = m.scrollTop, win = scrollY;
+  m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html;
+  if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else { m.scrollTop = top; scrollTo(0, win); settleLogo(); }
+  AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -870,28 +875,32 @@ const colChart = (arr, labels, names = labels, parts) => { const Y = niceT(Math.
   return `<div class="hcols yax${stack ? ' stack' : ''}">${yGrid(Y.ticks, mx, f => `calc(22px + (100% - 22px) * ${f.toFixed(4)})`)}${arr.map((v, i) => { const p = parts && parts[i], segs = stack && p ? subjOrder(Object.keys(p)).filter(s => p[s] > 0).map(s => `<i style="height:${(p[s] / mx * 100).toFixed(2)}%;background:${color(s)}"${segTip(names[i], s, p[s])}></i>`).join('') : '';
     return `<div class="hcol"${tip(names[i] + ' \u00b7 ' + fmtH(v) + (tot ? ' \u00b7 ' + Math.round(v / tot * 100) + '%' : ''))}><div class="hcol-bar">${segs || (v > 0 ? `<i style="height:max(3px,${(v / mx * 100).toFixed(2)}%);background:var(--acc)"></i>` : '')}</div><span>${labels[i]}</span></div>`; }).join('')}</div>`; };
 // Stacked cumulative areas, one band per subject (listed order, bottom to top), so the
-// top edge is the total line. One vertex per day; the series is already daily.
+// top edge is the total line. The series is already bucketed (hours or days).
 function cumChart(cum, cMax, cY) {
   if (!cum.length) return '';
   const W = 700, H = 160, base = 155, plot = 145, n = cum.length, rows = n > 1 ? cum : [cum[0], cum[0]];
   const xOf = i => rows.length > 1 ? i / (rows.length - 1) * W : 0, yOf = v => base - (cMax ? v / cMax * plot : 0), xy = (x, y) => x.toFixed(2) + ',' + y.toFixed(2);
   const names = []; for (const row of cum) for (const s of Object.keys(row[2] || {})) if (row[2][s] > 0 && !names.includes(s)) names.push(s);
-  const order = subjOrder(names), bands = [];
+  const order = subjOrder(names), bands = [], bandColor = s => s === 'Other' ? '#868e96' : color(s);
   for (const subj of order) {
     const top = [], bot = [];
     rows.forEach((row, i) => { const parts = row[2] || {}; let below = 0; for (const s of order) { if (s === subj) break; below += +parts[s] || 0; } const mine = +parts[subj] || 0; top.push(xy(xOf(i), yOf(below + mine))); bot.push(xy(xOf(i), yOf(below))); });
     const total = +((cum[n - 1][2] || {})[subj] || 0); if (!(total > 0)) continue;
     const i0 = Math.max(0, cum.findIndex(row => (row[2] || {})[subj] > 0));
-    bands.push({ subj, c: color(subj), total, top, bot, edge: top.slice(n > 1 ? Math.max(0, i0 - 1) : 0) });
+    bands.push({ subj, c: bandColor(subj), total, top, bot, edge: top.slice(n > 1 ? Math.max(0, i0 - 1) : 0) });
   }
   const areas = bands.map(b => `<path class="cum-band" data-subj="${esc(b.subj)}" d="M${b.top.join('L')}L${b.bot.slice().reverse().join('L')}Z" fill="${b.c}" stroke="none"/><polyline class="cum-edge" data-subj="${esc(b.subj)}" points="${b.edge.join(' ')}" fill="none" stroke="${b.c}" stroke-width="1.75" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>`).join('');
   const line = `<polyline class="cum-total" vector-effect="non-scaling-stroke" fill="none" stroke="var(--ok)" stroke-width="1.5" points="${rows.map(([, v], i) => xy(xOf(i), yOf(v))).join(' ')}"/>`;
-  const legend = bands.length ? `<div class="cum-legend">${bands.map(b => `<button type="button" class="cum-leg" data-subj="${esc(b.subj)}" style="--c:${esc(b.c)}" aria-pressed="false"><i class="dot" style="background:${b.c}"></i><span>${esc(b.subj)}</span><b>${fmtH(b.total)}</b></button>`).join('')}</div>` : '';
-  return `<div class="cum-block"><div class="cum-wrap yax">${yGrid(cY.ticks, cMax, f => ((5 + f * plot) / H * 100).toFixed(2) + '%')}<div class="cum-draw"><svg class="cum-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${areas}${line}</svg></div>${cumHits(cum, cMax)}</div>${legend}</div>`;
+  const legend = bands.length ? `<div class="cum-legend" aria-label="Subject totals">${bands.map(b => `<button type="button" class="cum-leg" data-subj="${esc(b.subj)}" style="--c:${esc(b.c)}" aria-pressed="false" aria-label="${esc(b.subj + ', ' + fmtH(b.total))}"><i class="dot" style="background:${b.c}"></i><span>${esc(b.subj)}</span><b>${fmtH(b.total)}</b></button>`).join('')}</div>` : '';
+  const still = typeof render !== 'undefined' && render.enter === false ? ' cum-still' : '';
+  return `<div class="cum-block" aria-label="Study momentum, cumulative study hours by subject"><div class="cum-wrap yax">${yGrid(cY.ticks, cMax, f => ((5 + f * plot) / H * 100).toFixed(2) + '%')}<div class="cum-draw${still}"><svg class="cum-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${areas}${line}</svg></div>${cumHits(cum, cMax)}</div>${legend}</div>`;
 }
+function cumWhen(k) { const m = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}))?$/.exec(String(k || '')); if (!m) return fmtDate(k2d(k), { month: 'short', day: 'numeric', year: 'numeric' });
+  const date = fmtDate(k2d(m[1]), { month: 'short', day: 'numeric', year: 'numeric' }); if (m[2] == null) return date;
+  const hr = +m[2], h12 = hr % 12 || 12; return date + ', ' + h12 + (hr < 12 ? ' AM' : ' PM'); }
 function cumHits(cum, top = Math.max(1, ...cum.map(x => x[1]))) { const n = Math.min(cum.length, 60), seg = [...Array(n)].map((_, i) => cum[Math.round((i + 1) / n * cum.length) - 1]);
   return '<div class="cum-hit">' + seg.map(([k, v], i) => { const pk = i ? seg[i - 1][0] : null, d = i ? v - seg[i - 1][1] : 0;
-    return '<i' + tip(fmtDate(k2d(k), { month: 'short', day: 'numeric', year: 'numeric' }) + ' \u00b7 ' + fmtH(v) + ' total' + (i ? ' \u00b7 ' + (d > 0 ? '+' + fmtH(d) : 'no change') + ' since ' + fmtDate(k2d(pk), { month: 'short', day: 'numeric' }) : ''), i === 0 || i === n - 1) + '><b style="bottom:' + ((5 + v / top * 145) / 160 * 100).toFixed(2) + '%"></b></i>'; }).join('') + '</div>'; }
+    return '<i' + tip(cumWhen(k) + ' \u00b7 ' + fmtH(v) + ' total' + (i ? ' \u00b7 ' + (d > 0 ? '+' + fmtH(d) : 'no change') + ' since ' + cumWhen(pk) : ''), i === 0 || i === n - 1) + '><b style="bottom:' + ((5 + v / top * 145) / 160 * 100).toFixed(2) + '%"></b></i>'; }).join('') + '</div>'; }
 function dataRoom(acts, subjects, m, cell) { const rowT = a => subjects.reduce((t, s) => t + (m[a][s] || 0), 0), colT = s => acts.reduce((t, a) => t + (m[a][s] || 0), 0), n = subjects.length + 1;
   return '<div class="tbl-wrap"><table class="tbl dr" style="min-width:' + (140 + n * 76) + 'px"><colgroup><col class="dr-first">' + '<col>'.repeat(n) + '</colgroup><thead><tr><th scope="col" class="dr-h">Activity</th>' + subjects.map(s => '<th scope="col" class="num">' + esc(s) + '</th>').join('') + '<th scope="col" class="num">Total</th></tr></thead><tbody>' +
     acts.map(a => '<tr><th scope="row">' + esc(a || 'Unspecified') + '</th>' + subjects.map(s => cell(m[a][s])).join('') + '<td class="num"><b>' + fmtH(rowT(a)) + '</b></td></tr>').join('') +
@@ -905,8 +914,8 @@ VIEWS.stats = async () => {
   const subjects = Object.keys(c.bySubject), acts = Object.keys(c.matrix.activitySubject), weeks = [...new Set(Object.values(c.matrix.subjectWeek).flatMap(Object.keys))].sort().slice(-12);
   const cell = v => v ? `<td class="num" style="background:color-mix(in srgb,var(--acc) ${Math.round(Math.min(70, v / Math.max(1, c.total) * 300))}%,transparent)">${fmtH(v)}</td>` : '<td class="num muted">–</td>';
   const range = c.from ? `${fmtDate(k2d(c.from), { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(k2d(c.to), { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No data yet';
-  return `${mixChip()}${isMcat() && mcatPx().length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(mcatPx()).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(mcatPx()).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="row wrap gap" style="margin:0"><div class="tabs grow range-tabs">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <select data-chg="sSubj" style="width:auto">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
+  return `${mixChip()}${isMcat() && mcatPx().length ? `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">MCAT practice: latest ${MCAT.summary(mcatPx()).last.total} · ${MCAT.fmtPct(MCAT.pctTotal(MCAT.summary(mcatPx()).last.total))}th percentile →</button>` : `<button class="chip px-link" style="--c:var(--acc)" data-act="goto" data-v="mcat">Track MCAT practice exams →</button>`}<div class="card"><div class="stats-range"><div class="tabs range-tabs" role="tablist" aria-label="Date range">${[['7d', '7 days'], ['week', 'Week'], ['30d', '30 days'], ['month', 'Month'], ['term', 'Term'], ['year', 'Year'], ['all', 'All'], ['custom', 'Custom']].map(([k, l]) => `<button data-act="range" data-r="${k}" class="${UI.range === k ? 'on' : ''}" role="tab" aria-selected="${UI.range === k}">${l}</button>`).join('')}</div>
+    <select class="subj-pick" data-chg="sSubj" aria-label="Subject">${opt(S.subjects, UI.sSubj || '', 'All subjects')}</select></div>
     ${UI.range === 'custom' ? `<div class="row"><input type="date" value="${from}" data-chg="cRange" data-k="cFrom"><input type="date" value="${to}" data-chg="cRange" data-k="cTo"></div>` : ''}
     <p class="muted small" style="margin:8px 0 0">${range}${R.previous ? ` · previous period: ${fmtH(R.previous.total)} ${chg == null ? '' : `<b style="color:${chg >= 0 ? 'var(--ok)' : 'var(--danger)'}">${chg >= 0 ? '▲' : '▼'} ${Math.abs(Math.round(chg * 100))}%</b>`}` : ''}</p></div>
   ${statCards([[fmtH(c.total), 'Total'], [c.count, 'Sessions'], [fmtH(c.avgPerDay), 'Avg per day'], [fmtH(c.avgSession), 'Avg session']])}
@@ -918,7 +927,7 @@ VIEWS.stats = async () => {
       <div class="subj-row"><span>Longest session</span><b>${fmtH(c.longestSession)}</b></div><div class="subj-row"><span>Longest streak</span><b>${c.streak} days</b></div><div class="subj-row"><span>Breaks</span><b>${fmtH(c.breakSec)}</b></div>
       <div class="subj-row"><span>Medals</span><b>${MEDAL_ORDER.map(m => `<span class="medal m-${m}"></span> ${c.medals[m]}`).join(' &nbsp;')}</b></div></div></div>
   <div class="grid2"><div class="card"><h3>By weekday</h3>${colChart(c.byWeekday, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], c.byWeekdaySubject)}</div><div class="card"><h3>Time of day</h3>${colChart(c.byHour, [...Array(24)].map((_, i) => (i % 3 ? '' : String(i))), [...Array(24)].map((_, i) => pad(i) + ':00-' + pad((i + 1) % 24) + ':00'), c.byHourSubject)}</div></div>
-  <div class="card"><h3>Study “share price” (cumulative)</h3>${cum.length ? cumChart(cum, cMax, cY) + `<p class="muted small">${fmtH(cTot)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>` : '<p class="muted small">No data yet</p>'}</div>
+  <section class="card" aria-labelledby="momTitle"><h3 id="momTitle">Study momentum</h3>${cum.length ? cumChart(cum, cMax, cY) + (from ? `<p class="muted small mom-note">${cTot === 0 ? 'No study time in this range' : fmtH(cTot) + ' in this range'}</p>` : `<p class="muted small mom-note">${fmtH(cTot)} total since ${fmtDate(k2d(cum[0][0]), { month: 'short', day: 'numeric', year: 'numeric' })}</p>`) : '<p class="muted small">No data yet</p>'}</section>
   <div class="card scroll"><h3>Data room · activities × subjects</h3>${acts.length ? dataRoom(acts, subjects, c.matrix.activitySubject, cell) : '<p class="muted small">No data</p>'}</div>
   <div class="card scroll"><h3>Data room · subjects × weeks</h3>${weeks.length ? `<table class="tbl"><tr><th></th>${weeks.map(w => `<th class="num">${esc(w.slice(5))}</th>`).join('')}</tr>${subjects.map(s => `<tr><th><span class="dot" style="background:${color(s)}"></span> ${esc(s)}</th>${weeks.map(w => cell((c.matrix.subjectWeek[s] || {})[w])).join('')}</tr>`).join('')}<tr><th>Total</th>${weeks.map(w => `<td class="num"><b>${fmtH(c.byWeek[w])}</b></td>`).join('')}</tr></table>` : '<p class="muted small">No data</p>'}</div>`;
 };
@@ -1575,7 +1584,7 @@ const TOUR = [
   { v: 'dash', sel: 'card:Goals', t: 'Dashboard: goals', b: 'Daily, weekly, monthly and term goals with rings and pace, so you can see at a glance whether you are on track.' },
   { mcat: true, v: 'dash', sel: 'card:MCAT practice exams', t: 'Dashboard: MCAT card', b: 'Your latest practice-exam score and percentile, with a shortcut to log a new full-length.' },
   { v: 'dash', sel: '.todo-card', t: 'Dashboard: to-dos', b: 'Add and check off to-dos right here; the card grows with your list.' },
-  { v: 'stats', sel: '.cum-wrap', alt: '.hcols', t: 'Stats and charts', b: 'Totals, records, weekday and time-of-day charts, and your study "share price". Hover or tap any bar or line for exact numbers.' },
+  { v: 'stats', sel: '.cum-wrap', alt: '.hcols', t: 'Stats and charts', b: 'Totals, records, weekday and time-of-day charts, and your study momentum. Hover or tap any bar or line for exact numbers.' },
   { v: 'stats', sel: '.mix-chip', t: 'Background gradient', b: 'This chip shows the subject mix behind the background gradient. Tap it to see how it is calculated.' },
   { mcat: true, v: 'mcat', sel: 'card:Practice exams', t: 'MCAT practice exams', b: 'Log full-length scores by section and watch your total and percentiles trend toward your goal.' },
   { v: 'plan', sel: 'card:Exams', t: 'Exams & to-dos', b: 'Upcoming exams with countdowns, plus a full to-do and study-plan list with due dates and priorities.' },
@@ -1631,6 +1640,7 @@ function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDef
 
 // ---------- periodic refresh ----------
 setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
+setInterval(() => { if (ME && !document.hidden && !$('dlg').open && view === 'stats') refresh().catch(() => {}); }, 30000);
 setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
 document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && (view === 'timer' || (S && S.active))) refresh().catch(() => {}); });
 boot().catch(e => { console.error('boot', e); if (ME) { toast('Something went wrong loading your data. Please refresh.'); return; } // never wipe the page: fall back to the signed-out landing

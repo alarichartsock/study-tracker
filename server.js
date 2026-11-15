@@ -575,7 +575,7 @@ function createApp(opts = {}) {
         if ((from && !isDateKey(from)) || (to && !isDateKey(to))) return send(res, 400, { error: 'from/to must be YYYY-MM-DD' });
         const subj = u.searchParams.get('subject'), list = subj ? ud.sessions.filter(s => s.subject === subj) : ud.sessions, o = { h, medals: ud.settings.medals };
         const r = from && to ? analytics.compare(list, from, to, o) : { current: analytics.report(list, { ...o, from, to }) };
-        return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h) });
+        return send(res, 200, { ...r, cumulative: analytics.cumulative(list, h, from && to ? { from, to } : undefined) });
       }
       const achFull = () => { const A = analytics.achievements(ud, h);
         const E = analytics.earnedCounts(store.db.users.map(x => { const d = store.data(x.id); return [d, stats.ctxOf(d.settings)]; })); // aggregate counts only

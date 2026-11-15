@@ -88,10 +88,10 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v179/);
 });
 
-test('share price chart stacks cumulative hours in each subject color', () => {
+test('study momentum chart stacks cumulative hours in each subject color', () => {
   const vm = require('vm'), js = pub('app.js'), css = pub('style.css');
   const start = js.indexOf('const subjOrder = '), end = js.indexOf('\nVIEWS.stats');
   assert.ok(start > 0 && end > start);
@@ -127,7 +127,14 @@ test('share price chart stacks cumulative hours in each subject color', () => {
   assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
   assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
   assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
-  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v179/);
+  assert.match(js, /Study momentum/); assert.match(js, /No study time in this range/);
+  assert.match(js, /aria-label="Study momentum, cumulative study hours by subject"/);
+  assert.match(js, /setInterval\(\(\) => \{ if \(ME && !document\.hidden && !\$\('dlg'\)\.open && view === 'stats'\) refresh\(\)\.catch\(\(\) => \{\}\); \}, 30000\)/);
+  assert.match(js, /cum-still/); assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw\.cum-still\{animation:none\}/);
+  assert.match(css, /\.stats-range\{display:flex;align-items:center;gap:8px;margin:0;min-width:0;max-width:100%;flex-wrap:nowrap\}/);
+  assert.match(css, /\.stats-range \.subj-pick\{flex:0 1 auto;width:auto;max-width:12\.5rem/);
+  assert.match(js, /your study momentum/); assert.doesNotMatch(js, /share price/i);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -249,7 +256,8 @@ test('load-in plays on a cold open or a view change, not on the periodic same-vi
   const js = pub('app.js'), css = pub('style.css');
   assert.match(js, /setInterval\(\(\) => \{ if \(ME && !document\.hidden && !\$\('dlg'\)\.open && \['timer', 'dash'\]\.includes\(view\)\) refresh\(\)/); // the poll stays
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
-  assert.match(js, /if \(enter\) \{ m\.classList\.remove\('enter'\); void m\.offsetWidth; m\.classList\.add\('enter'\); \} else settleLogo\(\)/);
+  assert.match(js, /if \(enter\) \{ m\.classList\.remove\('enter'\); void m\.offsetWidth; m\.classList\.add\('enter'\); \} else \{ m\.scrollTop = top; scrollTo\(0, win\); settleLogo\(\); \}/);
+  assert.match(js, /if \(!enter && render\.sig === sig\)/); // an unchanged stats poll does not rebuild the page
   assert.match(js, /render\.painted = false; go\(view\)/); // boot is a cold open
   assert.match(js, /async function refresh\(\) \{ settleLogo\(\); await load\(\); render\(\); \}/);
   assert.match(js, /function armLogo\(\)/); assert.match(js, /if \(app\.classList\.contains\('hid'\)\) armLogo\(\)/);
@@ -459,5 +467,5 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v179/);
 });

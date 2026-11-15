@@ -15,7 +15,7 @@ Full Athenify parity checklist: [docs/athenify-parity.md](docs/athenify-parity.m
 - **Goals**: daily (separate weekend goal), weekly, monthly, term/test-day totals with pace ("need X h/day") and forecast; weekly goals per subject; per-day planned hours from the calendar; configurable day start time for night owls.
 - **Dashboard**: today/week/month, streaks, goal rings, exam countdowns, due to-dos, medals, 14-day stacked chart, GitHub-style heatmap with medal days.
 - **Calendar**: month view with study time, medals, plans, exams and to-dos per day.
-- **Stats / data room**: any range (7d, week, 30d, month, term, year, all, custom) with comparison to the previous period; totals, averages, best day/week/month, longest session, breaks, avg focus; subject donut, activity bars, weekday and time-of-day charts, cumulative "share price" chart, activity × subject and subject × week matrices.
+- **Stats / data room**: any range (7d, week, 30d, month, term, year, all, custom) with comparison to the previous period; totals, averages, best day/week/month, longest session, breaks, avg focus; subject donut, activity bars, weekday and time-of-day charts, cumulative study momentum chart, activity × subject and subject × week matrices.
 - **Exams & to-dos**: exams/practice tests with dates, scores and weighted average; to-dos with due dates, priorities and Inbox/Scheduled/Done views.
 - **Gamification**: bronze/silver/gold/platinum medals with custom thresholds, 18 achievements with unlock notifications, trophy room.
 - **Import / export**: CSV import for other apps, CSV export, full JSON backup/restore (merge-only), and a secret iCal feed of your own sessions/exams/to-dos.
