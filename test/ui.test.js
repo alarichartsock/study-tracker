@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });
 
 test('share price chart stacks cumulative hours in each subject color', () => {
@@ -127,7 +127,7 @@ test('share price chart stacks cumulative hours in each subject color', () => {
   assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
   assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
   assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
-  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -211,6 +211,35 @@ test('Launch Pad trophy art: one isometric hairline svg per trophy, served and c
   for (const k of ['h1', 'h10', 'h50', 'h100', 'h250', 'n10', 'n50', 'n100']) assert.equal(T.key('subject:bio:' + k), DONE.includes('personal') ? 'p-' + k : T.key('subject:bio:' + k));
   for (const id of T.ids) assert.match(T.svg(id), /^<svg class="ta" viewBox="6 5 52 52"/);
   assert.match(P('index.html'), /trophy-art\.js/); assert.match(P('sw.js'), /'\/trophy-art\.js'/); assert.match(P('app.js'), /TrophyArt\.has\(x\)/); assert.match(P('app.js'), /TrophyArt\.svg\(TrophyArt\.key\(x\)\)/);
+});
+
+test('unlock celebration and trophy detail fit the whole drawing without a clipping box', () => {
+  const css = pub('style.css'), js = pub('app.js');
+  const slot = css.match(/\.ach-cele \.ach-ic\.t-art\{[^}]*\}/);
+  const art = css.match(/\.ach-cele \.ach-ic\.t-art \.ta\{[^}]*\}/);
+  const big = css.match(/\.t-ic\.t-art\.big\{[^}]*\}/);
+  const bigArt = css.match(/\.t3d-host \.t-art\.big \.ta\{[^}]*\}/);
+  const dlg = css.match(/#dlg:has\(\.t-art\)\{[^}]*\}/);
+  assert.ok(slot && art && big && bigArt && dlg, 'unlock and detail sizing rules exist');
+  assert.match(slot[0], /aspect-ratio:1/);
+  assert.match(slot[0], /min\(124px,36vw,38vh\)/);
+  assert.match(slot[0], /38dvh/);
+  assert.match(slot[0], /max-height:min\(124px,38dvh\)/);
+  assert.match(slot[0], /overflow:visible/);
+  assert.match(slot[0], /align-self:center/);
+  assert.doesNotMatch(slot[0], /height:64px|flex:0 0 64px/);
+  assert.match(art[0], /width:100%/); assert.match(art[0], /height:100%/); assert.match(art[0], /max-height:100%/);
+  assert.doesNotMatch(art[0], /124px|108px|64px/);
+  assert.match(big[0], /aspect-ratio:1/); assert.match(big[0], /46dvh/); assert.match(big[0], /max-height:min\(280px,46dvh\)/);
+  assert.match(big[0], /overflow:visible/);
+  assert.match(bigArt[0], /width:100%/); assert.match(bigArt[0], /max-height:100%/);
+  assert.match(dlg[0], /max-height:calc\(100dvh - 24px\)/);
+  assert.doesNotMatch(dlg[0], /overflow:\s*hidden/);
+  assert.match(js, /el\.className = 'ach-cele'/); assert.match(js, /ic\.className = 'ach-ic t-art on'/);
+  assert.match(js, /t-ic t-art big/);
+  assert.match(css, /\.ach-cele\{[^}]*align-items:center/);
+  assert.match(css, /\.ach-cele\.show\{transform:translate\(-50%,0\) scale\(1\)/);
+  assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.ach-cele/);
 });
 
 test('circling timer lines share one clock derived from the session start (no per-ring offsets)', () => {
@@ -459,5 +488,5 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });

@@ -878,7 +878,18 @@ html:not([data-anim="0"]) .sh-wave.sh-drawn{animation:none;stroke-dashoffset:0} 
 .trophy .t-ic.t-art{height:128px}.t-art .ta{width:124px;height:124px}
 .ta path,.ta ellipse,.ta circle{stroke-width:.6}.ta .w{stroke-width:.9}.ta .a{stroke-width:.68}
 @media(max-width:560px){.trophy .t-ic.t-art{height:112px}.t-art .ta{width:108px;height:108px}.ta path,.ta ellipse,.ta circle{stroke-width:.66}}
-.t3d-host:has(.t-art){min-height:0}.t-ic.t-art.big{height:auto}.t-art.big .ta{width:min(280px,70vw);height:min(280px,70vw)}.t-art.big .ta *{stroke-width:.3}.t-art.big .ta .a{stroke-width:.34}.t-art.big .ta .w{stroke-width:.45}
+/* Unlock + detail: the shared .t-art .ta size (124px, 108px under 560px) is for Launch Pad cards.
+   The celebration used to pin that drawing in a 64px slot inside overflow:hidden, so the base of the
+   trophy was sliced off the bottom of the card. Size the slot to the drawing (aspect-ratio, padding,
+   no fixed height), center it with the title, and on a short viewport shrink the art with max-height
+   rather than clipping it. vh first, then dvh where the browser has it. */
+.ach-cele .ach-ic.t-art{flex:0 0 auto;align-self:center;box-sizing:border-box;display:grid;place-items:center;width:min(124px,36vw,38vh);height:min(124px,36vw,38vh);width:min(124px,36vw,38dvh);height:min(124px,36vw,38dvh);max-height:min(124px,38vh);max-height:min(124px,38dvh);aspect-ratio:1;min-width:0;min-height:0;padding:4px;overflow:visible}
+.ach-cele .ach-ic.t-art .ta{width:100%;height:100%;max-width:100%;max-height:100%;min-width:0;min-height:0;display:block}
+.t3d-host:has(.t-art){min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0;box-sizing:border-box}
+.t-ic.t-art.big{box-sizing:border-box;display:grid;place-items:center;margin-inline:auto;overflow:visible;padding:8px;aspect-ratio:1;min-width:0;min-height:0;width:min(280px,70vw,46vh);height:min(280px,70vw,46vh);width:min(280px,70vw,46dvh);height:min(280px,70vw,46dvh);max-height:min(280px,46vh);max-height:min(280px,46dvh)}
+.t3d-host .t-art.big .ta{width:100%;height:100%;max-width:100%;max-height:100%;min-width:0;min-height:0;display:block}
+.t-art.big .ta *{stroke-width:.3}.t-art.big .ta .a{stroke-width:.34}.t-art.big .ta .w{stroke-width:.45}
+#dlg:has(.t-art){max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:auto}
 /* Card hover (pointer devices): lift with a softer, larger shadow, border tints toward the accent, slight tilt toward the cursor
    (coordinated with the drawing's lean), faint glow on earned; ~200ms back. transform/box-shadow only, so neighbours never move. */
 .trophy.t-lp{transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s var(--ease)}
