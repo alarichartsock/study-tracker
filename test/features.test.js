@@ -161,8 +161,8 @@ test('subjects meta/rename, activities, goals/settings validation, plan, exams, 
   assert.ok(!(await c('/api/activities', 'DELETE', { name: 'UWorld' })).body.includes('UWorld'));
   assert.equal((await c('/api/settings', 'POST', { goals: { dailyMin: 240, weekendDailyMin: 120, weeklyMin: 1500 }, term: { name: 'MCAT', start: '2026-09-01', end: '2027-01-15' },
     medals: { gold: 360 }, pomodoro: { focusMin: 50, shortMin: 10, cycles: 3 }, dayStartHour: 3, quickDurations: [30, 60], accent: '#ff8800' })).status, 200);
-  const s = (await c('/api/state')).body.settings; assert.equal(s.dailyGoalMin, 240); assert.equal(s.goals.weekendDailyMin, 120); assert.equal(s.medals.gold, 360); assert.equal(s.pomodoro.focusMin, 50); assert.equal(s.dayStartHour, 3);
-  for (const bad of [{ dayStartHour: 9 }, { pomodoro: { focusMin: 0 } }, { accent: 'javascript:x' }, { term: { start: 'tomorrow' } }, { goals: { dailyMin: 5000 } }])
+  const s = (await c('/api/state')).body.settings; assert.equal(s.dailyGoalMin, 240); assert.equal(s.goals.weekendDailyMin, 120); assert.equal(s.medals.gold, 360); assert.equal(s.pomodoro.focusMin, 50); assert.equal(s.dayStartHour, 3); assert.equal(s.dayStartMinute, 0);
+  for (const bad of [{ dayStartHour: 9 }, { dayStartMinute: 60 }, { pomodoro: { focusMin: 0 } }, { accent: 'javascript:x' }, { term: { start: 'tomorrow' } }, { goals: { dailyMin: 5000 } }])
     assert.equal((await c('/api/settings', 'POST', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await c('/api/plan', 'POST', { date: '2026-10-23', minutes: 90 })).body['2026-10-23'], 90);
   assert.equal((await c('/api/plan', 'POST', { date: '2026-10-23', minutes: null })).body['2026-10-23'], undefined);

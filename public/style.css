@@ -982,3 +982,20 @@ html.acc-local[data-theme=dark] body{--lw1:color-mix(in oklab,var(--acc) 55%,#10
   html.acc-local[data-theme=light] body{--lw1:oklch(from var(--acc) .8 .11 h);--lw2:oklch(from var(--acc) .9 .08 calc(h + 50));--lw3:oklch(from var(--acc) .88 .06 calc(h + 180))}
   html.acc-local[data-theme=dark] body{--lw1:oklch(from var(--acc) .42 .1 h);--lw2:oklch(from var(--acc) .4 .07 calc(h + 50));--lw3:oklch(from var(--acc) .36 .06 calc(h + 180))}}
 @media (prefers-reduced-motion:reduce){body{transition:none}}
+
+/* Hour + minute duration fields. The pair sits under the existing label so a grid row stays aligned. */
+.hm{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;min-width:0}
+.hm-u{min-width:0}
+.hm-u label{margin:0 0 4px;font-size:12px;line-height:1.2;color:var(--muted)}
+.hm input{width:100%;min-width:0;text-align:center;padding:10px 4px 10px 8px;font-variant-numeric:tabular-nums}
+.hm.inline{width:min(168px,46vw);flex:none}
+.hm-grid{align-items:end}
+.hm-grid>div>label{min-height:2.6em}
+.subj-goal{flex:0 1 168px;min-width:132px;max-width:200px}
+.subj-goal .hm input{padding:8px 2px 8px 6px}
+.sess-times{align-items:flex-end}
+.cd-row{align-items:flex-end}
+@media(max-width:640px){
+  .subj-goal{flex:1 1 100%;max-width:none}
+  .hm.inline{width:min(200px,70vw)}
+}
