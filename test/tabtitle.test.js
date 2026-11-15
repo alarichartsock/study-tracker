@@ -164,7 +164,7 @@ test('hidden-tab worker script posts immediately and reschedules on the next wal
 test('title sync is not tied to the timer view and wakes on visibility, focus, pageshow, resume, and freeze', () => {
   const tickSrc = js.slice(js.indexOf('function tick()'), js.indexOf('// Now-studying card'));
   const syncAt = tickSrc.indexOf('syncTabTitle(now)');
-  const gateAt = tickSrc.indexOf("if (view !== 'timer' || !$('clock')) return;");
+  const gateAt = tickSrc.indexOf("if (view !== 'timer' || !$('clock')");
   assert.ok(syncAt >= 0 && gateAt > syncAt, 'title is written before the timer-view return');
   assert.doesNotMatch(tickSrc, /document\.title = a && !a\.paused/);
   assert.match(js, /async function load\(\) \{(?:(?!\n\}\n)[\s\S])*syncTabTitle\(Date\.now\(\), true\); syncTabWorker\(\);/);
@@ -183,6 +183,6 @@ test('title sync is not tied to the timer view and wakes on visibility, focus, p
   const clock = js.slice(js.indexOf('function tabTitleFor'), js.indexOf('ACT.mode'));
   assert.doesNotMatch(clock, /location\.reload|shTabReload/);
   assert.doesNotMatch(clock, /accentFavicon|favSvg/); // favicon stays on the accent path
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v175/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v178/);
   assert.match(js, /addEventListener\('pageshow', pinIosWash\)/); // mobile Safari wash fix stays
 });

@@ -398,7 +398,7 @@ VIEWS.timer = () => {
     : `<button class="btn xl" data-act="pause">Pause</button><button class="btn xl danger" data-act="stop">Stop</button>`;
   return `<div class="timer-wrap ${a ? (a.paused ? 'paused' : 'running') : p?.phase === 'break' ? 'paused' : ''}" id="tw">
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
-    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-gold-svg" id="tGoldSvg" aria-hidden="true">${[1, 2, 3].map(n => `<circle cx="100" cy="100" r="${GOLD_R}" class="ring-gold g${n}" style="stroke-dasharray:${GOLD_C};stroke-dashoffset:${GOLD_C};opacity:0"/>`).join('')}</svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
+    <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg">${ring(88, 0)}</svg><svg viewBox="0 0 200 200" class="ring t-gold-svg" id="tGoldSvg" aria-hidden="true">${[1, 2, 3].map(n => `<circle cx="100" cy="100" r="${GOLD_R}" class="ring-gold g${n}" style="stroke-dasharray:${GOLD_C};stroke-dashoffset:${GOLD_C};opacity:0"/>`).join('')}</svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
     ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
     ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
@@ -490,8 +490,9 @@ function goalOvertime(todaySec, goalSec) {
   }
   return { over: true, extra, arcs };
 }
-// Persistent gold svg (not inside the accent svg, which tick replaces every second).
-// grow: one-shot fill when this view watches the goal get crossed. Level 0 jumps.
+// Gold stays on its own svg so the comet hairline is never rebuilt. The accent stroke is
+// persistent too (rAF writes its dashoffset). grow: one-shot fill when this view watches
+// the goal get crossed. Level 0 jumps.
 function paintGoalGold(ot, grow) {
   const svg = $('tGoldSvg');
   if (!svg) return;
@@ -513,58 +514,176 @@ function paintGoalGold(ot, grow) {
       el.dataset.off = String(off);
       el.dataset.show = '1';
     } else {
-      el.style.transition = (still || fresh) ? 'none' : '';
+      // Dashoffset is owned by the frame loop. Opacity may fade. A fresh svg paints at once
+      // so a refresh does not fade the arcs back in.
+      el.style.transition = (still || fresh) ? 'none' : 'opacity .35s';
       el.style.strokeDashoffset = String(off);
       el.style.opacity = show ? '1' : '0';
       el.dataset.off = '';
     }
   });
-  if (grow || fresh) requestAnimationFrame(() => requestAnimationFrame(() => {
+  if (grow) requestAnimationFrame(() => requestAnimationFrame(() => {
     if (!svg.isConnected) return;
     const move = animLevel() >= 1;
     svg.querySelectorAll('circle').forEach(el => {
-      el.style.transition = move ? '' : 'none';
-      if (grow && el.dataset.off) { el.style.strokeDashoffset = el.dataset.off; el.style.opacity = el.dataset.show === '1' ? '1' : '0'; }
+      el.style.transition = move ? 'stroke-dashoffset .6s var(--ease),opacity .35s' : 'none';
+      if (el.dataset.off) { el.style.strokeDashoffset = el.dataset.off; el.style.opacity = el.dataset.show === '1' ? '1' : '0'; }
     });
   }));
+}
+// Timer ring motion. One rAF loop while the timer view is visible and a clock is running
+// or a correction is easing. Progress comes from session start + accum (or the break
+// deadline), not from counting frames. A refresh that shifts the same total eases;
+// a new day, subject, session, or goal/countdown/break switch snaps. animLevel < 1
+// just paints the truth. The loop stops while the tab is hidden.
+const RING_EASE_MS = 500, RING_SNAP_SEC = 120, RING_STALE_MS = 2500, RING_EASE_MIN = 1.5;
+const ringMot = { vis: null, key: '', ease: null, raf: 0, at: null, growTill: 0 };
+function ringEase(t) {
+  t = Math.min(1, Math.max(0, +t || 0));
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+function ringTrack(truth, error, elapsedMs, durMs) {
+  const now = +truth || 0;
+  if (!(durMs > 0)) return now;
+  return now - (+error || 0) * (1 - ringEase((+elapsedMs || 0) / durMs));
+}
+function ringStale(at, now, limit) {
+  if (limit == null) limit = RING_STALE_MS;
+  return !(at != null && now - at <= limit);
+}
+function ringEasePlan(prev, next, anim, stale) {
+  if (!next) return { ease: false, snap: true, error: 0 };
+  const truth = +next.total || 0;
+  if (!prev || prev.total == null || prev.key !== next.key || !(anim >= 1) || stale) return { ease: false, snap: true, error: 0 };
+  const error = truth - (+prev.total || 0), mag = Math.abs(error);
+  if (mag <= RING_EASE_MIN) return { ease: false, snap: false, error: 0 };
+  if (mag > RING_SNAP_SEC) return { ease: false, snap: true, error: 0 };
+  return { ease: true, snap: false, error };
+}
+function ringDash(radius, pct) {
+  const c = 2 * Math.PI * radius, p = Math.min(1, Math.max(0, +pct || 0));
+  return { c, offset: c * (1 - p), show: p > 0.001 };
+}
+function ringSample(now) {
+  const a = S.active, p = UI.pomo;
+  const l = a ? a.accum + (a.paused ? 0 : (now - new Date(a.start)) / 1000) : 0;
+  const today = ST.today + l;
+  let mode = 'goal', scale = +ST.goalSec || 0, goalRing = true, shown = l, phase = '';
+  if (a && a.targetSec) {
+    shown = a.targetSec - l; mode = 'target'; scale = +a.targetSec; goalRing = false;
+    phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown';
+  } else if (!a && p && p.phase === 'break') {
+    const left = (p.until - now) / 1000;
+    shown = left; mode = 'break'; scale = +p.len || 0; goalRing = false;
+    phase = p.long ? 'Long break' : 'Break';
+  } else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
+  else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
+  const total = mode === 'goal' ? today : mode === 'break' ? scale - shown : l;
+  const session = a ? String(a.start) : '';
+  const subject = a ? (a.subject || '') : (sel || '');
+  const key = [mode, ST.todayKey || '', session, subject, scale].join('|');
+  const running = !!(a && !a.paused) || mode === 'break';
+  return { now, l, today, shown, phase, goalRing, mode, scale, total, key, running };
+}
+function ringPlan(m, anim) {
+  const stale = ringStale(ringMot.at, m.now);
+  const same = ringMot.vis != null && ringMot.key === m.key;
+  if (ringMot.ease && same && !stale && anim >= 1) { ringMot.snapped = false; return; }
+  const plan = ringEasePlan(same ? { key: ringMot.key, total: ringMot.vis } : null, { key: m.key, total: m.total }, anim, stale);
+  ringMot.key = m.key;
+  ringMot.snapped = !!plan.snap;
+  if (plan.ease) ringMot.ease = { error: plan.error, t0: performance.now(), dur: RING_EASE_MS };
+  else { ringMot.ease = null; ringMot.vis = m.total; ringMot.at = m.now; }
+}
+function ringVis(m) {
+  let v = m.total;
+  if (ringMot.ease) {
+    const elapsed = performance.now() - ringMot.ease.t0;
+    v = ringTrack(m.total, ringMot.ease.error, elapsed, ringMot.ease.dur);
+    if (elapsed >= ringMot.ease.dur) ringMot.ease = null;
+  }
+  ringMot.vis = v; ringMot.at = m.now; return v;
+}
+function ringApply(pct) {
+  const fg = $('tRingSvg') && $('tRingSvg').querySelector('.ring-fg');
+  if (!fg) return;
+  const d = ringDash(88, pct);
+  fg.style.transition = 'none';
+  fg.style.strokeDasharray = String(d.c);
+  fg.style.strokeDashoffset = String(d.offset);
+  fg.style.opacity = d.show ? '' : '0';
+}
+function ringGold(ot) {
+  const svg = $('tGoldSvg');
+  if (!svg || (ot.over && performance.now() < ringMot.growTill)) return;
+  const want = [0, 0, 0];
+  for (const a of ot.arcs) if (a && a.tier >= 0 && a.tier < 3) want[a.tier] = a.pct;
+  svg.dataset.ready = '1';
+  svg.dataset.laps = String(Math.min(9, Math.floor((ot.extra || 0) + 1e-9)));
+  svg.dataset.hot = ot.extra >= 2 ? '1' : '0';
+  const fade = animLevel() >= 1 ? 'opacity .35s' : 'none';
+  svg.querySelectorAll('circle').forEach((el, i) => {
+    const pct = want[i] || 0, d = ringDash(GOLD_R, pct);
+    el.style.transition = fade;
+    el.style.strokeDasharray = String(d.c);
+    el.style.strokeDashoffset = String(d.offset);
+    el.style.opacity = pct > 0 ? '1' : '0';
+  });
+}
+function ringHalt() { if (ringMot.raf) { cancelAnimationFrame(ringMot.raf); ringMot.raf = 0; } }
+function ringKick() {
+  if (ringMot.raf || document.hidden || view !== 'timer' || animLevel() < 1) return;
+  ringMot.raf = requestAnimationFrame(ringFrame);
+}
+function ringFrame() {
+  ringMot.raf = 0;
+  if (document.hidden || view !== 'timer' || !S || !ST || !$('tRingSvg') || animLevel() < 1) return;
+  const m = ringSample(Date.now()), tracked = ringVis(m);
+  ringApply(m.scale > 0 ? tracked / m.scale : 0);
+  if (m.goalRing) ringGold(goalOvertime(tracked, m.scale));
+  else ringGold({ over: false, extra: 0, arcs: [] });
+  if ((m.running || ringMot.ease) && !document.hidden && view === 'timer') ringMot.raf = requestAnimationFrame(ringFrame);
 }
 function tick() {
   const now = Date.now();
   if (S && view === 'dash') GA.live(); cometSync(); if (S && S.active && !S.active.paused) LOGO.kick();
   syncTabTitle(now);
-  if (!S) return;
-  const a = S.active, l = a ? a.accum + (a.paused ? 0 : (now - new Date(a.start)) / 1000) : 0, p = UI.pomo;
+  if (!S || !ST) return;
+  const m = ringSample(now), a = S.active, l = m.l, p = UI.pomo;
   // Countdown and break end on any view. Otherwise the title sits at 0:00:00 until the timer screen is opened again.
   if (a?.targetSec && l >= a.targetSec && !a.paused && !tick.busy) { tick.busy = true; finishTarget().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
   else if (!a && p?.phase === 'break' && (p.until - now) / 1000 <= 0 && !tick.busy) { tick.busy = true; breakOver().catch(e => toast(e.message)).finally(() => (tick.busy = false)); }
   syncTabWorker();
-  if (view !== 'timer' || !$('clock')) return;
-  const today = ST.today + l;
-  // The ring is the daily goal unless a countdown/pomodoro block or a break owns it.
-  let shown = l, pct = ST.goalSec ? today / ST.goalSec : 0, phase = '', goalRing = true;
-  if (a?.targetSec) { shown = a.targetSec - l; pct = l / a.targetSec; phase = a.mode === 'pomodoro' ? `Focus ${p ? p.cycle : 1}/${S.settings.pomodoro.cycles}` : 'Countdown'; goalRing = false; }
-  else if (!a && p?.phase === 'break') { const left = (p.until - now) / 1000; shown = left; pct = 1 - left / p.len; phase = p.long ? 'Long break' : 'Break'; goalRing = false; }
-  else if (!a && UI.mode === 'countdown') shown = UI.target * 60;
-  else if (!a && UI.mode === 'pomodoro') shown = S.settings.pomodoro.focusMin * 60;
-  $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; $('tRingSvg').innerHTML = ring(88, pct);
+  if (view !== 'timer' || !$('clock') || document.hidden) { ringHalt(); ringMot.at = null; ringMot.ease = null; return; }
+  ringPlan(m, animLevel());
+  const tracked = ringVis(m);
+  const shown = m.shown, phase = m.phase, goalRing = m.goalRing;
+  // Goal ring: ease today's total (gold follows it). Countdown, pomodoro and break ease their own elapsed time.
+  const today = goalRing ? tracked : m.today, pct = m.scale > 0 ? tracked / m.scale : 0;
+  $('clock').textContent = fmtClock(shown); $('tPhase').textContent = phase; ringApply(pct);
   const ot = goalRing ? goalOvertime(today, ST.goalSec) : { over: false, extra: 0, arcs: [] };
   const over = !!(ST.goalSec && today > ST.goalSec);
   if (tick.wasOver === undefined) tick.wasOver = over;
-  const grow = over && tick.wasOver === false && animLevel() >= 1;
-  if (over && tick.wasOver === false && animLevel() >= 2) {
+  const crossed = over && tick.wasOver === false;
+  // A smooth cross already drew the arc. The one-shot fill is for a snap across the goal.
+  const grow = crossed && animLevel() >= 1 && ringMot.snapped;
+  if (crossed && animLevel() >= 2) {
     const box = document.querySelector('#tw .tring');
     if (box) { box.classList.remove('goal-shimmer'); void box.offsetWidth; box.classList.add('goal-shimmer'); }
   }
   tick.wasOver = over;
+  if (grow && goalRing) ringMot.growTill = performance.now() + 700;
+  else if (!goalRing) ringMot.growTill = 0;
   paintGoalGold(ot, grow);
   const act = a ? (a.activity || '') : (localStorage.activity || '');
   $('tSubLbl').textContent = timerLabel(a, a ? a.subject : (sel || ''), act);
   const goalEl = $('tGoalLbl');
   goalEl.textContent = ST.goalSec ? `${fmtH(today)} of ${fmtH(ST.goalSec)} today` : `${fmtH(today)} today`;
   goalEl.classList.toggle('goal-over', over);
-  if (over) { const m = Math.round((today - ST.goalSec) / 60); goalEl.title = (m >= 1 ? fmtH(today - ST.goalSec) + ' over goal' : 'Over goal'); }
+  if (over) { const mins = Math.round((today - ST.goalSec) / 60); goalEl.title = (mins >= 1 ? fmtH(today - ST.goalSec) + ' over goal' : 'Over goal'); }
   else goalEl.removeAttribute('title');
   fitRingText();
+  if (animLevel() >= 1 && (m.running || ringMot.ease)) ringKick(); else ringHalt();
 }
 // Now-studying card: while a session runs and you're on any other view, a compact card (bottom-right; above the tab bar on mobile)
 // shows the subject, live time and a ring with the shared-clock hairline, plus Pause/Resume, Stop (the timer's save flow) and Discard

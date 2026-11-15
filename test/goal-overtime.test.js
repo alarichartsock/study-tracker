@@ -86,9 +86,12 @@ test('under the goal, a missing goal, and bad numbers draw no gold', () => {
 
 test('the timer tints the today line and paints gold only on the daily-goal ring', () => {
   const tick = js.slice(js.indexOf('function tick()'), js.indexOf('// Now-studying card'));
-  assert.match(tick, /let shown = l, pct = ST\.goalSec \? today \/ ST\.goalSec : 0, phase = '', goalRing = true/);
-  assert.match(tick, /a\?\.targetSec\) \{[\s\S]*?goalRing = false/);
-  assert.match(tick, /phase === 'break'\) \{[\s\S]*?goalRing = false/);
+  const sample = js.slice(js.indexOf('function ringSample('), js.indexOf('function ringPlan('));
+  assert.match(sample, /let mode = 'goal', scale = \+ST\.goalSec \|\| 0, goalRing = true/);
+  assert.match(sample, /a && a\.targetSec\) \{[\s\S]*?goalRing = false/);
+  assert.match(sample, /phase === 'break'\) \{[\s\S]*?goalRing = false/);
+  assert.match(sample, /mode = 'target'/);
+  assert.match(sample, /mode = 'break'/);
   assert.match(tick, /const ot = goalRing \? goalOvertime\(today, ST\.goalSec\)/);
   assert.match(tick, /paintGoalGold\(ot, grow\)/);
   assert.match(tick, /goalEl\.textContent = ST\.goalSec \? `\$\{fmtH\(today\)\} of \$\{fmtH\(ST\.goalSec\)\} today` : `\$\{fmtH\(today\)\} today`/);
@@ -97,7 +100,9 @@ test('the timer tints the today line and paints gold only on the daily-goal ring
   assert.match(tick, /animLevel\(\) >= 2/);
   assert.match(tick, /goal-shimmer/);
   assert.match(tick, /animLevel\(\) >= 1/);
-  assert.match(tick, /\$\('tRingSvg'\)\.innerHTML = ring\(88, pct\)/);
+  assert.match(tick, /ringApply\(pct\)/);
+  assert.doesNotMatch(tick, /tRingSvg'\)\.innerHTML/);
+  assert.match(tick, /\$\('clock'\)\.textContent = fmtClock\(shown\)/);
   assert.ok(tick.indexOf('fitRingText()') > tick.indexOf('tSubLbl'));
   const title = js.slice(js.indexOf('function tabTitleFor'), js.indexOf('function syncTabTitle'));
   assert.doesNotMatch(title, /gold|overtime|goal-over|goalOvertime/);
@@ -119,5 +124,5 @@ test('gold is inset and thinner than the accent, uses trophy gold, and follows m
   assert.match(css, /\[data-anim="0"\] \.tring\.goal-shimmer::after,\[data-anim="1"\] \.tring\.goal-shimmer::after\{animation:none;display:none\}/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.tring \.t-gold-svg circle\{transition:none\}\.tring\.goal-shimmer::after\{animation:none;display:none\}/);
   assert.match(css, /\.tring \.t-comet-svg circle\{r:88px/); // comet hairline unchanged
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v175/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v178/);
 });
