@@ -229,7 +229,7 @@ test('SEO: per-page titles/canonicals, robots, sitemap, og image, JSON-LD, compr
   const robots = await (await g('/robots.txt')).text(); assert.match(robots, /Disallow: \/api\//); assert.match(robots, /Sitemap: https:\/\/studyhertz\.com\/sitemap\.xml/);
   const sm = await (await g('/sitemap.xml')).text(); for (const u of Object.values(pages)) assert.ok(sm.includes('<loc>' + u + '</loc>'), u);
   const og = await g('/og-image.png'); assert.equal(og.headers.get('content-type'), 'image/png'); const ob = Buffer.from(await og.arrayBuffer()); assert.equal(ob.readUInt32BE(16), 1200); assert.equal(ob.readUInt32BE(20), 630);
-  const r = await g('/app.js', { 'Accept-Encoding': 'gzip, br' }); assert.equal(r.headers.get('content-encoding'), 'br'); assert.equal(r.headers.get('cache-control'), 'no-cache'); const et = r.headers.get('etag'); assert.ok(et);
+  const r = await g('/app.js', { 'Accept-Encoding': 'gzip, br' }); assert.equal(r.headers.get('content-encoding'), 'br'); assert.equal(r.headers.get('cache-control'), 'no-cache, must-revalidate'); const et = r.headers.get('etag'); assert.ok(et);
   assert.equal((await g('/app.js', { 'If-None-Match': et })).status, 304);
   assert.equal((await g('/style.css', { 'Accept-Encoding': 'gzip' })).headers.get('content-encoding'), 'gzip');
   assert.equal((await g('/vendor/three/three.module.min.js')).status, 404, '3D renderer removed: trophies are SVG line art');

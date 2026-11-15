@@ -99,7 +99,111 @@ async function notify(title, body) {
 }
 let wakeLock = null;
 async function keepAwake(on) { try { if (on && !wakeLock && 'wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => (wakeLock = null)); } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch { /* unsupported */ } }
-if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// ---------- deploy updates ----------
+// New workers skipWaiting()+claim(). Open and newly opened tabs reload once so the new shell runs.
+// The timer is server-backed; the selected subject and view live in localStorage. A modal with unsaved
+// input waits until it closes. A second controllerchange inside 15s is ignored: WebKit can fire another
+// one after reload (the favicon snapshot used to chain hard refreshes).
+const SW_VERSION_POLL = 2000;
+let shUpdateBoot = false, swReg = null, swPending = '', swReloading = false, swPinging = false;
+try { shUpdateBoot = sessionStorage.getItem('shUpdateBoot') === '1'; if (shUpdateBoot) sessionStorage.removeItem('shUpdateBoot'); } catch { /* ignore */ }
+function swReloadDecision(s) {
+  const now = +s.now || 0, last = +s.lastReloadAt || 0;
+  if (s.reason === 'controller') {
+    if (!s.hadController) return 'skip'; // first install claim is not a deploy
+    if (last && now - last < 15000) return 'skip';
+  } else if (s.reason === 'version') {
+    if (!s.remote || !s.local || s.remote === s.local) return 'skip';
+    if (s.reloadedFor === s.remote && (+s.reloadCount || 0) >= 2) return 'skip'; // stale HTML must not loop
+  } else return 'skip';
+  if (s.dirty) return 'defer';
+  return 'reload';
+}
+function fieldDirty(el) {
+  if (!el || el.disabled) return false;
+  if (el.tagName === 'SELECT') return [...el.options].some(o => o.selected !== o.defaultSelected);
+  const t = el.type;
+  if (t === 'button' || t === 'submit' || t === 'reset') return false;
+  if (t === 'checkbox' || t === 'radio') return el.checked !== el.defaultChecked;
+  return el.value !== el.defaultValue;
+}
+function formDirty(root) {
+  if (!root || !root.querySelectorAll) return false;
+  for (const el of root.querySelectorAll('input, textarea, select')) if (fieldDirty(el)) return true;
+  return false;
+}
+function unsavedModalOpen() {
+  try {
+    const dlg = document.getElementById('dlg');
+    if (dlg && dlg.open && formDirty(dlg)) return true;
+    const tour = document.querySelector('.tour');
+    if (tour && formDirty(tour)) return true;
+    const auth = document.getElementById('auth');
+    if (auth && !auth.classList.contains('hid') && formDirty(document.getElementById('authForm'))) return true;
+    const gate = document.getElementById('termsGate');
+    if (gate && formDirty(gate)) return true;
+  } catch { /* ignore */ }
+  return false;
+}
+function swStorage() {
+  const o = { lastReloadAt: 0, reloadCount: 0, reloadedFor: '' };
+  try { o.lastReloadAt = +sessionStorage.shReloadAt || 0; o.reloadCount = +sessionStorage.shReloadCount || 0; o.reloadedFor = sessionStorage.shReloadedFor || ''; } catch { /* ignore */ }
+  return o;
+}
+function swCommitReload(version) {
+  if (swReloading) return;
+  swReloading = true;
+  try {
+    sessionStorage.shReloadAt = String(Date.now());
+    sessionStorage.shUpdateBoot = '1'; // next paint is an update, not a first open: skip the load-in
+    if (version) {
+      const prev = sessionStorage.shReloadedFor || '';
+      sessionStorage.shReloadCount = String(version === prev ? (+sessionStorage.shReloadCount || 0) + 1 : 1);
+      sessionStorage.shReloadedFor = version;
+    }
+    if (typeof view === 'string' && view && view !== 'logev' && view !== 'loglive') localStorage.view = view;
+    if (sel) localStorage.subject = sel;
+    const n = document.getElementById('tNote');
+    if (n && n.value !== n.defaultValue) sessionStorage.shPendingNote = n.value;
+  } catch { /* storage blocked */ }
+  location.reload();
+}
+function swRequest(reason, extra) {
+  const st = swStorage(), meta = document.querySelector('meta[name="studyhertz-build"]');
+  const d = swReloadDecision(Object.assign({ reason, now: Date.now(), local: meta && meta.content || '', dirty: unsavedModalOpen() }, st, extra || {}));
+  if (d === 'defer') { swPending = reason === 'version' ? (extra && extra.remote) || '' : 'controller'; return; }
+  if (d === 'reload') swCommitReload(reason === 'version' ? (extra && extra.remote) || '' : '');
+}
+function swFlush() {
+  if (!swPending || swReloading || unsavedModalOpen()) return;
+  const pending = swPending; swPending = '';
+  if (pending === 'controller') swRequest('controller', { hadController: true });
+  else swRequest('version', { remote: pending });
+}
+async function swPing(forceUpdate) {
+  if (!('serviceWorker' in navigator) || swPinging || swReloading) return;
+  swPinging = true;
+  try {
+    let remote = '';
+    try { const r = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' }); if (r.ok) remote = (await r.json()).version || ''; } catch { /* offline */ }
+    const meta = document.querySelector('meta[name="studyhertz-build"]'), local = meta && meta.content || '', changed = !!(remote && local && remote !== local);
+    if (forceUpdate || changed) { try { const reg = swReg || await navigator.serviceWorker.getRegistration(); swReg = reg || swReg; if (reg) await reg.update(); } catch { /* ignore */ } }
+    if (!swReloading && changed) swRequest('version', { remote });
+  } finally { swPinging = false; }
+}
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const first = !hadController; hadController = true;
+    if (first) return;
+    swRequest('controller', { hadController: true });
+  });
+  const regp = navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => navigator.serviceWorker.register('/sw.js'));
+  regp.then(reg => { swReg = reg; swPing(true); }).catch(() => {});
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) swPing(true); });
+  window.addEventListener('focus', () => swPing(true));
+  setInterval(() => { if (!document.hidden) swPing(false); }, SW_VERSION_POLL); // version compare; update() immediately when it changes
+}
 
 // ---------- auth ----------
 let oauthErr = '', oauthPending = false, oauthProvider = '';
@@ -123,7 +227,7 @@ async function boot() {
   if (me.termsRequired) return termsGate(me.termsRequired);
   if (!document.querySelector('meta[name=robots]')) document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">'); // the signed-in app is never indexed
   if (sessionStorage.shOauthLogin) { track('login', { method: sessionStorage.shOauthLogin }); sessionStorage.shOauthLogin = sessionStorage.shOauth = ''; }
-  ME = me.user; document.title = BRAND; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); { const app = $('app'); if (app.classList.contains('hid')) armLogo(); app.classList.remove('hid'); } // showing the shell is a cold open: the logo wave may draw once
+  ME = me.user; document.title = BRAND; try { localStorage.shAuthed = '1'; } catch { /* ignore */ } $('auth').classList.add('hid'); $('landing').classList.add('hid'); { const app = $('app'); if (app.classList.contains('hid')) armLogo(); if (shUpdateBoot) { settleLogo.hold = 0; const w = document.querySelector('#app .sh-wave'); if (w) w.classList.add('sh-drawn'); } app.classList.remove('hid'); } // showing the shell is a cold open: the logo wave may draw once. An update reload already drew it.
   { const nb = $('nav'), ex = nb.querySelector('[data-v=users]'); if (ME.admin && !ex) { nb.insertAdjacentHTML('beforeend', '<button data-v="users" title="Users" aria-label="Users"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg><span>Users</span></button>'); nb.lastElementChild.onclick = () => go('users'); } else if (!ME.admin && ex) ex.remove(); } // admin-only
   BILL = me.billing || { enabled: false }; billBar(); emailBar();
   try { const lang = (window.SHI18N && SHI18N.lang) || 'en', plan = BILL.lifetime ? 'lifetime' : BILL.subscribed ? ((BILL.subscription && BILL.subscription.plan) || 'monthly') : BILL.exempt ? 'comped' : BILL.enabled ? (BILL.readOnly ? 'expired' : 'trial') : 'free'; window.SHConsent?.identify(ME.id, { plan, language: lang }); } catch { /* ignore */ }
@@ -134,11 +238,12 @@ async function boot() {
     if (pl && cur && pl !== cur && !ls && !SHI18N.pathLang) { try { localStorage.lang = pl; } catch { /* ignore */ } location.reload(); return; }
     if (cur && ls && pl !== ls) api('/api/settings', 'POST', { lang: ls }).catch(() => {}); }
   { const lm = /^#\/admin\/logs\/([\w-]{1,40})$/.exec(BOOT_HASH); if (lm && ME && ME.admin) { UI.logEv = lm[1]; view = "logev"; } else if (BOOT_HASH === '#/admin/live' && ME && ME.admin) view = 'loglive'; }
-  render.painted = false; go(view); // cold open: the page load-in plays on this paint, not when the same view refreshes
+  render.suppressEnter = !!shUpdateBoot; render.painted = false; go(view); // cold open: the page load-in plays on this paint, not when the same view refreshes. Update reloads suppress it.
   if (billingQ === 'success') billingDone(); else if (billingQ === 'cancel') toast('Checkout cancelled. You were not charged.');
   else if (BILL.readOnly && !sessionStorage.paywallSeen) showPaywall();
   if (localStorage.onboard === '1') { localStorage.onboard = ''; setTimeout(tour, 600); }
   setTimeout(refRewards, 1500);
+  swFlush();
 }
 // clickwrap: account creation stays disabled until the box is checked and a birth year is entered
 function syncAgree() { $('aSubmit').disabled = false; if (authMode !== 'login' && $('aAgree').checked && /^\d{4}$/.test($('aBirth').value.trim())) $('aErr').textContent = ''; }
@@ -369,7 +474,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 // Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
-async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
+async function render() { if (!S) return; const enter = (!render.painted || render.view !== view) && !render.suppressEnter; render.suppressEnter = false; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -378,7 +483,7 @@ $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp
 function dialog(html, onSubmit) {
   const d = $('dlg'), f = $('dlgForm'); f.innerHTML = html; d.returnValue = '';
   f.onclick = e => { const b = e.target.closest('[data-dact]'); if (b && dialog.acts[b.dataset.dact]) dialog.acts[b.dataset.dact](b, e); };
-  d.onclose = async () => { if (d.returnValue && d.returnValue !== 'cancel') { try { await onSubmit(d.returnValue, f); } catch (e) { toast(e.message); } } };
+  d.onclose = async () => { if (d.returnValue && d.returnValue !== 'cancel') { try { await onSubmit(d.returnValue, f); } catch (e) { toast(e.message); } } swFlush(); };
   d.onclick = e => { if (e.target !== d) return; const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close('cancel'); };
   d.showModal();
 }
@@ -410,7 +515,7 @@ VIEWS.timer = () => {
   <div class="card"><h3>Today</h3><div class="list">${todayItems() || '<p class="muted small">No sessions yet today. Start the timer!</p>'}</div></div>`;
 };
 const todayItems = () => S.sessions.filter(s => dayKey(s.start) === ST.todayKey).sort((x, y) => y.start.localeCompare(x.start)).map(s => itemHTML(s)).join('');
-AFTER.timer = () => tick();
+AFTER.timer = () => { try { const n = sessionStorage.getItem('shPendingNote'); if (n != null && $('tNote') && $('tNote').value !== n) $('tNote').value = n; sessionStorage.removeItem('shPendingNote'); } catch { /* ignore */ } tick(); };
 // Ring status. Idle shows the picked subject and activity. A session shows its own, with a Paused prefix.
 function timerLabel(active, subject, activity) {
   const act = activity ? ' · ' + activity : '';
@@ -1624,13 +1729,13 @@ async function tourEnd(saveSetup) { const S0 = tourS; if (!S0) return; tourS = n
       if (d) { const mc = (S.exams || []).find(e => (isMcat() ? /mcat/i.test(e.name) : e.name === tplOf().exam) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : tplOf().exam, date: d }); } } catch (e) { toast(e.message); } }
   S0.el.classList.add('out'); setTimeout(() => S0.el.remove(), reduceMotion() ? 0 : 200);
   document.removeEventListener('keydown', tourKey); removeEventListener('resize', tourPlace); removeEventListener('scroll', tourPlace, true); removeEventListener('scrollend', tourPlace, true);
-  api('/api/flags', 'POST', { key: 'onboarded' }).catch(() => {}); await refresh().catch(() => {}); go(S0.back || 'timer'); }
+  api('/api/flags', 'POST', { key: 'onboarded' }).catch(() => {}); await refresh().catch(() => {}); go(S0.back || 'timer'); swFlush(); }
 function tourClick(e) { const b = e.target.closest('[data-tour]'); if (!b || !tourS || tourS.el.classList.contains('busy')) return; const a = b.dataset.tour, i = tourS.i, s = tourSteps()[i];
   if (a === 'skip') tourEnd(false); else if (a === 'back') tourShow(Math.max(0, i - 1)); else if (s.setup || i === tourSteps().length - 1) tourEnd(!!s.setup); else tourShow(i + 1); }
 function tourKey(e) { if (!tourS) return; if (e.key === 'Escape') { e.preventDefault(); tourEnd(false); } else if (e.key === 'ArrowRight' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=next]') }); else if (e.key === 'ArrowLeft' && !e.target.closest('input')) tourClick({ target: tourS.el.querySelector('[data-tour=back]') || document.body }); }
 
 // ---------- periodic refresh ----------
-setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); }, 60000);
+setInterval(() => { if (ME && !document.hidden && !$('dlg').open && ['timer', 'dash'].includes(view)) refresh().catch(() => {}); if (!document.hidden) swPing(true); }, 60000);
 setInterval(() => { if (ME) checkAchievements(); }, 120000); document.addEventListener('visibilitychange', () => { if (!document.hidden && ME) checkAchievements(); });
 document.addEventListener('visibilitychange', () => { if (ME && !document.hidden && (view === 'timer' || (S && S.active))) refresh().catch(() => {}); });
 boot().catch(e => { console.error('boot', e); if (ME) { toast('Something went wrong loading your data. Please refresh.'); return; } // never wipe the page: fall back to the signed-out landing
