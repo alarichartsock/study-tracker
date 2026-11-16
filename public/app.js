@@ -18,7 +18,8 @@ const dk = d => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth()
 // Calendar dates (k2d/addD/dk on them) are plain dates and stay zone-free. Unset = America/Los_Angeles, like the server.
 const utz = () => S ? (TZ.valid(S.settings.timezone) ? S.settings.timezone : TZ.DEFAULT) : (TZ.guess() || TZ.DEFAULT);
 const ik = t => TZ.key(t, utz()), wallHM = t => { const p = TZ.parts(t, utz()); return pad(p.h) + ':' + pad(p.mi); }, wallToUtc = (k, hm) => TZ.toUtc(k, hm, utz());
-const dayKey = d => TZ.key(d, utz(), S ? +S.settings.dayStartHour || 0 : 0);
+const dayShift = () => { const s = S && S.settings; return { h: s ? +s.dayStartHour || 0 : 0, m: s ? +s.dayStartMinute || 0 : 0 }; };
+const dayKey = d => { const o = dayShift(); return TZ.key(d, utz(), o.h, o.m); };
 const k2d = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 const addD = (d, n) => { d = new Date(d); d.setDate(d.getDate() + n); return d; };
 const dur = s => Math.max(0, (new Date(s.end) - new Date(s.start)) / 1000 - (+s.breakSec || 0));
@@ -369,7 +370,7 @@ document.addEventListener('click', e => { const a = e.target.closest && e.target
 // views that count toward the Grand Tour trophy; must match lib/analytics.js VIEW_KEYS (the server rejects anything else)
 const FLAG_VIEWS = ['timer', 'dash', 'sess', 'cal', 'stats', 'plan', 'trophy', 'data', 'set'];
 // Page load-in (main.enter) plays on a cold open and when the view changes. A same-view re-render — the timer/dashboard poll — must not replay it.
-async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
+async function render() { if (!S) return; const enter = !render.painted || render.view !== view; render.painted = true; render.view = view; if (FLAG_VIEWS.includes(view)) markFlag('view:' + view); const html = await VIEWS[view](); const m = $('main'); m.innerHTML = (TITLES[view] ? `<h1 class="large-title">${esc(TITLES[view])}</h1>` : '') + html; Dur.bind(m); if (enter) { m.classList.remove('enter'); void m.offsetWidth; m.classList.add('enter'); } else settleLogo(); AFTER[view]?.(); NOW.draw(); cometSync(); syncTabTitle(Date.now(), true); syncTabWorker(); }
 $('main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && ACT[b.dataset.act]) { if (b.type !== 'checkbox') e.preventDefault(); Promise.resolve(ACT[b.dataset.act](b, e)).catch(err => toast(err.message)); } });
 $('main').addEventListener('change', e => { const b = e.target.closest('[data-chg]'); if (b && ACT[b.dataset.chg]) Promise.resolve(ACT[b.dataset.chg](b, e)).catch(err => toast(err.message)); });
 $('main').addEventListener('input', e => { const b = e.target.closest('[data-inp]'); if (b && ACT[b.dataset.inp]) ACT[b.dataset.inp](b, e); });
@@ -380,7 +381,7 @@ function dialog(html, onSubmit) {
   f.onclick = e => { const b = e.target.closest('[data-dact]'); if (b && dialog.acts[b.dataset.dact]) dialog.acts[b.dataset.dact](b, e); };
   d.onclose = async () => { if (d.returnValue && d.returnValue !== 'cancel') { try { await onSubmit(d.returnValue, f); } catch (e) { toast(e.message); } } };
   d.onclick = e => { if (e.target !== d) return; const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close('cancel'); };
-  d.showModal();
+  d.showModal(); Dur.bind(f);
 }
 dialog.acts = {};
 const stars = (name, v) => `<div class="stars">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-dact="star" data-v="${i}" class="${v >= i ? 'on' : ''}">★</button>`).join('')}<input type="hidden" name="${name}" value="${v || ''}"></div>`;
@@ -400,8 +401,8 @@ VIEWS.timer = () => {
     <div class="tabs mode-tabs ${a ? 'gone' : ''} ${UI.wasActive !== undefined && UI.wasActive !== !!a ? (a ? 'anim-out' : 'anim-in') : ''}" style="width:min(420px,100%)" ${a ? 'aria-hidden="true" inert' : ''}>${['stopwatch', 'pomodoro', 'countdown'].map(m => `<button data-act="mode" data-m="${m}" class="${mode === m ? 'on' : ''}" ${a ? 'tabindex="-1"' : ''}>${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div>${(UI.wasActive = !!a, '')}
     <div class="ring-box tring" style="--subj:${color(sel || (a && a.subject))}"><svg viewBox="0 0 200 200" class="ring" id="tRingSvg"></svg><svg viewBox="0 0 200 200" class="ring t-gold-svg" id="tGoldSvg" aria-hidden="true">${[1, 2, 3].map(n => `<circle cx="100" cy="100" r="${GOLD_R}" class="ring-gold g${n}" style="stroke-dasharray:${GOLD_C};stroke-dashoffset:${GOLD_C};opacity:0"/>`).join('')}</svg><svg viewBox="0 0 200 200" class="ring t-comet-svg" aria-hidden="true"><g class="g-comet"><circle class="g-tail" cx="100" cy="100" r="84" style="stroke-dasharray:60 ${2 * Math.PI * 84 - 60};stroke-dashoffset:60"/><circle cx="100" cy="100" r="84" style="stroke-dasharray:30 ${2 * Math.PI * 84 - 30}"/></g></svg>
       <div class="ring-center"><div class="phase" id="tPhase"></div><div class="clock" id="clock">0:00:00</div><div class="muted" id="tSubLbl"></div><div class="muted small" id="tGoalLbl"></div></div></div>
-    ${mode === 'countdown' && !a ? `<div class="row wrap gap" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${m} min</button>`).join('')}<input type="number" min="1" max="600" value="${UI.target}" style="width:90px" data-chg="targetInp"> ${sug}</div>` : ''}
-    ${mode === 'pomodoro' && !a ? `<div class="muted small">${S.settings.pomodoro.focusMin}m focus · ${S.settings.pomodoro.shortMin}m break · ${S.settings.pomodoro.longMin}m long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
+    ${mode === 'countdown' && !a ? `<div class="row wrap gap cd-row" style="justify-content:center">${S.settings.quickDurations.map(m => `<button class="chip ${UI.target === m ? 'on' : ''}" style="--c:var(--acc)" data-act="target" data-m="${m}">${Dur.short(m)}</button>`).join('')}<span class="dur-inline">${Dur.fields({ id: 'cd', label: 'Countdown', minutes: UI.target, chg: 'targetInp', minMin: 1, maxMin: 600 })}</span> ${sug}</div>` : ''}
+    ${mode === 'pomodoro' && !a ? `<div class="muted small">${Dur.short(S.settings.pomodoro.focusMin)} focus · ${Dur.short(S.settings.pomodoro.shortMin)} break · ${Dur.short(S.settings.pomodoro.longMin)} long break every ${S.settings.pomodoro.cycles} · <a href="#" class="link" data-act="goto" data-v="set">change</a></div>` : ''}
     <div class="chips">${S.subjects.map(s => `<button class="chip ${s === sel ? 'on' : ''}" style="--c:${color(s)}" data-act="pick" data-s="${esc(s)}"><span class="dot" style="background:${color(s)}"></span>${esc(s)}</button>`).join('')}</div>
     <div class="row gap" style="width:min(520px,100%)"><select id="tAct" data-chg="tAct">${opt(S.activities, a?.activity ?? localStorage.activity ?? '', 'Activity (optional)')}</select><input id="tNote" placeholder="Note (optional)" value="${esc(a?.note || '')}"></div>
     <div class="ctrl">${ctrl}<button class="btn xl" data-act="fullscreen" title="Fullscreen focus (F)">⛶</button></div>
@@ -636,7 +637,7 @@ document.addEventListener('freeze', () => syncTabTitle(Date.now(), true));
 armTabClock();
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
-ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
+ACT.targetInp = b => { if (!b.value.trim()) return; let n = Dur.read(b); n = Math.max(1, Math.min(600, n || 1)); UI.target = n; localStorage.countdownMin = n; if (Dur.read(b) !== n) Dur.write(b, n); tick(); };
 ACT.useSuggestion = () => { UI.target = Math.round(ST.suggestion / 60); localStorage.countdownMin = UI.target; render(); };
 ACT.goto = b => go(b.dataset.v);
 ACT.pick = async b => {
@@ -793,11 +794,17 @@ ACT.bulkUpd = async () => { const set = {}; if ($('bSubj').value) set.subject = 
   const r = await api('/api/sessions/bulk', 'POST', { ids: [...UI.selected], action: 'update', set }); toast(`Updated ${r.updated}`); UI.selected.clear(); refresh(); };
 ACT.bulkDel = async () => { if (!confirm(`Delete ${UI.selected.size} sessions?`)) return; const r = await api('/api/sessions/bulk', 'POST', { ids: [...UI.selected], action: 'delete' }); UI.selected.clear(); await refresh(); undoToast(`Deleted ${r.deleted} sessions`, r.removed); };
 function undoToast(msg, removed) { toast(msg, 'Undo', async () => { await api('/api/sessions/bulk', 'POST', { action: 'restore', sessions: removed }); toast('Restored'); refresh(); }); }
-function openAdd() {
-  if (!S) return; editSession(null); const f = $('dlgForm'); if (!f.durm) return;
-  const sync = () => { const e = wallToUtc(f.date.value, f.end.value), a = new Date(e - Math.max(1, +f.durm.value || 0) * 6e4); f.start.value = wallHM(a); };
-  f.durm.oninput = sync; f.end.oninput = sync;
-  f.start.oninput = () => { const a = wallToUtc(f.date.value, f.start.value); let b = wallToUtc(f.date.value, f.end.value); if (b <= a) b = wallToUtc(dk(addD(k2d(f.date.value), 1)), f.end.value); f.durm.value = Math.round((b - a) / 6e4); };
+function openAdd() { if (!S) return; editSession(null); }
+function wireSessionTimes(f, editing) {
+  const box = f.querySelector('[data-hm=durm]'); if (!box) return;
+  let lock = false;
+  const pull = () => { if (lock) return; const mins = Dur.read(box); if (!(mins >= 1)) return; lock = true;
+    if (editing) { const a = wallToUtc(f.date.value, f.start.value); f.end.value = wallHM(new Date(+a + mins * 6e4)); }
+    else { const e = wallToUtc(f.date.value, f.end.value); f.start.value = wallHM(new Date(+e - mins * 6e4)); }
+    lock = false; };
+  const push = () => { if (lock) return; lock = true; const a = wallToUtc(f.date.value, f.start.value); let b = wallToUtc(f.date.value, f.end.value); if (b <= a) b = wallToUtc(dk(addD(k2d(f.date.value), 1)), f.end.value);
+    Dur.write(box, Math.max(1, Math.round((b - a) / 6e4))); lock = false; };
+  box.addEventListener('input', pull); f.start.addEventListener('input', push); f.end.addEventListener('input', push);
 }
 ACT.add = () => openAdd();
 $('addBtn').onclick = () => openAdd();
@@ -805,25 +812,27 @@ document.addEventListener('keydown', e => { if ((e.key === 'n' || e.key === 'N')
 ACT.edit = (b, e) => { if (e.target.closest('.chk')) return; editSession(S.sessions.find(s => s.id === +b.dataset.id)); };
 function editSession(s, preset = {}) {
   const st = s ? new Date(s.start) : preset.start || new Date(Date.now() - 3600e3), en = s ? new Date(s.end) : preset.end || new Date(), q = S.settings.quickDurations;
+  const durMin = Math.max(1, Math.round((en - st) / 6e4)), brkMin = s ? Math.round((s.breakSec || 0) / 60) : 0;
   dialog(`<h3>${s ? 'Edit session' : 'Add session'}</h3>
     <div class="row"><div><label>Subject</label><select name="subject">${opt(S.subjects, s ? s.subject : sel)}</select></div><div><label>Activity</label><select name="activity">${opt(S.activities, s ? s.activity || '' : localStorage.activity || '', '—')}</select></div></div>
     <label>Date</label><input type="date" name="date" value="${ik(st)}" required>
-    <div class="row"><div><label>Start</label><input type="time" name="start" value="${wallHM(st)}" required></div><div><label>End</label><input type="time" name="end" value="${wallHM(en)}" required></div><div><label>Break (min)</label><input type="number" name="brk" min="0" value="${s ? Math.round((s.breakSec || 0) / 60) : 0}"></div></div>
-    ${!s ? `<div class="row"><div><label>Duration (min)</label><input type="number" name="durm" min="1" value="${Math.max(1, Math.round((en - st) / 6e4))}"></div></div>` : ''}
-    ${!s ? `<div class="row wrap gap small">Quick (ending now): ${q.map(m => `<button type="button" class="chip" data-dact="quick" data-m="${m}">${m}m</button>`).join('')}</div>` : ''}
+    <div class="row sess-times"><div><label>Start</label><input type="time" name="start" value="${wallHM(st)}" required></div><div><label>End</label><input type="time" name="end" value="${wallHM(en)}" required></div><div><label for="brk">Break</label>${Dur.fields({ id: 'brk', label: 'Break', minutes: brkMin, maxMin: 1440 })}</div></div>
+    <div class="row"><div><label for="durm">Duration</label>${Dur.fields({ id: 'durm', name: 'durm', label: 'Duration', minutes: durMin, minMin: 1, maxMin: 1440 })}</div></div>
+    ${!s ? `<div class="row wrap gap small">Quick (ending now): ${q.map(m => `<button type="button" class="chip" data-dact="quick" data-m="${m}">${Dur.short(m)}</button>`).join('')}</div>` : ''}
     <label>Note</label><input name="note" value="${esc(s?.note || '')}">
     <div class="row"><div><label>Focus</label>${stars('focus', s?.focus)}</div><div><label>Progress</label>${stars('progress', s?.progress)}</div></div>
     <div class="row">${s ? '<button class="btn danger" value="del" formnovalidate>Delete</button>' : ''}${!s ? '<button type="button" class="link" data-dact="toTimer">Start timer instead</button>' : ''}<span class="sp"></span><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="save">Save</button></div>`,
   async (v, f) => {
     if (v === 'del') { const r = await api('/api/sessions/' + s.id, 'DELETE'); await refresh(); return undoToast('Session deleted', [r.removed]); }
     const a = wallToUtc(f.date.value, f.start.value); let b = wallToUtc(f.date.value, f.end.value); if (b <= a) b = wallToUtc(dk(addD(k2d(f.date.value), 1)), f.end.value);
-    const body = { subject: f.subject.value, activity: f.activity.value, note: f.note.value, start: a.toISOString(), end: b.toISOString(), breakSec: (+f.brk.value || 0) * 60, focus: +f.focus.value || null, progress: +f.progress.value || null };
+    const brk = Dur.read(f.querySelector('[data-hm=brk]')) || 0;
+    const body = { subject: f.subject.value, activity: f.activity.value, note: f.note.value, start: a.toISOString(), end: b.toISOString(), breakSec: brk * 60, focus: +f.focus.value || null, progress: +f.progress.value || null };
     if (!s) localStorage.activity = body.activity; await api(s ? '/api/sessions/' + s.id : '/api/sessions', s ? 'PUT' : 'POST', body); if (!s) track('study_session_log', { duration_min: Math.round(dur(body) / 60), subject: subjParam(body.subject), source: 'manual' }); toast('Saved'); refresh(); checkAchievements();
   });
+  wireSessionTimes($('dlgForm'), !!s);
 }
-dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), st = new Date(+e - b.dataset.m * 60e3); f.date.value = ik(st); f.start.value = wallHM(st); f.end.value = wallHM(e); };
+dialog.acts.quick = b => { const f = $('dlgForm'), e = new Date(), mins = +b.dataset.m || 1, st = new Date(+e - mins * 60e3); f.date.value = ik(st); f.start.value = wallHM(st); f.end.value = wallHM(e); const box = f.querySelector('[data-hm=durm]'); if (box) Dur.write(box, mins); };
 dialog.acts.toTimer = () => { $('dlg').close('cancel'); go('timer'); };
-const _quick = dialog.acts.quick; dialog.acts.quick = b => { _quick(b); const f = $('dlgForm'); if (f.durm) f.durm.value = b.dataset.m; };
 
 // ================= CALENDAR =================
 VIEWS.cal = () => {
@@ -845,7 +854,7 @@ dialog.acts.calTk = b => { const row = b.closest('.todo-it'); row?.classList.tog
 ACT.calNav = b => { const d = +b.dataset.d; if (!d) UI.calMonth = ik(Date.now()).slice(0, 7); else { const [y, m] = UI.calMonth.split('-').map(Number); UI.calMonth = dk(new Date(y, m - 1 + d, 1)).slice(0, 7); } render(); };
 ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventListener('close', () => { if (calChanged) Promise.resolve(calPending).then(refresh); }, { once: true })); const k = b.dataset.k, list = S.sessions.filter(s => dayKey(s.start) === k).sort((a, c) => a.start.localeCompare(c.start));
   dialog(`<h3>${fmtDate(k2d(k), { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
-    <label>Planned study time (hours), overrides the daily goal for this day</label><input type="number" name="plan" min="0" max="24" step="0.25" value="${S.plan[k] != null ? S.plan[k] / 60 : ''}" placeholder="default ${fmtH(ST.goals.day.goal)}">
+    <label for="plan">Planned study time (blank clears the override, default ${fmtH(ST.goals.day.goal)})</label>${Dur.fields({ id: 'plan', label: 'Planned study time', minutes: S.plan[k] != null ? S.plan[k] : null, blank: true, placeholder: 'default goal', maxMin: 1440 })}
     <div class="list mt">${list.map(s => itemHTML(s)).join('') || '<p class="muted small">No sessions.</p>'}</div>
     ${S.exams.filter(e => e.date === k).map(e => `<p>📝 <b>${esc(e.name)}</b></p>`).join('')}
     <div class="cal-todos mt"><h4>To-dos due this day</h4>${S.tasks.filter(t => t.due === k).sort((a, b) => a.done - b.done || a.id - b.id).map(t => `<label class="todo-it${t.done ? ' done' : ''}"><input type="checkbox" class="chk" data-dact="calTk" data-id="${t.id}" ${t.done ? 'checked' : ''}><span class="todo-t">${esc(t.title)}</span>${t.subject ? `<span class="dot" style="background:${color(t.subject)}"></span>` : ''}</label>`).join('') || '<p class="muted small">None yet.</p>'}
@@ -853,7 +862,7 @@ ACT.calDay = b => { calChanged = false; queueMicrotask(() => $('dlg').addEventLi
     <div class="row"><button class="btn" value="addPast">+ Add session</button><span class="sp"></span><button class="btn" value="cancel">Close</button><button class="btn primary" value="save">Save plan</button></div>`,
   async (v, f) => { if (v === 'addTodo') { const t = f.tdText.value.trim(); if (t) { await api('/api/tasks', 'POST', { title: t, due: k, subject: f.tdSubj.value }); track('todo_created', { source: 'calendar' }); toast('To-do added'); } await refresh(); return ACT.calDay(b); }
     if (v === 'addPast') { const d = wallToUtc(k, '09:00'); return editSession(null, { start: d, end: new Date(+d + 3600e3) }); }
-    await api('/api/plan', 'POST', { date: k, minutes: f.plan.value === '' ? null : Math.round(+f.plan.value * 60) }); refresh(); }); };
+    const planMin = Dur.read(f.querySelector('[data-hm=plan]')); if (planMin != null && planMin > 1440) return toast('Planned study time is capped at 24 hours'); await api('/api/plan', 'POST', { date: k, minutes: planMin }); refresh(); }); };
 
 // ================= STATS / DATA ROOM =================
 function rangeDates(r) { const t = k2d(ST.todayKey), term = S.settings.term;
@@ -1237,19 +1246,18 @@ VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = SHTheme.pref(), rf = await api('/api/referral').catch(() => null);
   const af = await api('/api/affiliates/me').catch(() => null);
   return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="appr-grid"><div class="appr-field"><label id="apprThemeLbl">Theme</label><div class="tabs" role="group" aria-labelledby="apprThemeLbl"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div></div><div class="appr-field"><label id="apprSizeLbl">Session card size</label><div class="tabs" id="sNowSize" role="group" aria-labelledby="apprSizeLbl">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div><div class="appr-field appr-accent"><label id="apprAccLbl">Accent color <span class="muted small">${s.accent ? '(manual override)' : '(follows selected subject)'}</span></label><div class="appr-accent-row" role="group" aria-labelledby="apprAccLbl"><span class="acc-row">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}<input type="color" id="sAccent" class="acc-custom" aria-label="Custom accent color" value="${s.accent || color(sel) || '#6c8cff'}"></span><span class="acc-actions"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</span></div></div></div>${t3dQualityRow()}</div>${bgSettingsCard()}
-  <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
-    <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
+  <div class="card"><h3>Goals</h3><div class="grid3"><div><label for="gD">Daily</label>${Dur.fields({ id: 'gD', label: 'Daily', minutes: g.dailyMin, maxMin: 1440 })}</div><div><label for="gWE">Weekend daily (blank = same)</label>${Dur.fields({ id: 'gWE', label: 'Weekend daily', minutes: g.weekendDailyMin, blank: true, maxMin: 1440 })}</div>
+    <div><label for="gW">Weekly</label>${Dur.fields({ id: 'gW', label: 'Weekly', minutes: g.weeklyMin, maxMin: 1000000 })}</div><div><label for="gM">Monthly</label>${Dur.fields({ id: 'gM', label: 'Monthly', minutes: g.monthlyMin, maxMin: 1000000 })}</div><div><label for="gT">Term / prep total</label>${Dur.fields({ id: 'gT', label: 'Term / prep total', minutes: g.termMin, maxMin: 1000000 })}</div><div id="dayStartField"><label for="gDS">Day starts at (night owls)</label>${Dur.fields({ id: 'gDS', label: 'Day starts at', minutes: (+s.dayStartHour || 0) * 60 + (+s.dayStartMinute || 0), maxMin: 6 * 60 + 59 })}</div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveGoals">Save goals</button></div></div>
   <div class="card"><h3>Study template</h3><p>Current template: <b>${esc(tplOf().name)}</b></p><p class="muted small">Switching sets that test's subjects and activities. Ones you have logged time on are kept, and past sessions never change.</p><div class="tpl-grid">${TEMPLATES.LIST.map(t => `<button class="chip ${t.id === tplOf().id ? 'on' : ''}" style="--c:var(--acc)" data-act="tplSwitch" data-t="${t.id}">${esc(t.name)}</button>`).join('')}</div></div>
-  <div class="card"><h3>Subjects</h3>${S.subjects.map(n => { const m = S.subjectMeta[n] || {}; return `<div class="subj-row" data-subj="${esc(n)}"><input type="color" value="${color(n)}" style="width:40px;padding:2px" data-chg="subjColor" aria-describedby="scn-${esc(n)}"><span class="sc-note muted small" id="scn-${esc(n)}" aria-live="polite"></span><span>${esc(n)}</span>
-      <input type="number" min="0" placeholder="weekly goal h" value="${m.weeklyGoalMin ? m.weeklyGoalMin / 60 : ''}" style="width:120px" data-chg="subjGoal" title="Weekly goal (hours)"><button class="icon" data-act="subjRename" title="Rename">✎</button><button class="icon" data-act="subjDel" title="Remove">✕</button></div>`; }).join('')}
+  <div class="card"><h3>Subjects</h3>${S.subjects.map((n, i) => { const m = S.subjectMeta[n] || {}; return `<div class="subj-row subj-cfg" data-subj="${esc(n)}"><input type="color" class="subj-sw" value="${color(n)}" data-chg="subjColor" aria-describedby="scn-${esc(n)}"><span class="subj-nm"><span class="subj-nm-t">${esc(n)}</span><span class="sc-note muted small" id="scn-${esc(n)}" aria-live="polite"></span></span><div class="subj-side">${Dur.fields({ id: 'sg' + i, label: 'Weekly goal for ' + n, minutes: m.weeklyGoalMin || null, blank: true, placeholder: '0:00', chg: 'subjGoal', maxMin: 10080 })}<button class="icon" data-act="subjRename" title="Rename">✎</button><button class="icon" data-act="subjDel" title="Remove">✕</button></div></div>`; }).join('')}
     <div class="row"><input id="newSubj" placeholder="Add custom subject"><button class="btn" data-act="addSubj">Add</button></div></div>
   <div class="card"><h3>Activities (study types)</h3><div class="row wrap gap">${S.activities.map(a => `<span class="pill">${esc(a)} <button class="link" data-act="actRename" data-a="${esc(a)}" title="Rename">✎</button> <button class="link" data-act="actDel" data-a="${esc(a)}">✕</button></span>`).join('')}</div>
     <div class="row"><input id="newAct" placeholder="${isMcat() ? 'e.g. UWorld, Anki, AAMC section bank' : 'e.g. Q-bank, flashcards, timed section'}"><button class="btn" data-act="addAct">Add</button></div></div>
-  <div class="card"><h3>Timer</h3><div class="grid3"><div><label>Focus (min)</label><input type="number" id="pF" value="${pm.focusMin}"></div><div><label>Short break (min)</label><input type="number" id="pS" value="${pm.shortMin}"></div><div><label>Long break (min)</label><input type="number" id="pL" value="${pm.longMin}"></div><div><label>Cycles before long break</label><input type="number" id="pC" value="${pm.cycles}"></div><div><label>Quick durations (min, comma)</label><input id="qD" value="${s.quickDurations.join(', ')}"></div><div><label>&nbsp;</label><label class="switch"><input type="checkbox" id="pA" ${pm.autoStart ? 'checked' : ''}> Auto-start next focus</label></div></div>
+  <div class="card"><h3>Timer</h3><div class="grid3"><div><label for="pF">Focus</label>${Dur.fields({ id: 'pF', label: 'Focus', minutes: pm.focusMin, minMin: 1, maxMin: 240 })}</div><div><label for="pS">Short break</label>${Dur.fields({ id: 'pS', label: 'Short break', minutes: pm.shortMin, minMin: 1, maxMin: 60 })}</div><div><label for="pL">Long break</label>${Dur.fields({ id: 'pL', label: 'Long break', minutes: pm.longMin, minMin: 1, maxMin: 120 })}</div><div><label>Cycles before long break</label><input type="number" id="pC" value="${pm.cycles}"></div><div><label>Quick durations (min, or 1:30)</label><input id="qD" value="${s.quickDurations.join(', ')}"></div><div><label>&nbsp;</label><label class="switch"><input type="checkbox" id="pA" ${pm.autoStart ? 'checked' : ''}> Auto-start next focus</label></div></div>
     <div class="row"><span class="sp"></span><button class="btn primary" data-act="saveTimer">Save timer</button></div></div>
-  <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label><span class="medal m-${m}"></span> ${m} (h/day)</label><input type="number" step="0.25" min="0" id="md_${m}" value="${md[m] / 60}"></div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
+  <div class="card"><h3>Medals</h3><div class="grid4">${MEDAL_ORDER.slice().reverse().map(m => `<div><label for="md_${m}"><span class="medal m-${m}"></span> ${m} / day</label>${Dur.fields({ id: 'md_' + m, label: m + ' per day', minutes: md[m], maxMin: 1440 })}</div>`).join('')}</div><div class="row"><span class="sp"></span><button class="btn primary" data-act="saveMedals">Save medals</button></div></div>
   <div class="card"><h3>Notifications &amp; reminders</h3>${achNotifRow()}<p class="muted small">${window.isSecureContext ? '' : 'Installing the app also needs HTTPS. '}Reminders fire while the app is open or installed.</p>
     <div class="row wrap gap"><button class="btn" data-act="notifPerm">${'Notification' in window && Notification.permission === 'granted' ? 'Notifications enabled ✓' : 'Enable notifications'}</button><span class="muted small">Remind me if I haven't studied by</span><input type="time" id="remT" value="${localStorage.remindAt || ''}" style="width:auto"><button class="btn" data-act="saveRem">Save</button></div></div>
   <div class="card"><h3>Report a bug</h3><p class="muted small">Goes to the admin for review. The current page and browser info are attached.</p>
@@ -1502,16 +1510,18 @@ ACT.theme = b => { SHTheme.set(b.dataset.t); render(); };
 ACT.accSw = async b => { $('sAccent').value = b.dataset.c; await api('/api/settings', 'POST', { accent: b.dataset.c }); await refresh(); };
 ACT.saveAccent = async () => { await api('/api/settings', 'POST', { accent: $('sAccent').value }); await refresh(); };
 ACT.resetAccent = async () => { await api('/api/settings', 'POST', { accent: '' }); await refresh(); };
-const hrs = id => Math.round((+$(id).value || 0) * 60);
 const STD_SRC = s => /aamc/i.test(s) ? 'aamc' : /blueprint|next ?step/i.test(s) ? 'blueprint' : /uworld/i.test(s) ? 'uworld' : /kaplan/i.test(s) ? 'kaplan' : /princeton|tpr/i.test(s) ? 'princeton_review' : /altius/i.test(s) ? 'altius' : s ? 'other' : 'none';
-ACT.saveGoals = async () => { track('goal_created', { goal_type: 'time' }); await api('/api/settings', 'POST', { goals: { dailyMin: hrs('gD'), weekendDailyMin: $('gWE').value === '' ? null : hrs('gWE'), weeklyMin: hrs('gW'), monthlyMin: hrs('gM'), termMin: hrs('gT') }, dayStartHour: +$('gDS').value || 0, term: { name: $('tN').value, start: $('tS').value, end: $('tE').value } }); toast('Goals saved'); refresh(); };
-ACT.saveTimer = async () => { await api('/api/settings', 'POST', { pomodoro: { focusMin: +$('pF').value, shortMin: +$('pS').value, longMin: +$('pL').value, cycles: +$('pC').value, autoStart: $('pA').checked }, quickDurations: $('qD').value.split(/[ ,]+/).filter(Boolean).map(Number) }); toast('Timer saved'); refresh(); };
-ACT.saveMedals = async () => { const medals = {}; MEDAL_ORDER.forEach(m => (medals[m] = hrs('md_' + m))); await api('/api/settings', 'POST', { medals }); toast('Medals saved'); refresh(); };
+const minRange = (n, lo, hi, label) => (n == null || n < lo || n > hi) ? label + ' must be from ' + Dur.short(lo) + ' to ' + Dur.short(hi) : '';
+ACT.saveGoals = async () => { const day = Dur.readClock($('gDS')); track('goal_created', { goal_type: 'time' }); await api('/api/settings', 'POST', { goals: { dailyMin: Dur.read($('gD')) || 0, weekendDailyMin: Dur.read($('gWE')), weeklyMin: Dur.read($('gW')) || 0, monthlyMin: Dur.read($('gM')) || 0, termMin: Dur.read($('gT')) || 0 }, dayStartHour: day.hour, dayStartMinute: day.minute, term: { name: $('tN').value, start: $('tS').value, end: $('tE').value } }); toast('Goals saved'); refresh(); };
+ACT.saveTimer = async () => { const focusMin = Dur.read($('pF')), shortMin = Dur.read($('pS')), longMin = Dur.read($('pL')); const err = minRange(focusMin, 1, 240, 'Focus') || minRange(shortMin, 1, 60, 'Short break') || minRange(longMin, 1, 120, 'Long break'); if (err) return toast(err);
+  const quick = Dur.parseList($('qD').value); if ($('qD').value.trim() && !quick.length) return toast('Quick durations look like 25, 90 or 1:30'); if (quick.some(n => n < 1 || n > 600)) return toast('Each quick duration must be from 1 minute to 10 hours');
+  await api('/api/settings', 'POST', { pomodoro: { focusMin, shortMin, longMin, cycles: +$('pC').value, autoStart: $('pA').checked }, quickDurations: quick }); toast('Timer saved'); refresh(); };
+ACT.saveMedals = async () => { const medals = {}; for (const m of MEDAL_ORDER) { const n = Dur.read($('md_' + m)) || 0; if (n > 1440) return toast('Medals are capped at 24 hours'); medals[m] = n; } await api('/api/settings', 'POST', { medals }); toast('Medals saved'); refresh(); };
 const subjOf = b => b.closest('[data-subj]').dataset.subj;
 ACT.subjColor = async b => { const r = window.SubjectColor ? SubjectColor.clamp(b.value) : { color: b.value, adjusted: false }; b.value = r.color; const n = b.parentNode.querySelector('.sc-note');
   if (n) { n.textContent = r.adjusted ? 'Adjusted for readability' : ''; clearTimeout(n._t); if (r.adjusted) n._t = setTimeout(() => { if (n.isConnected) n.textContent = ''; }, 4000); }
   await api('/api/subjects', 'PUT', { name: subjOf(b), color: r.color }); await load(); if (r.adjusted) { const m = document.querySelector('.subj-row[data-subj="' + CSS.escape(subjOf(b)) + '"] .sc-note'); if (m) { m.textContent = 'Adjusted for readability'; setTimeout(() => { if (m.isConnected) m.textContent = ''; }, 4000); } } };
-ACT.subjGoal = async b => { if (+b.value > 0) track('goal_created', { goal_type: 'subject_weekly' }); await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: Math.round((+b.value || 0) * 60) }); toast('Weekly subject goal saved'); await load(); };
+ACT.subjGoal = async b => { const n = Dur.read(b) || 0; if (n > 10080) return toast('Weekly subject goal is capped at 168 hours'); if (n > 0) track('goal_created', { goal_type: 'subject_weekly' }); await api('/api/subjects', 'PUT', { name: subjOf(b), weeklyGoalMin: n }); toast('Weekly subject goal saved'); await load(); };
 ACT.subjRename = async b => { const n = subjOf(b), nn = prompt('Rename subject (past sessions are renamed too):', n); if (nn && nn.trim() && nn !== n) { await api('/api/subjects', 'PUT', { name: n, rename: nn.trim() }); if (sel === n) sel = nn.trim(); refresh(); } };
 ACT.subjDel = async b => { const n = subjOf(b); if (confirm(`Remove "${n}" from the list? Past sessions are kept.`)) { await api('/api/subjects', 'DELETE', { name: n }); refresh(); } };
 ACT.addSubj = async () => { const n = $('newSubj').value.trim(); if (n) { await api('/api/subjects', 'POST', { name: n }); refresh(); } };
@@ -1600,9 +1610,9 @@ async function tourShow(i) { const s = tourSteps()[i], S0 = tourS; if (!S0) retu
   if (tourS !== S0) return; if (tgt) { const bh = reduceMotion() ? 'auto' : 'smooth'; if (innerWidth < 600 && getComputedStyle(tgt).position !== 'fixed') window.scrollBy({ top: tgt.getBoundingClientRect().top - 72, behavior: bh }); else tgt.scrollIntoView({ block: 'center', behavior: bh }); await tourSleep(reduceMotion() ? 50 : 450); }
   S0.tgt = tgt; const last = i === tourSteps().length - 1, c = S0.el.querySelector('.tour-card'), g = S.settings.goals || {}, mc = (S.exams || []).find(e => (isMcat() ? /mcat/i.test(e.name) : e.name === tplOf().exam) && e.grade == null);
   c.innerHTML = '<div class="tour-dots" aria-hidden="true">' + tourSteps().map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('') + '</div><small class="muted">Step ' + (i + 1) + ' of ' + tourSteps().length + '</small><h4>' + esc(s.t) + '</h4><p>' + esc(s.b) + '</p>' +
-    (s.setup ? '<div class="tour-setup"><label>Weekly goal (hours)</label><input type="number" min="0" step="0.5" id="tourWk" value="' + (g.weeklyMin ? g.weeklyMin / 60 : '') + '" placeholder="e.g. 25"><label>' + (isMcat() ? 'MCAT test date' : 'Test date') + '</label><input type="date" id="tourMcat" value="' + (mc ? mc.date : '') + '"></div>' : '') +
+    (s.setup ? '<div class="tour-setup"><label for="tourWk">Weekly goal</label>' + Dur.fields({ id: 'tourWk', label: 'Weekly goal', minutes: g.weeklyMin || null, blank: true, placeholder: 'e.g. 25:00', maxMin: 1000000 }) + '<label>' + (isMcat() ? 'MCAT test date' : 'Test date') + '</label><input type="date" id="tourMcat" value="' + (mc ? mc.date : '') + '"></div>' : '') +
     '<div class="row tour-btns"><button class="btn link" data-tour="skip">' + (s.setup ? 'Skip setup' : 'Skip tour') + '</button><span class="sp"></span>' + (i ? '<button class="btn" data-tour="back">Back</button>' : '') + '<button class="btn primary" data-tour="next">' + (s.setup ? 'Save & finish' : last ? 'Finish' : i ? 'Next' : 'Start tour') + '</button></div>';
-  tourPlace(); setTimeout(tourPlace, 300); setTimeout(tourPlace, 900); if (S0.el.classList.contains('init')) { void S0.el.offsetWidth; S0.el.classList.remove('init'); } S0.el.classList.remove('busy'); c.focus({ preventScroll: true }); }
+  Dur.bind(c); tourPlace(); setTimeout(tourPlace, 300); setTimeout(tourPlace, 900); if (S0.el.classList.contains('init')) { void S0.el.offsetWidth; S0.el.classList.remove('init'); } S0.el.classList.remove('busy'); c.focus({ preventScroll: true }); }
 function tourPlace() { if (!tourS) return; const { el, tgt } = tourS, h = el.querySelector('.tour-hole'), c = el.querySelector('.tour-card'), vw = document.documentElement.clientWidth, vh = innerHeight, m = 12;
   let r = tgt && tgt.isConnected ? tgt.getBoundingClientRect() : null; if (r && (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > vh)) r = null;
   const nv = $('nav'), nr = nv && getComputedStyle(nv).position === 'fixed' ? nv.getBoundingClientRect() : null, floor = nr && nr.top > vh / 2 && !(tgt && tgt.id === 'nav') ? nr.top - 8 : vh - m; // keep the card above the phone tab bar
@@ -1618,9 +1628,9 @@ function tourPlace() { if (!tourS) return; const { el, tgt } = tourS, h = el.que
     if (y < r.bottom && y + ch > r.top && r.right + 14 + cw <= vw - m) { x = r.right + 14; y = Math.min(Math.max(m, r.top), vh - ch - m); } }
   c.style.left = Math.round(x) + 'px'; c.style.top = Math.round(y) + 'px'; }
 async function tourEnd(saveSetup) { const S0 = tourS; if (!S0) return; tourS = null;
-  if (saveSetup) { const wk = $('tourWk')?.value, d = $('tourMcat')?.value;
-    track('tour_complete', { set_weekly_goal: wk !== '' && wk != null, set_mcat_date: !!d });
-    try { if (wk !== '' && wk != null && +wk >= 0) { await api('/api/settings', 'POST', { goals: { weeklyMin: Math.round(+wk * 60) } }); track('goal_created', { goal_type: 'weekly_onboarding' }); }
+  if (saveSetup) { const wk = $('tourWk') ? Dur.read($('tourWk')) : null, d = $('tourMcat')?.value;
+    track('tour_complete', { set_weekly_goal: wk != null, set_mcat_date: !!d });
+    try { if (wk != null && wk >= 0) { await api('/api/settings', 'POST', { goals: { weeklyMin: wk } }); track('goal_created', { goal_type: 'weekly_onboarding' }); }
       if (d) { const mc = (S.exams || []).find(e => (isMcat() ? /mcat/i.test(e.name) : e.name === tplOf().exam) && e.grade == null); await api(mc ? '/api/exams/' + mc.id : '/api/exams', mc ? 'PUT' : 'POST', { name: mc ? mc.name : tplOf().exam, date: d }); } } catch (e) { toast(e.message); } }
   S0.el.classList.add('out'); setTimeout(() => S0.el.remove(), reduceMotion() ? 0 : 200);
   document.removeEventListener('keydown', tourKey); removeEventListener('resize', tourPlace); removeEventListener('scroll', tourPlace, true); removeEventListener('scrollend', tourPlace, true);
@@ -1656,7 +1666,7 @@ addEventListener('resize', () => { if (document.querySelector('.ach-cats')) achI
 // ---------- study-mix wallpaper ----------
 const WIN_LBL = { day: 'today', week: 'this week', month: 'this month', all: 'across all time' }, WIN_CHIP = { day: 'your day', week: 'your week', month: 'your month', all: 'all time' };
 const bgSet = () => ({ mode: 'auto', window: 'week', motion: true, ...(S?.settings.background || {}) });
-function currentMix() { const b = bgSet(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: +S?.settings.dayStartHour || 0, tz: utz() }); }
+function currentMix() { const b = bgSet(), o = dayShift(); return StudyMix.studyMix(S?.sessions || [], { win: b.window, h: o.h, m: o.m, tz: utz() }); }
 function applyWallpaper() { const wp = $('wallpaper'); if (!wp || !S || !window.StudyMix) return; const b = bgSet(), dots = [...wp.children];
   let list = [];
   if (b.mode === 'auto') list = StudyMix.blobs(currentMix().parts, color);

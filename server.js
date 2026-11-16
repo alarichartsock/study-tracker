@@ -32,7 +32,7 @@ const affiliates = require('./lib/affiliates');
 const openaiAds = require('./lib/openai-ads');
 const tiktokAds = require('./lib/tiktok-ads');
 const EXAMS = require('./lib/exams');
-const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy-tier.js': 'trophy-tier.js', '/trophy-art.js': 'trophy-art.js', '/color-clamp.js': 'color-clamp.js',
+const STATIC = { '/': 'index.html', ...Object.fromEntries(EXAMS.ORDER.map(s => ['/' + s, 'index.html'])), '/i18n.js': 'i18n.js', ...Object.fromEntries(Object.keys(require('./lib/i18n').ROUTES).map(r => [r, 'index.html'])), ...Object.fromEntries(require('./lib/i18n').LANGS.filter(l => l !== 'en').map(l => ['/i18n/' + l.toLowerCase() + '.json', 'i18n/' + l.toLowerCase() + '.json'])), '/BingSiteAuth.xml': 'BingSiteAuth.xml', '/index.html': 'index.html', '/app.js': 'app.js', '/mix.js': 'mix.js', '/mcat.js': 'mcat.js', '/templates.js': 'templates.js', '/tz.js': 'tz.js', '/practice.js': 'practice.js', '/trophy-spec.js': 'trophy-spec.js', '/trophy-tier.js': 'trophy-tier.js', '/trophy-art.js': 'trophy-art.js', '/color-clamp.js': 'color-clamp.js', '/duration.js': 'duration.js', '/html-duration-picker.js': 'html-duration-picker.js',
   '/style.css': 'style.css', '/favicon.svg': 'favicon.svg',
   '/manifest.webmanifest': 'manifest.webmanifest', '/sw.js': 'sw.js', '/icon-192.png': 'icon-192.png', '/icon-512.png': 'icon-512.png', '/apple-touch-icon.png': 'apple-touch-icon.png', '/favicon.ico': 'favicon.ico', '/favicon-32.png': 'favicon-32.png', '/terms': 'terms.html', '/terms.html': 'terms.html', '/terms/v1.0': 'terms-v1.0.html', '/terms/v1.1': 'terms.html', '/consent.js': 'consent.js', '/privacy': 'privacy.html', '/affiliates': 'affiliates.html', '/privacy.html': 'privacy.html', '/pricing': 'index.html', '/og-image.png': 'og-image.png' };
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
@@ -728,7 +728,13 @@ function createApp(opts = {}) {
         if (j.pomodoro) { const pm = j.pomodoro; for (const [k, lo, hi] of [['focusMin', 1, 240], ['shortMin', 1, 60], ['longMin', 1, 120], ['cycles', 1, 12]]) if (pm[k] !== undefined) s.pomodoro[k] = Math.round(numIn(pm[k], lo, hi));
           if (pm.autoStart !== undefined) s.pomodoro.autoStart = !!pm.autoStart; }
         if (j.timezone !== undefined) { if (!stats.TZ.valid(j.timezone)) return send(res, 400, { error: 'unknown time zone' }); s.timezone = j.timezone; }
-        if (j.dayStartHour !== undefined) s.dayStartHour = Math.round(numIn(j.dayStartHour, 0, 6));
+        if (j.dayStartHour !== undefined || j.dayStartMinute !== undefined) {
+          // Hour alone still means H:00, so older clients that only send dayStartHour keep working.
+          let hour = +s.dayStartHour || 0, minute = +s.dayStartMinute || 0;
+          if (j.dayStartHour !== undefined) hour = Math.round(numIn(j.dayStartHour, 0, 6));
+          if (j.dayStartMinute !== undefined) minute = Math.round(numIn(j.dayStartMinute, 0, 59));
+          else if (j.dayStartHour !== undefined) minute = 0;
+          s.dayStartHour = hour; s.dayStartMinute = minute; }
         if (Array.isArray(j.quickDurations)) s.quickDurations = j.quickDurations.slice(0, 6).map(x => Math.round(numIn(x, 1, 600)));
         if (j.nowSize !== undefined) { if (!['s', 'm', 'l'].includes(j.nowSize)) return send(res, 400, { error: 'nowSize must be s, m or l' }); s.nowSize = j.nowSize; }
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }

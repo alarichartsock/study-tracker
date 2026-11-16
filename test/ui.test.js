@@ -47,7 +47,7 @@ test('add-session shortcut is in the toolbar with a timer fallback', () => {
   const js = pub('app.js');
   assert.match(js, /Start timer instead/);
   assert.match(js, /function openAdd\(/);
-  assert.match(js, /name="durm"/);
+  assert.match(js, /name: 'durm'/);
 });
 test('goal rings use HTML labels instead of scaled SVG text', () => {
   const js = pub('app.js');
@@ -88,7 +88,7 @@ test('stats activity, weekday and hour bars stack by subject color', () => {
   assert.match(js, /bars\(c\.bySubject, c\.total, color\)\}/); assert.match(js, /<span>Medals<\/span>/);
   assert.match(js, /const enter = !render\.painted \|\| render\.view !== view/);
   assert.match(css, /\.bar\.segs\{display:flex\}/); assert.doesNotMatch(css, /\.bar\.segs\{[^}]*animation/); assert.match(css, /\.stack \.hcol-bar i:last-child\{border-radius:3px 3px 0 0\}/);
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });
 
 test('share price chart stacks cumulative hours in each subject color', () => {
@@ -127,7 +127,7 @@ test('share price chart stacks cumulative hours in each subject color', () => {
   assert.match(js, /function cumHi\(block, name\)/); assert.match(js, /block\.dataset\.pin/); assert.match(js, /e\.pointerType !== 'mouse'/);
   assert.match(css, /\.cum-block\[data-hi\] \.cum-band/); assert.match(css, /@keyframes cum-draw/);
   assert.match(css, /html:not\(\[data-anim="0"\]\) \.cum-draw/); assert.match(css, /prefers-reduced-motion:reduce\)\{\.cum-draw\{animation:none/);
-  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(css, /\[data-anim="0"\] \.cum-draw/); assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });
 
 test('charts carry data-tip tooltips and a shared accessible tooltip component', () => {
@@ -459,5 +459,5 @@ test('timer ring copy wraps inside the stroke and the clock scales with the ring
   assert.doesNotMatch(fn, /ellipsis|line-clamp|textOverflow|slice\(0,/);
   const tickSrc = app.slice(app.indexOf('function tick()'), app.indexOf('// Now-studying card'));
   assert.ok(tickSrc.indexOf('fitRingText()') > tickSrc.indexOf('tSubLbl'));
-  assert.match(pub('sw.js'), /studyhertz-shell-v175/);
+  assert.match(pub('sw.js'), /studyhertz-shell-v177/);
 });

@@ -982,3 +982,29 @@ html.acc-local[data-theme=dark] body{--lw1:color-mix(in oklab,var(--acc) 55%,#10
   html.acc-local[data-theme=light] body{--lw1:oklch(from var(--acc) .8 .11 h);--lw2:oklch(from var(--acc) .9 .08 calc(h + 50));--lw3:oklch(from var(--acc) .88 .06 calc(h + 180))}
   html.acc-local[data-theme=dark] body{--lw1:oklch(from var(--acc) .42 .1 h);--lw2:oklch(from var(--acc) .4 .07 calc(h + 50));--lw3:oklch(from var(--acc) .36 .06 calc(h + 180))}}
 @media (prefers-reduced-motion:reduce){body{transition:none}}
+
+/* One-field duration picker (html-duration-picker). Matches the existing inputs; the spinner sits inside the field. */
+.html-duration-picker-input-controls-wrapper{display:block !important;width:100% !important;margin:0 !important;position:relative}
+.html-duration-picker-input-controls-wrapper .html-duration-picker{text-align:left !important;padding-right:28px;font-variant-numeric:tabular-nums}
+.html-duration-picker-input-controls-wrapper .controls{left:auto !important;right:6px;top:7px !important;bottom:7px;height:auto !important;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0}
+.html-duration-picker-input-controls-wrapper .scroll-btn{position:static !important;height:8px !important;width:14px;padding:0;background:transparent;display:flex;align-items:center;justify-content:center}
+.html-duration-picker-input-controls-wrapper .caret.caret-up{border-color:transparent transparent var(--muted) transparent !important}
+.html-duration-picker-input-controls-wrapper .caret.caret-down{border-color:var(--muted) transparent transparent transparent !important}
+.dur-inline{display:inline-block;width:7.5rem;flex:none}
+.dur-inline .html-duration-picker-input-controls-wrapper{width:7.5rem !important}
+/* Settings subjects: name on the left, weekly goal with the buttons on the right. The goal stays
+   one compact field so it lines up with the rename and remove controls. */
+.subj-row.subj-cfg{align-items:center;min-width:0}
+.subj-row.subj-cfg>.subj-sw{flex:none;width:40px;min-width:40px;height:36px;padding:2px}
+.subj-row.subj-cfg>.subj-nm{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;text-align:left}
+.subj-row.subj-cfg .subj-nm-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.subj-row.subj-cfg>.subj-side{display:flex;align-items:center;flex:none;gap:10px}
+.subj-row.subj-cfg .subj-side .html-duration-picker-input-controls-wrapper{width:7.5rem !important}
+.subj-row.subj-cfg .sc-note{flex:none;max-width:40%;margin-left:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subj-row.subj-cfg .sc-note:empty{display:none}
+@media(max-width:640px){
+  .subj-row.subj-cfg{gap:8px}
+  .subj-row.subj-cfg>.subj-side{gap:2px}
+  .subj-row.subj-cfg>.subj-side .icon{padding-left:4px;padding-right:4px}
+  .subj-row.subj-cfg .subj-side .html-duration-picker-input-controls-wrapper,.dur-inline,.dur-inline .html-duration-picker-input-controls-wrapper{width:6.5rem !important}
+}
