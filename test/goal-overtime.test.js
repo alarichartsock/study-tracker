@@ -119,5 +119,5 @@ test('gold is inset and thinner than the accent, uses trophy gold, and follows m
   assert.match(css, /\[data-anim="0"\] \.tring\.goal-shimmer::after,\[data-anim="1"\] \.tring\.goal-shimmer::after\{animation:none;display:none\}/);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.tring \.t-gold-svg circle\{transition:none\}\.tring\.goal-shimmer::after\{animation:none;display:none\}/);
   assert.match(css, /\.tring \.t-comet-svg circle\{r:88px/); // comet hairline unchanged
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v176/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'), /studyhertz-shell-v177/);
 });

@@ -40,15 +40,16 @@ test('day-start clock caps at 6:59 and keeps typed minutes', () => {
   assert.equal(Dur.join('6', '75', { clock: true, maxHour: 6 }), 6 * 60 + 15);
   assert.equal(Dur.join('', '', { clock: true, maxHour: 6 }), 0);
   const html = Dur.fields({ id: 'gD', label: 'Daily', minutes: 150 });
-  assert.match(html, /id="gDh"/); assert.match(html, /id="gDm"/);
-  assert.match(html, /value="2"/); assert.match(html, /value="30"/);
-  assert.match(html, />h</); assert.match(html, />m</);
-  assert.match(html, /data-part="m"[^>]*step="5"/);
-  assert.match(html, /data-part="h"[^>]*step="any"/);
+  assert.match(html, /<input /); assert.equal((html.match(/<input /g) || []).length, 1);
+  assert.match(html, /id="gD"/); assert.match(html, /class="html-duration-picker/);
+  assert.match(html, /data-hide-seconds/); assert.match(html, /value="02:30"/);
+  assert.doesNotMatch(html, /data-part=/);
   const blank = Dur.fields({ id: 'gWE', label: 'Weekend daily', minutes: null, blank: true });
-  assert.match(blank, /data-blank="1"/); assert.match(blank, /value=""/);
+  assert.match(blank, /data-allow-blank/); assert.match(blank, /value=""/);
   const zero = Dur.fields({ id: 'gWE', label: 'Weekend daily', minutes: 0, blank: true });
-  assert.match(zero, /value="0"/);
+  assert.match(zero, /value="00:00"/);
+  const picker = fs.readFileSync(path.join(__dirname, '../public/html-duration-picker.js'), 'utf8');
+  assert.match(picker, /Apache-2\.0/); assert.match(picker, /adjustmentFactor === 60 \? 300/);
 });
 
 test('day start of 2:30 counts 2:20am toward the previous day', () => {
@@ -112,8 +113,8 @@ test('duration picker is wired into every duration surface and the shell cache',
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   for (const id of ['gD', 'gWE', 'gW', 'gM', 'gT', 'gDS', 'pF', 'pS', 'pL', 'durm', 'brk', 'plan', 'cd', 'tourWk']) assert.match(app, new RegExp("id: '" + id + "'"));
   assert.match(app, /id: 'sg' \+ i/); assert.match(app, /id: 'md_' \+ m/);
-  assert.match(app, /name="durm"/);
+  assert.match(app, /name: 'durm'/);
   assert.match(app, /dayStartMinute: day\.minute/);
-  assert.match(html, /src="\/duration\.js"/);
-  assert.match(sw, /studyhertz-shell-v176/); assert.match(sw, /'\/duration\.js'/);
+  assert.match(html, /src="\/html-duration-picker\.js"/); assert.match(html, /src="\/duration\.js"/);
+  assert.match(sw, /studyhertz-shell-v177/); assert.match(sw, /'\/html-duration-picker\.js'/);
 });
