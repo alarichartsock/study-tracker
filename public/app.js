@@ -356,7 +356,7 @@ async function load() {
   const gen = ++stateGen;
   const [s, st] = await Promise.all([api('/api/state'), api('/api/stats' + (sel ? '?subject=' + encodeURIComponent(sel) : ''))]);
   if (gen !== stateGen) return;
-  S = s; ST = st; if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); syncTabTitle(Date.now(), true); syncTabWorker();
+  S = s; ST = st; if (!S.subjects.includes(sel)) sel = S.active?.subject || S.subjects[0]; applyAccent(); applyNowSize(); syncTplNav(); tzBackfill(); carryAccent(); syncTabTitle(Date.now(), true); syncTabWorker(); armDayTitle();
 }
 async function refresh() { settleLogo(); await load(); render(); } // same view, fresh data: keep the poll, don't replay the load-in
 const live = () => { const a = S?.active; return a ? a.accum + (a.paused ? 0 : (Date.now() - new Date(a.start)) / 1000) : 0; };
@@ -417,20 +417,68 @@ function timerLabel(active, subject, activity) {
   if (active) return (active.paused ? 'Paused · ' : '') + subject + act;
   return subject ? subject + act : 'Pick a subject';
 }
+// Hours:minutes for the day total. No leading zero under 10h (2:05); 10h and up keeps both digits (12:40).
+// Minutes are floored so the total steps forward on the minute, from the real elapsed seconds.
+function fmtHM(s) { s = Math.max(0, Math.floor(+s || 0)); const m = Math.floor(s / 60); return Math.floor(m / 60) + ':' + pad(m % 60); }
+// Missing settings (accounts from before this existed) use the defaults: timer, today's total and the app name on, subject off.
+function tabTitlePrefs(p) {
+  const on = (k, fallback) => !p || typeof p !== 'object' || Array.isArray(p) || p[k] === undefined ? fallback : !!p[k];
+  return { timer: on('timer', true), today: on('today', true), subject: on('subject', false), brand: on('brand', true) };
+}
+// dayStartHour plus dayStartMinute when that setting is present. Fractional hours so TZ.key can shift by minutes.
+function titleDayShift(settings) {
+  const h = settings ? +settings.dayStartHour || 0 : 0;
+  const m = settings && settings.dayStartMinute != null ? Math.min(59, Math.max(0, +settings.dayStartMinute || 0)) : 0;
+  return h + m / 60;
+}
+// Study seconds on the open session. Paused gaps stay out: accum is frozen at pause and the live segment is added only while running.
+function activeStudySec(active, now) {
+  if (!active) return 0;
+  const base = Math.max(0, +active.accum || 0);
+  if (active.paused) return base;
+  const live = (now - new Date(active.start).getTime()) / 1000;
+  return base + (Number.isFinite(live) ? Math.max(0, live) : 0);
+}
+function savedStudySec(s) { const sec = (new Date(s.end) - new Date(s.start)) / 1000 - (+s.breakSec || 0); return Number.isFinite(sec) ? Math.max(0, sec) : 0; }
+function todayStudySec(sessions, active, now, sameDay) {
+  let sum = 0;
+  for (const s of sessions || []) if (!sameDay || sameDay(s)) sum += savedStudySec(s);
+  return sum + activeStudySec(active, now);
+}
+function titleExtra(now) {
+  const settings = (S && S.settings) || {};
+  const picked = typeof sel === 'string' ? sel : '';
+  const base = { prefs: settings.tabTitle, subject: (S && S.active && S.active.subject) || picked };
+  if (!S || typeof TZ === 'undefined') return { ...base, todaySec: todayStudySec(S && S.sessions, S && S.active, now, () => false) };
+  const shift = titleDayShift(settings);
+  const zone = TZ.valid(settings.timezone) ? settings.timezone : TZ.DEFAULT;
+  const today = TZ.key(now, zone, shift);
+  return { ...base, todaySec: todayStudySec(S.sessions, S.active, now, s => TZ.key(s.start, zone, shift) === today) };
+}
 // Tab title: the running clock is elapsed study time (or remaining, for a countdown) from timestamps —
 // accum + (now - start) — never a count of ticks. Date.now, not performance.now, so sleep moves it forward.
-// Written on every view. A re-render used to leave a stale title because the write lived behind the timer-view return.
-// The activity rides along with the subject so a dropdown change shows up in the same second.
-function tabTitleFor(active, now, signedIn, brand, landing) {
-  if (active && !active.paused) {
+// Written on every view. Today's total sits beside it (saved sessions for this app-day, plus the open session)
+// and stays up when the timer is idle. Each piece can be turned off in Settings; all off falls back to the brand.
+function tabTitleFor(active, now, signedIn, brand, landing, extra) {
+  if (!signedIn) return landing;
+  const x = extra || {}, prefs = tabTitlePrefs(x.prefs);
+  const todaySec = x.todaySec == null ? activeStudySec(active, now) : Math.max(0, +x.todaySec || 0);
+  const bits = [];
+  if (prefs.timer && active && !active.paused) {
     const elapsed = (+active.accum || 0) + (now - new Date(active.start).getTime()) / 1000;
     const shown = active.targetSec ? +active.targetSec - elapsed : elapsed;
-    return fmtClock(shown) + ' · ' + active.subject + (active.activity ? ' · ' + active.activity : '');
+    bits.push(fmtClock(shown));
   }
-  return signedIn ? brand : landing;
+  if (prefs.subject && active && active.subject) bits.push(active.subject + (active.activity ? ' · ' + active.activity : ''));
+  else if (prefs.subject && x.subject) bits.push(String(x.subject));
+  if (prefs.today) bits.push(fmtHM(todaySec) + ' today');
+  const body = bits.join(' · ');
+  if (prefs.brand && body) return body + ' — ' + brand;
+  return body || brand;
 }
 function syncTabTitle(now, force) {
-  const t = tabTitleFor(S && S.active, now || Date.now(), !!ME, BRAND, LANDING_TITLE);
+  now = now || Date.now();
+  const t = tabTitleFor(S && S.active, now, !!ME, BRAND, LANDING_TITLE, titleExtra(now));
   if (!force && syncTabTitle.last === t) return;
   syncTabTitle.last = t; document.title = t;
 }
@@ -625,7 +673,20 @@ function armTabClock() {
   }, tabClockDelay(Date.now()));
 }
 // Catch up the moment the browser unthrottles us: background -> foreground, sleep/wake, bfcache, window focus.
-function wakeTabClock() { syncTabTitle(Date.now(), true); tick(); NOW.draw(); armTabClock(); syncTabWorker(); }
+function wakeTabClock() { syncTabTitle(Date.now(), true); tick(); NOW.draw(); armTabClock(); syncTabWorker(); armDayTitle(); }
+// Hidden idle tabs throttle the 1s clock, so also wake at the next app-day boundary (day start hour and minute).
+function armDayTitle(now) {
+  clearTimeout(armDayTitle.t);
+  if (!S || !ME || typeof TZ === 'undefined') return;
+  now = now || Date.now();
+  const shiftMs = titleDayShift(S.settings) * 3600e3, zone = utz();
+  const p = TZ.parts(now - shiftMs, zone);
+  const next = new Date(Date.UTC(p.y, p.mo - 1, p.d + 1));
+  const nk = next.getUTCFullYear() + '-' + pad(next.getUTCMonth() + 1) + '-' + pad(next.getUTCDate());
+  let boundary = +TZ.toUtc(nk, '00:00', zone) + shiftMs;
+  if (!(boundary > now + 250)) boundary = now + 60000;
+  armDayTitle.t = setTimeout(() => { syncTabTitle(Date.now(), true); armDayTitle(); }, Math.min(boundary - now + 30, 2147483647));
+}
 if (tabBus) tabBus.onmessage = () => { if (!document.hidden) return; const n = Date.now(); if (n - tabBus.heard < 200) return; tabBus.heard = n; tick(); };
 document.addEventListener('visibilitychange', () => { wakeTabClock(); });
 window.addEventListener('focus', wakeTabClock);
@@ -633,7 +694,7 @@ window.addEventListener('blur', () => { syncTabTitle(Date.now(), true); syncTabW
 window.addEventListener('pageshow', wakeTabClock);
 document.addEventListener('resume', wakeTabClock);
 document.addEventListener('freeze', () => syncTabTitle(Date.now(), true));
-armTabClock();
+armTabClock(); armDayTitle();
 ACT.mode = b => { UI.mode = localStorage.timerMode = b.dataset.m; render(); };
 ACT.target = b => { UI.target = +b.dataset.m; localStorage.countdownMin = UI.target; render(); };
 ACT.targetInp = b => { UI.target = Math.max(1, +b.value || 25); localStorage.countdownMin = UI.target; tick(); };
@@ -1233,10 +1294,16 @@ ACT.refCopy = async () => { const i = $('refLink'); try { await navigator.clipbo
 async function refRewards() { const r = await api('/api/referral').catch(() => null); if (!r || !r.unseen) return;
   track('referral_reward', { value: r.unseen * r.days, credits: r.unseen }); toast(r.unseen === 1 ? 'A friend you invited logged their first session. You earned ' + r.days + ' free days.' : r.unseen + ' friends you invited started studying. You earned free days.');
   await api('/api/referral/seen', 'POST').catch(() => {}); const me = await api('/api/me').catch(() => null); if (me && me.billing) { BILL = me.billing; billBar(); } }
+function tabTitleCard() {
+  const p = tabTitlePrefs(S.settings && S.settings.tabTitle);
+  const row = (id, key, label, hint) => `<div class="appr-field"><label for="${id}">${label}</label><label class="switch"><input type="checkbox" id="${id}" data-chg="tabTitle" data-k="${key}"${p[key] ? ' checked' : ''}> ${hint}</label></div>`;
+  return `<div class="card" id="tabTitleSet"><h3>Tab title</h3><p class="muted small">Choose what the browser tab shows. Today’s total is this day’s study time as hours and minutes, and it counts a running timer.</p><div class="tt-grid">${row('ttTimer', 'timer', 'Running session timer', 'Show the live clock')}${row('ttToday', 'today', 'Today’s total', 'Show H:MM for today')}${row('ttSubject', 'subject', 'Current subject', 'Show the subject name')}${row('ttBrand', 'brand', 'App name', 'Show StudyHertz')}</div></div>`;
+}
 VIEWS.set = async () => {
   const s = S.settings, g = s.goals, pm = s.pomodoro, md = s.medals, my = await api('/api/reports').catch(() => []), th = SHTheme.pref(), rf = await api('/api/referral').catch(() => null);
   const af = await api('/api/affiliates/me').catch(() => null);
-  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="appr-grid"><div class="appr-field"><label id="apprThemeLbl">Theme</label><div class="tabs" role="group" aria-labelledby="apprThemeLbl"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div></div><div class="appr-field"><label id="apprSizeLbl">Session card size</label><div class="tabs" id="sNowSize" role="group" aria-labelledby="apprSizeLbl">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div><div class="appr-field appr-accent"><label id="apprAccLbl">Accent color <span class="muted small">${s.accent ? '(manual override)' : '(follows selected subject)'}</span></label><div class="appr-accent-row" role="group" aria-labelledby="apprAccLbl"><span class="acc-row">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}<input type="color" id="sAccent" class="acc-custom" aria-label="Custom accent color" value="${s.accent || color(sel) || '#6c8cff'}"></span><span class="acc-actions"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</span></div></div></div>${t3dQualityRow()}</div>${bgSettingsCard()}
+  return `${rf ? referralCard(rf) : ''}${af ? affiliateCard(af) : ''}<div class="card"><h3>Time zone</h3><p class="muted small">Days, streaks, goals, the calendar and charts follow this zone.</p><div class="row wrap gap"><select id="sTz" aria-label="Time zone" style="max-width:320px">${tzOpts(utz())}</select><button class="btn primary" data-act="saveTz">Save</button>${TZ.guess() && TZ.guess() !== utz() ? `<button class="btn" data-act="saveTz" data-z="${TZ.guess()}">Use this device (${esc(TZ.guess().replace(/_/g, ' '))})</button>` : ''}</div></div><div class="card"><h3>Language</h3><div class="row wrap gap">${window.SHI18N ? SHI18N.picker('sLang') : ''}<span class="muted small">Terms and Privacy are in English only.</span></div></div><div class="card"><h3>Appearance</h3><div class="appr-grid"><div class="appr-field"><label id="apprThemeLbl">Theme</label><div class="tabs" role="group" aria-labelledby="apprThemeLbl"><button data-act="theme" data-t="dark" class="${th === 'dark' ? 'on' : ''}">Dark</button><button data-act="theme" data-t="light" class="${th === 'light' ? 'on' : ''}">Light</button><button data-act="theme" data-t="system" class="${th === 'system' ? 'on' : ''}" title="Follow your device's light/dark setting">System</button></div></div><div class="appr-field"><label id="apprSizeLbl">Session card size</label><div class="tabs" id="sNowSize" role="group" aria-labelledby="apprSizeLbl">${[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']].map(([v, n]) => `<button data-act="nowSize" data-v="${v}" class="${nowSize() === v ? 'on' : ''}">${n}</button>`).join('')}</div></div><div class="appr-field appr-accent"><label id="apprAccLbl">Accent color <span class="muted small">${s.accent ? '(manual override)' : '(follows selected subject)'}</span></label><div class="appr-accent-row" role="group" aria-labelledby="apprAccLbl"><span class="acc-row">${ACCENTS.map(([c, n]) => `<button type="button" class="acc-sw" data-act="accSw" data-c="${c}" style="--sw:${c}" aria-label="${n}" title="${n}" aria-pressed="${(s.accent || '').toLowerCase() === c}"></button>`).join('')}<input type="color" id="sAccent" class="acc-custom" aria-label="Custom accent color" value="${s.accent || color(sel) || '#6c8cff'}"></span><span class="acc-actions"><button class="btn" data-act="saveAccent">Override</button>${s.accent ? '<button class="btn" data-act="resetAccent">Use subject color</button>' : ''}</span></div></div></div>  ${t3dQualityRow()}</div>${bgSettingsCard()}
+  ${tabTitleCard()}
   <div class="card"><h3>Goals</h3><div class="grid3"><div><label>Daily (h)</label><input type="number" step="0.25" min="0" id="gD" value="${g.dailyMin / 60}"></div><div><label>Weekend daily (h, blank = same)</label><input type="number" step="0.25" min="0" id="gWE" value="${g.weekendDailyMin == null ? '' : g.weekendDailyMin / 60}"></div>
     <div><label>Weekly (h)</label><input type="number" min="0" id="gW" value="${g.weeklyMin / 60 || ''}"></div><div><label>Monthly (h)</label><input type="number" min="0" id="gM" value="${g.monthlyMin / 60 || ''}"></div><div><label>Term / prep total (h)</label><input type="number" min="0" id="gT" value="${g.termMin / 60 || ''}"></div><div><label>Day starts at hour (night owls)</label><input type="number" min="0" max="6" id="gDS" value="${s.dayStartHour}"></div></div>
     <div class="grid3"><div><label>Term name</label><input id="tN" value="${esc(s.term.name)}" placeholder="${esc(tplOf().exam)} prep"></div><div><label>Term start</label><input type="date" id="tS" value="${s.term.start}"></div><div><label>Term end / test day</label><input type="date" id="tE" value="${s.term.end}"></div></div>
@@ -1505,6 +1572,15 @@ ACT.resetAccent = async () => { await api('/api/settings', 'POST', { accent: '' 
 const hrs = id => Math.round((+$(id).value || 0) * 60);
 const STD_SRC = s => /aamc/i.test(s) ? 'aamc' : /blueprint|next ?step/i.test(s) ? 'blueprint' : /uworld/i.test(s) ? 'uworld' : /kaplan/i.test(s) ? 'kaplan' : /princeton|tpr/i.test(s) ? 'princeton_review' : /altius/i.test(s) ? 'altius' : s ? 'other' : 'none';
 ACT.saveGoals = async () => { track('goal_created', { goal_type: 'time' }); await api('/api/settings', 'POST', { goals: { dailyMin: hrs('gD'), weekendDailyMin: $('gWE').value === '' ? null : hrs('gWE'), weeklyMin: hrs('gW'), monthlyMin: hrs('gM'), termMin: hrs('gT') }, dayStartHour: +$('gDS').value || 0, term: { name: $('tN').value, start: $('tS').value, end: $('tE').value } }); toast('Goals saved'); refresh(); };
+ACT.tabTitle = async b => {
+  const key = b.dataset.k;
+  if (!['timer', 'today', 'subject', 'brand'].includes(key)) return;
+  const prev = tabTitlePrefs(S.settings.tabTitle);
+  const prefs = { ...prev, [key]: !!b.checked };
+  S.settings.tabTitle = prefs; syncTabTitle(Date.now(), true);
+  try { await api('/api/settings', 'POST', { tabTitle: prefs }); }
+  catch (e) { S.settings.tabTitle = prev; b.checked = !!prev[key]; syncTabTitle(Date.now(), true); toast(e.message); }
+};
 ACT.saveTimer = async () => { await api('/api/settings', 'POST', { pomodoro: { focusMin: +$('pF').value, shortMin: +$('pS').value, longMin: +$('pL').value, cycles: +$('pC').value, autoStart: $('pA').checked }, quickDurations: $('qD').value.split(/[ ,]+/).filter(Boolean).map(Number) }); toast('Timer saved'); refresh(); };
 ACT.saveMedals = async () => { const medals = {}; MEDAL_ORDER.forEach(m => (medals[m] = hrs('md_' + m))); await api('/api/settings', 'POST', { medals }); toast('Medals saved'); refresh(); };
 const subjOf = b => b.closest('[data-subj]').dataset.subj;
