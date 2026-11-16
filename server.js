@@ -729,6 +729,15 @@ function createApp(opts = {}) {
           if (pm.autoStart !== undefined) s.pomodoro.autoStart = !!pm.autoStart; }
         if (j.timezone !== undefined) { if (!stats.TZ.valid(j.timezone)) return send(res, 400, { error: 'unknown time zone' }); s.timezone = j.timezone; }
         if (j.dayStartHour !== undefined) s.dayStartHour = Math.round(numIn(j.dayStartHour, 0, 6));
+        if (j.tabTitle !== undefined) {
+          if (!j.tabTitle || typeof j.tabTitle !== 'object' || Array.isArray(j.tabTitle)) return send(res, 400, { error: 'tabTitle must be an object' });
+          const base = { timer: true, today: true, subject: false, brand: true };
+          const cur = s.tabTitle && typeof s.tabTitle === 'object' && !Array.isArray(s.tabTitle) ? s.tabTitle : {};
+          const next = {};
+          for (const k of Object.keys(base)) next[k] = cur[k] === undefined ? base[k] : !!cur[k];
+          for (const k of Object.keys(base)) if (j.tabTitle[k] !== undefined) next[k] = !!j.tabTitle[k];
+          s.tabTitle = next;
+        }
         if (Array.isArray(j.quickDurations)) s.quickDurations = j.quickDurations.slice(0, 6).map(x => Math.round(numIn(x, 1, 600)));
         if (j.nowSize !== undefined) { if (!['s', 'm', 'l'].includes(j.nowSize)) return send(res, 400, { error: 'nowSize must be s, m or l' }); s.nowSize = j.nowSize; }
         if (j.accent !== undefined) { if (j.accent && !COLOR.test(j.accent)) return send(res, 400, { error: 'accent must be #rrggbb' }); s.accent = j.accent || ''; }

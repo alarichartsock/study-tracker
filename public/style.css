@@ -523,6 +523,13 @@ input[type=color].acc-custom:focus-visible{outline:2px solid var(--acc);outline-
   .appr-field>.tabs{width:100%}
   .appr-field>.tabs button{flex:1 1 0;min-width:0;padding:0 4px}
 }
+/* Settings > Tab title: a label above each toggle, two columns on a wide window, one column on a phone. */
+.tt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px;margin-top:4px}
+.tt-grid .appr-field{min-width:0;max-width:100%}
+.tt-grid .appr-field>label{overflow-wrap:anywhere}
+.tt-grid .switch{min-width:0;max-width:100%;flex-wrap:wrap;align-items:flex-start}
+.tt-grid .switch input{flex:0 0 auto;margin-top:3px}
+@media(max-width:640px){.tt-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:340px){.appr-accent-row .acc-row{gap:4px}}
 
 .ach-cele{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;width:min(440px,calc(100vw - 24px));transform:translate(-50%,24px) scale(.96);opacity:0;transition:transform .35s var(--ease),opacity .3s;display:flex;gap:12px;align-items:center;padding:12px 40px 12px 12px;border-radius:18px;background:var(--glass-strong,var(--card));border:1px solid color-mix(in srgb,var(--acc) 50%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.25);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);cursor:pointer;overflow:hidden}
